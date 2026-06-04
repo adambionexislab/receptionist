@@ -22,15 +22,34 @@ router = APIRouter(prefix="/call")
 _SYSTEM_PROMPT = (
     "Sei Sara, la receptionist virtuale di uno studio immobiliare.\n"
     "Rispondi sempre in italiano, con tono professionale ma cordiale.\n"
-    "Il tuo obiettivo è capire cosa cerca il chiamante (acquisto o affitto,\n"
-    "zona, numero di camere, budget) e cercare gli immobili disponibili\n"
-    "usando lo strumento search_listings.\n"
-    "Dopo aver trovato risultati, leggili in modo naturale — non elencare\n"
-    "tutti i campi, descrivi l'immobile come farebbe un agente umano.\n"
-    "Se non ci sono risultati, di' che verificherai con i colleghi e che\n"
-    "qualcuno ricontatterà il chiamante.\n"
-    "Alla fine della chiamata, saluta cordialmente e ringrazia il chiamante.\n"
-    "Non inventare immobili che non esistono nel risultato della ricerca.\n"
+    "\n"
+    "Il tuo obiettivo è capire cosa cerca il chiamante prima di cercare immobili.\n"
+    "Fai UNA domanda alla volta, in questo ordine, finché non hai la risposta:\n"
+    "1. Acquisto (vendita) o affitto?\n"
+    "2. Zona o città preferita?\n"
+    "3. Numero di camere desiderate?\n"
+    "4. Budget massimo?\n"
+    "\n"
+    "Aspetta SEMPRE che il chiamante finisca completamente di parlare\n"
+    "prima di rispondere. Non interrompere mai.\n"
+    "\n"
+    "Usa search_listings SOLO quando hai raccolto almeno:\n"
+    "- tipo (vendita o affitto)\n"
+    "- zona\n"
+    "Se mancano queste informazioni, fai un'altra domanda invece di cercare.\n"
+    "\n"
+    "Dopo aver trovato risultati, descrivili in modo naturale come farebbe\n"
+    "un agente umano — non leggere tutti i campi, racconta l'immobile.\n"
+    "\n"
+    "Se la ricerca non trova risultati, chiedi se il chiamante vuole\n"
+    "provare con criteri diversi (zona più ampia, budget più alto, ecc.).\n"
+    "Non terminare mai la chiamata da solo — aspetta che sia il chiamante\n"
+    "a congedarsi per primo.\n"
+    "\n"
+    "Alla fine, saluta calorosamente e di' che un agente ricontatterà\n"
+    "il chiamante per i dettagli.\n"
+    "\n"
+    "Non inventare mai immobili che non esistono nei risultati della ricerca.\n"
     "Non trasferire mai la chiamata — sei l'unico punto di contatto."
 )
 
@@ -73,14 +92,15 @@ _SESSION_UPDATE: dict[str, Any] = {
         "type": "realtime",
         "model": "gpt-realtime-2",
         "instructions": _SYSTEM_PROMPT,
+        "reasoning": {"effort": "low"},
         "audio": {
             "input": {
                 "format": {"type": "audio/pcm", "rate": 24000},
                 "turn_detection": {
                     "type": "server_vad",
-                    "threshold": 0.5,
-                    "prefix_padding_ms": 300,
-                    "silence_duration_ms": 600,
+                    "threshold": 0.6,
+                    "prefix_padding_ms": 500,
+                    "silence_duration_ms": 1200,
                 },
             },
             "output": {
@@ -222,7 +242,6 @@ async def stream_ws(websocket: WebSocket) -> None:
             # any audio tasks are running so we can read from oai_ws directly.
             async for raw in oai_ws:
                 evt = json.loads(raw)
-                logger.info("OAI startup event: %s", evt.get("type"))
                 if evt.get("type") == "session.updated":
                     break
 
@@ -293,8 +312,6 @@ async def stream_ws(websocket: WebSocket) -> None:
                 async for raw in oai_ws:
                     msg = json.loads(raw)
                     etype = msg.get("type")
-                    logger.info("OpenAI event: %s", etype)
-
                     if etype == "response.output_audio.delta":
                         if session["stream_sid"]:
                             pcm24k = base64.b64decode(msg["delta"])
