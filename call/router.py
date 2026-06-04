@@ -295,7 +295,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                     etype = msg.get("type")
                     logger.info("OpenAI event: %s", etype)
 
-                    if etype == "response.audio.delta":
+                    if etype == "response.output_audio.delta":
                         if session["stream_sid"]:
                             pcm24k = base64.b64decode(msg["delta"])
                             pcm8k, downsample_state = audioop.ratecv(
