@@ -69,7 +69,7 @@ _SESSION_UPDATE: dict[str, Any] = {
     "type": "session.update",
     "session": {
         "type": "realtime",
-        "modalities": ["audio", "text"],
+        "model": "gpt-realtime-2",
         "instructions": _SYSTEM_PROMPT,
         "voice": "alloy",
         "input_audio_format": "g711_ulaw",
@@ -83,7 +83,6 @@ _SESSION_UPDATE: dict[str, Any] = {
         },
         "tools": [_SEARCH_TOOL],
         "tool_choice": "auto",
-        "temperature": 0.8,
     },
 }
 
