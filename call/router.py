@@ -69,14 +69,20 @@ _SESSION_UPDATE: dict[str, Any] = {
     "type": "session.update",
     "session": {
         "modalities": ["audio", "text"],
-        "voice": "alloy",
         "instructions": _SYSTEM_PROMPT,
+        "voice": "alloy",
         "input_audio_format": "g711_ulaw",
         "output_audio_format": "g711_ulaw",
-        "input_audio_transcription": {"model": "whisper-1"},
-        "turn_detection": {"type": "server_vad", "threshold": 0.5},
+        "input_audio_transcription": {"model": "gpt-4o-mini-transcribe"},
+        "turn_detection": {
+            "type": "server_vad",
+            "threshold": 0.5,
+            "prefix_padding_ms": 300,
+            "silence_duration_ms": 600,
+        },
         "tools": [_SEARCH_TOOL],
         "tool_choice": "auto",
+        "temperature": 0.8,
     },
 }
 
