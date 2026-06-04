@@ -73,27 +73,16 @@ _SESSION_UPDATE: dict[str, Any] = {
         "instructions": _SYSTEM_PROMPT,
         "audio": {
             "input": {
-                "format": {
-                    "type": "audio/pcm",
-                    "encoding": "mulaw",
-                    "rate": 8000,
-                },
+                "format": {"type": "audio/pcm", "rate": 8000},
                 "turn_detection": {
                     "type": "server_vad",
                     "threshold": 0.5,
                     "prefix_padding_ms": 300,
                     "silence_duration_ms": 600,
                 },
-                "transcription": {
-                    "model": "gpt-realtime-whisper"
-                },
             },
             "output": {
-                "format": {
-                    "type": "audio/pcm",
-                    "encoding": "mulaw",
-                    "rate": 8000,
-                },
+                "format": {"type": "audio/pcm", "rate": 8000},
                 "voice": "alloy",
             },
         },
