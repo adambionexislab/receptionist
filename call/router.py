@@ -221,7 +221,9 @@ async def stream_ws(websocket: WebSocket) -> None:
             # session.updated is the ack for session.update; it arrives before
             # any audio tasks are running so we can read from oai_ws directly.
             async for raw in oai_ws:
-                if json.loads(raw).get("type") == "session.updated":
+                evt = json.loads(raw)
+                logger.info("OAI startup event: %s", evt.get("type"))
+                if evt.get("type") == "session.updated":
                     break
 
             await oai_ws.send(json.dumps({
@@ -291,6 +293,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                 async for raw in oai_ws:
                     msg = json.loads(raw)
                     etype = msg.get("type")
+                    logger.info("OpenAI event: %s", etype)
 
                     if etype == "response.audio.delta":
                         if session["stream_sid"]:
