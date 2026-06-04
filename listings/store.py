@@ -99,5 +99,13 @@ class ListingsStore:
             results.append(dict(listing))
         return results
 
+    def get_by_address(self, address_query: str) -> list[dict]:
+        query = address_query.lower().strip()
+        return [
+            l for l in self._listings
+            if query in l["address"].lower() or
+               any(word in l["address"].lower() for word in query.split() if len(word) > 3)
+        ]
+
 
 store = ListingsStore()

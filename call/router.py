@@ -23,34 +23,49 @@ _SYSTEM_PROMPT = (
     "Sei Sara, la receptionist virtuale di uno studio immobiliare.\n"
     "Rispondi sempre in italiano, con tono professionale ma cordiale.\n"
     "\n"
-    "Il tuo obiettivo è capire cosa cerca il chiamante prima di cercare immobili.\n"
-    "Fai UNA domanda alla volta, in questo ordine, finché non hai la risposta:\n"
+    "# Tipi di chiamata\n"
+    "\n"
+    "## TIPO A — Il chiamante chiede di un immobile specifico\n"
+    "Riconosci questo tipo quando il chiamante menziona un indirizzo o\n"
+    "un immobile specifico ('chiamo per l'appartamento in Via Roma...').\n"
+    "Procedura:\n"
+    "1. Usa get_listing_by_address per cercare quell'immobile.\n"
+    "2. Se trovato: conferma che è disponibile e descrivi brevemente.\n"
+    "3. Poi fai UNA domanda qualificante alla volta, in questo ordine.\n"
+    "   Per AFFITTO chiedi:\n"
+    "   - Situazione lavorativa (dipendente, autonomo, studente?)\n"
+    "   - Reddito mensile netto approssimativo\n"
+    "   - Numero di persone che abiterebbero nell'immobile\n"
+    "   - Presenza di animali domestici\n"
+    "   - Data di ingresso desiderata\n"
+    "   Per VENDITA chiedi:\n"
+    "   - Ha già un mutuo pre-approvato o sta trattando con una banca?\n"
+    "   - Ha un immobile da vendere prima di acquistare?\n"
+    "   - Tempistiche desiderate per il rogito\n"
+    "   - Visita: quando sarebbe disponibile?\n"
+    "4. Rispondi a qualsiasi domanda sul immobile usando i dati trovati.\n"
+    "   Se non hai l'informazione, di' che chiederai all'agente.\n"
+    "5. Se NON trovato: scusati, di' che verificherai e un agente\n"
+    "   ricontatterà il chiamante.\n"
+    "\n"
+    "## TIPO B — Il chiamante cerca senza un immobile specifico\n"
+    "Raccolta informazioni — fai UNA domanda alla volta:\n"
     "1. Acquisto (vendita) o affitto?\n"
     "2. Zona o città preferita?\n"
-    "3. Numero di camere desiderate?\n"
+    "3. Numero di camere?\n"
     "4. Budget massimo?\n"
+    "Poi usa search_listings con i parametri raccolti.\n"
+    "Descrivi i risultati in modo naturale, come farebbe un agente umano.\n"
+    "Se nessun risultato: chiedi se vuole provare criteri diversi.\n"
     "\n"
-    "Aspetta SEMPRE che il chiamante finisca completamente di parlare\n"
-    "prima di rispondere. Non interrompere mai.\n"
-    "\n"
-    "Usa search_listings SOLO quando hai raccolto almeno:\n"
-    "- tipo (vendita o affitto)\n"
-    "- zona\n"
-    "Se mancano queste informazioni, fai un'altra domanda invece di cercare.\n"
-    "\n"
-    "Dopo aver trovato risultati, descrivili in modo naturale come farebbe\n"
-    "un agente umano — non leggere tutti i campi, racconta l'immobile.\n"
-    "\n"
-    "Se la ricerca non trova risultati, chiedi se il chiamante vuole\n"
-    "provare con criteri diversi (zona più ampia, budget più alto, ecc.).\n"
-    "Non terminare mai la chiamata da solo — aspetta che sia il chiamante\n"
-    "a congedarsi per primo.\n"
-    "\n"
-    "Alla fine, saluta calorosamente e di' che un agente ricontatterà\n"
-    "il chiamante per i dettagli.\n"
-    "\n"
-    "Non inventare mai immobili che non esistono nei risultati della ricerca.\n"
-    "Non trasferire mai la chiamata — sei l'unico punto di contatto."
+    "# Regole generali\n"
+    "- Aspetta SEMPRE che il chiamante finisca di parlare prima di rispondere.\n"
+    "- Non terminare mai la chiamata — aspetta che sia il chiamante a salutare.\n"
+    "- Alla fine di ogni chiamata di' che un agente ricontatterà per i dettagli.\n"
+    "- Non inventare mai dati non presenti nei risultati degli strumenti.\n"
+    "- Non trasferire mai la chiamata.\n"
+    "- Raccogli sempre il nome del chiamante se non lo conosce già.\n"
+    "- Salva mentalmente le informazioni raccolte per il riepilogo finale.\n"
 )
 
 _SEARCH_TOOL: dict[str, Any] = {
@@ -86,6 +101,26 @@ _SEARCH_TOOL: dict[str, Any] = {
     },
 }
 
+_GET_LISTING_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "get_listing_by_address",
+    "description": (
+        "Look up a specific listing by address or partial address. "
+        "Use this when the caller mentions a specific property or address. "
+        "Returns the listing details if found, or empty list if not found."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "address_query": {
+                "type": "string",
+                "description": "The address or partial address mentioned by the caller",
+            }
+        },
+        "required": ["address_query"],
+    },
+}
+
 _SESSION_UPDATE: dict[str, Any] = {
     "type": "session.update",
     "session": {
@@ -108,7 +143,7 @@ _SESSION_UPDATE: dict[str, Any] = {
                 "voice": "alloy",
             },
         },
-        "tools": [_SEARCH_TOOL],
+        "tools": [_SEARCH_TOOL, _GET_LISTING_TOOL],
         "tool_choice": "auto",
     },
 }
@@ -375,6 +410,27 @@ async def stream_ws(websocket: WebSocket) -> None:
                                     }
                                 )
                             )
+                            await oai_ws.send(json.dumps({"type": "response.create"}))
+
+                        elif msg.get("name") == "get_listing_by_address":
+                            call_id = msg.get("call_id")
+                            try:
+                                args = json.loads(msg.get("arguments", "{}"))
+                            except json.JSONDecodeError:
+                                args = {}
+                            results = store.get_by_address(args.get("address_query", ""))
+                            session["listings_shown"].extend(results)
+                            logger.info(
+                                "get_listing_by_address(%s) → %d results", args, len(results)
+                            )
+                            await oai_ws.send(json.dumps({
+                                "type": "conversation.item.create",
+                                "item": {
+                                    "type": "function_call_output",
+                                    "call_id": call_id,
+                                    "output": json.dumps(results, ensure_ascii=False),
+                                },
+                            }))
                             await oai_ws.send(json.dumps({"type": "response.create"}))
 
                     elif etype == "error":
