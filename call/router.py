@@ -1,4 +1,6 @@
 import asyncio
+import audioop
+import base64
 import json
 import logging
 from email.message import EmailMessage
@@ -73,7 +75,7 @@ _SESSION_UPDATE: dict[str, Any] = {
         "instructions": _SYSTEM_PROMPT,
         "audio": {
             "input": {
-                "format": {"type": "audio/pcm", "rate": 8000},
+                "format": {"type": "audio/pcm", "rate": 24000},
                 "turn_detection": {
                     "type": "server_vad",
                     "threshold": 0.5,
@@ -82,7 +84,7 @@ _SESSION_UPDATE: dict[str, Any] = {
                 },
             },
             "output": {
-                "format": {"type": "audio/pcm", "rate": 8000},
+                "format": {"type": "audio/pcm", "rate": 24000},
                 "voice": "alloy",
             },
         },
@@ -216,6 +218,7 @@ async def stream_ws(websocket: WebSocket) -> None:
             logger.info("OpenAI Realtime session initialised")
 
             async def twilio_to_openai() -> None:
+                upsample_state = None
                 async for raw in websocket.iter_text():
                     msg = json.loads(raw)
                     event = msg.get("event")
@@ -237,11 +240,16 @@ async def stream_ws(websocket: WebSocket) -> None:
                         )
 
                     elif event == "media":
+                        mulaw = base64.b64decode(msg["media"]["payload"])
+                        pcm16 = audioop.ulaw2lin(mulaw, 2)
+                        pcm24k, upsample_state = audioop.ratecv(
+                            pcm16, 2, 1, 8000, 24000, upsample_state
+                        )
                         await oai_ws.send(
                             json.dumps(
                                 {
                                     "type": "input_audio_buffer.append",
-                                    "audio": msg["media"]["payload"],
+                                    "audio": base64.b64encode(pcm24k).decode(),
                                 }
                             )
                         )
@@ -253,12 +261,18 @@ async def stream_ws(websocket: WebSocket) -> None:
                         break
 
             async def openai_to_twilio() -> None:
+                downsample_state = None
                 async for raw in oai_ws:
                     msg = json.loads(raw)
                     etype = msg.get("type")
 
                     if etype == "response.audio.delta":
                         if session["stream_sid"]:
+                            pcm24k = base64.b64decode(msg["delta"])
+                            pcm8k, downsample_state = audioop.ratecv(
+                                pcm24k, 2, 1, 24000, 8000, downsample_state
+                            )
+                            mulaw = audioop.lin2ulaw(pcm8k, 2)
                             await websocket.send_text(
                                 json.dumps(
                                     {
@@ -266,7 +280,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                                         "streamSid": session["stream_sid"],
                                         "media": {
                                             "track": "outbound",
-                                            "payload": msg["delta"],
+                                            "payload": base64.b64encode(mulaw).decode(),
                                         },
                                     }
                                 )
