@@ -217,6 +217,32 @@ async def stream_ws(websocket: WebSocket) -> None:
             await oai_ws.send(json.dumps(_SESSION_UPDATE))
             logger.info("OpenAI Realtime session initialised")
 
+            # Wait for OpenAI to confirm the session is ready before greeting.
+            # session.updated is the ack for session.update; it arrives before
+            # any audio tasks are running so we can read from oai_ws directly.
+            async for raw in oai_ws:
+                if json.loads(raw).get("type") == "session.updated":
+                    break
+
+            await oai_ws.send(json.dumps({
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": (
+                                "Il telefono ha squillato e hai risposto. "
+                                "Saluta il chiamante e chiedi come puoi aiutarlo."
+                            ),
+                        }
+                    ],
+                },
+            }))
+            await oai_ws.send(json.dumps({"type": "response.create"}))
+            logger.info("Greeting triggered")
+
             async def twilio_to_openai() -> None:
                 upsample_state = None
                 async for raw in websocket.iter_text():
