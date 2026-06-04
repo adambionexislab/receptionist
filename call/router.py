@@ -120,7 +120,7 @@ async def inbound_call(request: Request) -> Response:
 
     response = VoiceResponse()
     connect = Connect()
-    stream = Stream(url=f"{wss_base}/call/stream", track="both_tracks")
+    stream = Stream(url=f"{wss_base}/call/stream", track="inbound_track")
     stream.parameter(name="caller", value=caller)
     connect.append(stream)
     response.append(connect)
@@ -254,7 +254,10 @@ async def stream_ws(websocket: WebSocket) -> None:
                                     {
                                         "event": "media",
                                         "streamSid": session["stream_sid"],
-                                        "media": {"payload": msg["delta"]},
+                                        "media": {
+                                            "track": "outbound",
+                                            "payload": msg["delta"],
+                                        },
                                     }
                                 )
                             )
