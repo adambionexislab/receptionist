@@ -200,7 +200,6 @@ async def stream_ws(websocket: WebSocket) -> None:
 
     oai_headers = [
         ("Authorization", f"Bearer {settings.OPENAI_API_KEY}"),
-        ("OpenAI-Beta", "realtime=v1"),
     ]
 
     try:
