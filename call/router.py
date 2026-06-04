@@ -68,7 +68,7 @@ _SEARCH_TOOL: dict[str, Any] = {
 _SESSION_UPDATE: dict[str, Any] = {
     "type": "session.update",
     "session": {
-        "type": "realtime_session",
+        "type": "realtime",
         "modalities": ["audio", "text"],
         "instructions": _SYSTEM_PROMPT,
         "voice": "alloy",
