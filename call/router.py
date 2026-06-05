@@ -509,8 +509,8 @@ async def stream_ws(websocket: WebSocket) -> None:
             async def silence_watchdog() -> None:
                 while True:
                     await asyncio.sleep(1)
-                    if asyncio.get_event_loop().time() - session["last_speech_at"] > 10:
-                        logger.info("10s silence — hanging up sid=%s", session["stream_sid"])
+                    if asyncio.get_event_loop().time() - session["last_speech_at"] > 100:
+                        logger.info("100s silence — hanging up sid=%s", session["stream_sid"])
                         await websocket.close()
                         break
 
