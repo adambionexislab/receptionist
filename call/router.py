@@ -3,7 +3,9 @@ import audioop
 import base64
 import json
 import logging
+import wave
 from email.message import EmailMessage
+from pathlib import Path
 from typing import Any
 
 import aiosmtplib
@@ -18,6 +20,34 @@ from listings.store import store
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/call")
+
+_GREETING_TEXT = "Buongiorno, sono Sara. Come posso aiutarla?"
+
+
+def _load_greeting() -> str | None:
+    """Load static/greeting.wav and return base64 mulaw 8kHz, or None if missing."""
+    path = Path(__file__).parent.parent / "static" / "greeting.wav"
+    if not path.exists():
+        return None
+    try:
+        with wave.open(str(path), "rb") as wf:
+            pcm = wf.readframes(wf.getnframes())
+            rate = wf.getframerate()
+            channels = wf.getnchannels()
+            width = wf.getsampwidth()
+        if width != 2:
+            pcm = audioop.lin2lin(pcm, width, 2)
+        if channels > 1:
+            pcm = audioop.tomono(pcm, 2, 1)
+        if rate != 8000:
+            pcm, _ = audioop.ratecv(pcm, 2, 1, rate, 8000, None)
+        return base64.b64encode(audioop.lin2ulaw(pcm, 2)).decode()
+    except Exception as exc:
+        logger.error("Failed to load greeting audio: %s", exc)
+        return None
+
+
+_GREETING_AUDIO: str | None = _load_greeting()
 
 _SYSTEM_PROMPT = (
     "Sei Sara, la receptionist virtuale di uno studio immobiliare.\n"
@@ -59,6 +89,7 @@ _SYSTEM_PROMPT = (
     "Se nessun risultato: chiedi se vuole provare criteri diversi.\n"
     "\n"
     "# Regole generali\n"
+    "- Rispondi nel modo più breve possibile. Una frase, mai più di due.\n"
     "- Aspetta SEMPRE che il chiamante finisca di parlare prima di rispondere.\n"
     "- Non terminare mai la chiamata — aspetta che sia il chiamante a salutare.\n"
     "- Alla fine di ogni chiamata di' che un agente ricontatterà per i dettagli.\n"
@@ -135,12 +166,12 @@ _SESSION_UPDATE: dict[str, Any] = {
                     "type": "server_vad",
                     "threshold": 0.6,
                     "prefix_padding_ms": 500,
-                    "silence_duration_ms": 1200,
+                    "silence_duration_ms": 800,
                 },
             },
             "output": {
                 "format": {"type": "audio/pcm", "rate": 24000},
-                "voice": "alloy",
+                "voice": "nova",
             },
         },
         "tools": [_SEARCH_TOOL, _GET_LISTING_TOOL],
@@ -258,6 +289,7 @@ async def stream_ws(websocket: WebSocket) -> None:
         "caller_number": "sconosciuto",
         "transcript": [],
         "listings_shown": [],
+        "last_speech_at": 0.0,
     }
 
     oai_headers = [
@@ -280,24 +312,38 @@ async def stream_ws(websocket: WebSocket) -> None:
                 if evt.get("type") == "session.updated":
                     break
 
-            await oai_ws.send(json.dumps({
-                "type": "conversation.item.create",
-                "item": {
-                    "type": "message",
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": (
-                                "Il telefono ha squillato e hai risposto. "
-                                "Saluta il chiamante e chiedi come puoi aiutarlo."
-                            ),
-                        }
-                    ],
-                },
-            }))
-            await oai_ws.send(json.dumps({"type": "response.create"}))
-            logger.info("Greeting triggered")
+            if _GREETING_AUDIO:
+                # Inject prerecorded greeting as an assistant turn so OpenAI
+                # knows the greeting was said without generating its own audio.
+                await oai_ws.send(json.dumps({
+                    "type": "conversation.item.create",
+                    "item": {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": _GREETING_TEXT}],
+                    },
+                }))
+                logger.info("Prerecorded greeting injected into context")
+            else:
+                # Fallback: let OpenAI generate the greeting.
+                await oai_ws.send(json.dumps({
+                    "type": "conversation.item.create",
+                    "item": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": (
+                                    "Il telefono ha squillato e hai risposto. "
+                                    "Saluta il chiamante e chiedi come puoi aiutarlo."
+                                ),
+                            }
+                        ],
+                    },
+                }))
+                await oai_ws.send(json.dumps({"type": "response.create"}))
+                logger.info("Greeting triggered via OpenAI")
 
             async def twilio_to_openai() -> None:
                 upsample_state = None
@@ -320,6 +366,15 @@ async def stream_ws(websocket: WebSocket) -> None:
                             session["stream_sid"],
                             session["caller_number"],
                         )
+                        if _GREETING_AUDIO:
+                            await websocket.send_text(json.dumps({
+                                "event": "media",
+                                "streamSid": session["stream_sid"],
+                                "media": {
+                                    "track": "outbound",
+                                    "payload": _GREETING_AUDIO,
+                                },
+                            }))
 
                     elif event == "media":
                         mulaw = base64.b64decode(msg["media"]["payload"])
@@ -368,6 +423,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                             )
 
                     elif etype == "response.audio_transcript.done":
+                        session["last_speech_at"] = asyncio.get_event_loop().time()
                         text = msg.get("transcript", "").strip()
                         if text:
                             session["transcript"].append(
@@ -433,13 +489,27 @@ async def stream_ws(websocket: WebSocket) -> None:
                             }))
                             await oai_ws.send(json.dumps({"type": "response.create"}))
 
+                    elif etype == "input_audio_buffer.speech_started":
+                        session["last_speech_at"] = asyncio.get_event_loop().time()
+
                     elif etype == "error":
                         logger.error("OpenAI Realtime error: %s", msg)
 
+            session["last_speech_at"] = asyncio.get_event_loop().time()
+
+            async def silence_watchdog() -> None:
+                while True:
+                    await asyncio.sleep(1)
+                    if asyncio.get_event_loop().time() - session["last_speech_at"] > 10:
+                        logger.info("10s silence — hanging up sid=%s", session["stream_sid"])
+                        await websocket.close()
+                        break
+
             t1 = asyncio.create_task(twilio_to_openai())
             t2 = asyncio.create_task(openai_to_twilio())
+            t3 = asyncio.create_task(silence_watchdog())
             _done, pending = await asyncio.wait(
-                [t1, t2], return_when=asyncio.FIRST_COMPLETED
+                [t1, t2, t3], return_when=asyncio.FIRST_COMPLETED
             )
             for task in pending:
                 task.cancel()
