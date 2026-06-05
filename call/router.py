@@ -171,7 +171,7 @@ _SESSION_UPDATE: dict[str, Any] = {
             },
             "output": {
                 "format": {"type": "audio/pcm", "rate": 24000},
-                "voice": "nova",
+                "voice": "marin",
             },
         },
         "tools": [_SEARCH_TOOL, _GET_LISTING_TOOL],
