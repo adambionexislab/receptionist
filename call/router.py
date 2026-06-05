@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/call")
 
-_GREETING_TEXT = "Buongiorno, sono Sara. Come posso aiutarla?"
+_GREETING_TEXT = "Buongiorno, sono Apollonia. Come posso aiutarla?"
 
 
 def _load_greeting() -> str | None:
@@ -50,7 +50,7 @@ def _load_greeting() -> str | None:
 _GREETING_AUDIO: str | None = _load_greeting()
 
 _SYSTEM_PROMPT = (
-    "Sei Sara, la receptionist virtuale di uno studio immobiliare.\n"
+    "Sei Apollonia, la receptionist virtuale di uno studio immobiliare.\n"
     "Rispondi sempre in italiano, con tono professionale ma cordiale.\n"
     "\n"
     "# Tipi di chiamata\n"
