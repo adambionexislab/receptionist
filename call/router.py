@@ -309,8 +309,14 @@ async def stream_ws(websocket: WebSocket) -> None:
             # any audio tasks are running so we can read from oai_ws directly.
             async for raw in oai_ws:
                 evt = json.loads(raw)
-                if evt.get("type") == "session.updated":
+                etype = evt.get("type")
+                if etype == "session.updated":
+                    logger.info("OpenAI session ready")
                     break
+                elif etype == "error":
+                    logger.error("OpenAI startup error: %s", evt)
+                else:
+                    logger.info("OpenAI startup event: %s", etype)
 
             if _GREETING_AUDIO:
                 # Inject prerecorded greeting as an assistant turn so OpenAI
@@ -429,6 +435,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                             session["transcript"].append(
                                 {"role": "assistant", "text": text}
                             )
+                            logger.info("Apollonia: %s", text)
 
                     elif (
                         etype
@@ -439,6 +446,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                             session["transcript"].append(
                                 {"role": "user", "text": text}
                             )
+                            logger.info("Caller said: %s", text)
 
                     elif etype == "response.function_call_arguments.done":
                         if msg.get("name") == "search_listings":
@@ -491,6 +499,7 @@ async def stream_ws(websocket: WebSocket) -> None:
 
                     elif etype == "input_audio_buffer.speech_started":
                         session["last_speech_at"] = asyncio.get_event_loop().time()
+                        logger.info("Caller speaking")
 
                     elif etype == "error":
                         logger.error("OpenAI Realtime error: %s", msg)
