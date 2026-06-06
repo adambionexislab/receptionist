@@ -152,6 +152,8 @@ class ListingsStore:
                         "maxItems": 200,
                     },
                 )
+                if run_resp.is_error:
+                    logger.error("Apify start failed %s: %s", run_resp.status_code, run_resp.text)
                 run_resp.raise_for_status()
                 run_id = run_resp.json()["data"]["id"]
                 logger.info("Apify run started: %s", run_id)
