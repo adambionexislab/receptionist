@@ -1,4 +1,5 @@
 change the silenece hang up time. right now 100 seconds
-apify scraping of immobiliare.it
-change language when other language is detected
+apify scraping of immobiliare.it  - done (u will need pai apify account)
+change language when other language is detected - done - need to test
 have your phoneringing display an apollonIA button that will redirect the phonecall to apollonIA
+    - PROMPT FOR THIS: multitentant_prompt.txt

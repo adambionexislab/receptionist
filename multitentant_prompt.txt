@@ -1,0 +1,165 @@
+Convert the AI voice receptionist from a single-tenant app into a
+multi-tenant SaaS platform. Each tenant is a real estate agency with
+their own Twilio US number, Immobiliare.it listings, lead email, and
+AI persona.
+
+## Current state
+- Single FastAPI app deployed on Render
+- One hardcoded tenant in environment variables
+- listings/store.py holds one global ListingsStore in memory
+- call/router.py uses a single _SYSTEM_PROMPT and _SESSION_UPDATE
+- Twilio number is manually provisioned
+
+## Target architecture
+- SQLite database (one file, no external DB needed) stores tenant records
+- Each inbound call is matched to a tenant by the called Twilio number
+- Listings are stored per-tenant in memory (dict keyed by tenant_id)
+- Apify scraping runs per-tenant on the shared 4x daily schedule
+- A self-onboarding form provisions new tenants automatically
+- Twilio numbers are provisioned programmatically via the Twilio API
+
+## 1. Database — tenants/db.py
+Use Python's built-in sqlite3 module. No ORM needed.
+DB file path: DATA_DIR env var (default: /data/receptionist.db) — use
+/data on Render since it supports persistent disks.
+
+Create table on startup:
+  CREATE TABLE IF NOT EXISTS tenants (
+    id          TEXT PRIMARY KEY,  -- UUID
+    created_at  TEXT,              -- ISO datetime
+    agency_name TEXT NOT NULL,     -- e.g. "Studio Rossi Immobiliare"
+    agent_name  TEXT NOT NULL,     -- receptionist persona name e.g. "Sara"
+    twilio_number TEXT NOT NULL,   -- E.164 Twilio US number e.g. +14632326753
+    real_number TEXT,              -- realtor's real Italian number (for reference)
+    immobiliare_url TEXT,          -- Apify scrape source URL
+    lead_email  TEXT NOT NULL,     -- where to send lead summaries
+    active      INTEGER DEFAULT 1  -- 0 = suspended
+  )
+
+Methods:
+  get_by_twilio_number(number) -> dict | None
+  get_all_active() -> list[dict]
+  create(agency_name, agent_name, lead_email, immobiliare_url) -> dict
+  update_twilio_number(tenant_id, twilio_number) -> None
+
+## 2. Per-tenant listings — listings/store.py
+Replace the global singleton with a TenantListingsStore:
+  - Holds a dict: {tenant_id: ListingsStore}
+  - get_or_create(tenant_id) -> ListingsStore
+  - Each ListingsStore still works exactly as before (search, get_by_address)
+  - load(tenant_id, immobiliare_url) loads listings for that tenant only
+
+Sync schedule: on the 4x daily tick, iterate all active tenants and
+call load() for each one using their immobiliare_url.
+If a tenant has no immobiliare_url, use seed data for that tenant.
+
+## 3. Per-tenant call routing — call/router.py
+In POST /call/inbound:
+  - Read the "To" field from the Twilio POST params (the called number)
+  - Look up the tenant by that number using db.get_by_twilio_number()
+  - If no tenant found: return TwiML that says "numero non disponibile" and hangs up
+  - Pass tenant_id and tenant config into the WebSocket session
+
+In WS /call/stream:
+  - Read tenant config from session
+  - Build _SESSION_UPDATE dynamically per call using:
+      - tenant["agent_name"] in the system prompt
+      - tenant["agency_name"] in the system prompt
+  - Use tenant-specific ListingsStore for tool calls
+  - Send lead email to tenant["lead_email"]
+
+System prompt template (fill agency_name and agent_name dynamically):
+  "Sei {agent_name}, la receptionist virtuale di {agency_name}.
+   [rest of prompt unchanged]"
+
+## 4. Twilio number provisioning — tenants/provisioner.py
+Function: provision_twilio_number(tenant_id) -> str
+  - Use Twilio client to search for available US local numbers:
+    client.available_phone_numbers("US").local.list(limit=1)
+  - Purchase the first available number:
+    client.incoming_phone_numbers.create(phone_number=number)
+  - Set the voice webhook to:
+    {PUBLIC_BASE_URL}/call/inbound
+  - Update the tenant record with the new number
+  - Return the purchased number in E.164 format
+  - Log the purchase
+
+## 5. Onboarding form — onboarding/router.py
+POST /onboard
+  Body (JSON):
+    agency_name: str
+    agent_name: str       -- default "Sara" if not provided
+    lead_email: str
+    immobiliare_url: str  -- optional
+    real_number: str      -- optional, for reference only
+
+  Steps:
+    1. Validate all required fields
+    2. Create tenant record in DB
+    3. Call provision_twilio_number(tenant_id)
+    4. Trigger immediate listings load for this tenant
+    5. Send welcome email to lead_email containing:
+       - Agency name and agent name configured
+       - Their Twilio number (for internal reference)
+       - The USSD forwarding code to dial:
+         **61*{twilio_number}**30#
+         (formatted for Italian carrier conditional forward on no answer)
+       - Link to test: "Call this number to test Sara: {twilio_number}"
+    6. Return JSON: {tenant_id, twilio_number, status: "active"}
+
+GET /onboard
+  Return a minimal HTML form (inline, no template files) with fields:
+    - Agency name
+    - Receptionist name (default: Sara)
+    - Email for leads
+    - Immobiliare.it URL (optional)
+    - Real phone number (optional, just stored for reference)
+  On submit: POST to /onboard, show success message with USSD code
+
+## 6. Admin endpoint
+GET /admin/tenants
+  Protected by a simple bearer token (ADMIN_TOKEN env var)
+  Returns JSON list of all tenants with their status and listing counts
+
+## 7. Render configuration
+Update render.yaml:
+  - Add a persistent disk mounted at /data (1GB, free tier)
+  - Add new env vars: ADMIN_TOKEN, DATA_DIR=/data
+
+## New env vars needed
+  ADMIN_TOKEN          — simple secret for /admin/tenants
+  DATA_DIR             — path for SQLite file (default /data)
+
+## Existing env vars that become per-tenant (move to DB, keep as fallback)
+  TWILIO_PHONE_NUMBER  — keep for backward compat, used as default if DB empty
+  LEAD_EMAIL           — keep as fallback
+  IMMOBILIARE_URL      — keep as fallback
+
+## Migration: keep existing single tenant working
+On startup, if the tenants table is empty AND TWILIO_PHONE_NUMBER is set:
+  Auto-insert the existing single tenant from env vars so the app works
+  immediately without any manual onboarding step.
+  Use "Studio Demo" as agency_name and "Sara" as agent_name if not set.
+
+## What NOT to change
+- Audio resampling logic (audioop)
+- OpenAI WebSocket connection and session update structure
+- Greeting injection logic
+- Apify scraping logic (just make it per-tenant)
+- Email sending logic (just make recipient per-tenant)
+- The /listings and /listings/reload endpoints (keep for dev/debug)
+
+## Dependencies to add
+  No new dependencies — sqlite3 is standard library.
+  twilio is already installed.
+
+## Deliverables
+1. tenants/db.py — database layer
+2. tenants/provisioner.py — Twilio number provisioning
+3. onboarding/router.py — form + API endpoint
+4. Modified listings/store.py — per-tenant stores
+5. Modified call/router.py — per-tenant routing
+6. Modified main.py — register new routers, run migration on startup
+7. Updated render.yaml — persistent disk
+8. Updated .env.example — new vars
+9. Brief note on how to test locally with two fake tenants

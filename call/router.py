@@ -23,6 +23,20 @@ router = APIRouter(prefix="/call")
 
 _GREETING_TEXT = "Buongiorno, sono Apollonia. Come posso aiutarla?"
 
+_LANG_WORDS: dict[str, frozenset[str]] = {
+    "italiano": frozenset({"sono", "per", "che", "con", "una", "del", "della", "nel", "anche", "come", "buongiorno", "ciao", "vorrei", "cerco", "affitto", "vendita", "appartamento"}),
+    "inglese":  frozenset({"the", "and", "for", "with", "that", "this", "hello", "good", "morning", "looking", "apartment", "rent", "buy", "would", "like", "calling"}),
+    "tedesco":  frozenset({"ich", "sie", "und", "die", "der", "das", "ist", "nicht", "hallo", "guten", "morgen", "suche", "miete", "wohnung"}),
+    "francese": frozenset({"je", "vous", "les", "des", "est", "avec", "pour", "bonjour", "cherche", "louer", "acheter", "appartement"}),
+}
+
+
+def _detect_language(text: str) -> str:
+    words = frozenset(text.lower().split())
+    scores = {lang: len(words & vocab) for lang, vocab in _LANG_WORDS.items()}
+    best, count = max(scores.items(), key=lambda x: x[1])
+    return best if count > 0 else "altra"
+
 
 def _load_greeting() -> str | None:
     """Load static/greeting.wav and return base64 mulaw 8kHz, or None if missing."""
@@ -90,6 +104,9 @@ _SYSTEM_PROMPT = (
     "\n"
     "# Regole generali\n"
     "- Rispondi nel modo più breve possibile. Una frase, mai più di due.\n"
+    "- Se il chiamante parla una lingua diversa dall'italiano, passa\n"
+    "  immediatamente alla sua lingua e continua in quella lingua per\n"
+    "  tutta la durata della chiamata.\n"
     "- Aspetta SEMPRE che il chiamante finisca di parlare prima di rispondere.\n"
     "- Non terminare mai la chiamata — aspetta che sia il chiamante a salutare.\n"
     "- Non inventare mai dati non presenti nei risultati degli strumenti.\n"
@@ -242,7 +259,11 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
         return
 
     caller = session.get("caller_number", "sconosciuto")
-    lines: list[str] = [f"Chiamante: {caller}", ""]
+    lines: list[str] = [
+        f"Chiamante: {caller}",
+        f"Lingua: {session.get('caller_language', 'italiano')}",
+        "",
+    ]
 
     lines += ["=== Trascrizione ==="]
     if session["transcript"]:
@@ -298,6 +319,7 @@ async def stream_ws(websocket: WebSocket) -> None:
         "caller_number": "sconosciuto",
         "transcript": [],
         "listings_shown": [],
+        "caller_language": "italiano",
         "last_speech_at": 0.0,
     }
 
@@ -455,6 +477,9 @@ async def stream_ws(websocket: WebSocket) -> None:
                             session["transcript"].append(
                                 {"role": "user", "text": text}
                             )
+                            detected = _detect_language(text)
+                            if detected != "italiano":
+                                session["caller_language"] = detected
                             logger.info("Caller said: %s", text)
 
                     elif etype == "response.function_call_arguments.done":
