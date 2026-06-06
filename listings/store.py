@@ -148,7 +148,7 @@ class ListingsStore:
                     f"https://api.apify.com/v2/acts/{_ACTOR_ID}/runs",
                     headers=apify_headers,
                     json={
-                        "startUrls": [{"url": settings.IMMOBILIARE_SEARCH_URL}],
+                        "startUrl": settings.IMMOBILIARE_SEARCH_URL,
                         "maxItems": 200,
                     },
                 )
