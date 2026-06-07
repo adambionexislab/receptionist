@@ -12,10 +12,15 @@ from listings.seed import get_seed_listings
 
 logger = logging.getLogger(__name__)
 
+# TEMPORARY: pauses the background Apify scrape (and the GitHub CSV write-back
+# it triggers) so listings can be edited by hand without being overwritten.
+# Flip back to False to resume automatic syncing.
+_APIFY_SYNC_PAUSED = True
+
 _ACTOR_ID = "azzouzana~immobiliare-it-listing-page-scraper-by-search-url"
 _POLL_INTERVAL = 5
 _RUN_TIMEOUT = 120
-_CSV_FIELDS = ["address", "zone", "type", "rooms", "size_sqm", "price", "currency", "available", "notes"]
+_CSV_FIELDS = ["address", "zone", "type", "rooms", "size_sqm", "price", "currency", "available", "text"]
 
 
 def _safe_int(val, default: int = 0) -> int:
@@ -37,7 +42,7 @@ def _map_apify_item(item: dict) -> dict:
         "price": _safe_int(item.get("price")),
         "currency": "EUR",
         "available": True,
-        "notes": (item.get("description") or "")[:300],
+        "text": item.get("description", "") or item.get("text", "") or item.get("desc", ""),
     }
 
 
@@ -55,7 +60,7 @@ def _listings_to_csv(listings: list[dict]) -> str:
             "price": listing.get("price", 0),
             "currency": listing.get("currency", "EUR"),
             "available": "TRUE" if listing.get("available", True) else "FALSE",
-            "notes": listing.get("notes", ""),
+            "text": listing.get("text", ""),
         })
     return buf.getvalue()
 
@@ -73,7 +78,9 @@ class ListingsStore:
             self._listings = get_seed_listings()
             logger.info("Loaded %d seed listings as fallback", len(self._listings))
 
-        if settings.APIFY_TOKEN and settings.IMMOBILIARE_SEARCH_URL:
+        if _APIFY_SYNC_PAUSED:
+            logger.info("Apify sync is paused (_APIFY_SYNC_PAUSED=True) — skipping background scrape")
+        elif settings.APIFY_TOKEN and settings.IMMOBILIARE_SEARCH_URL:
             asyncio.create_task(self._apify_scrape_and_cache())
         elif not settings.APIFY_TOKEN:
             logger.info("APIFY_TOKEN not set — skipping background Apify scrape")
@@ -121,7 +128,7 @@ class ListingsStore:
                     "price": _safe_int(row.get("price")),
                     "currency": (row.get("currency") or "EUR").strip() or "EUR",
                     "available": True,
-                    "notes": (row.get("notes") or "").strip(),
+                    "text": (row.get("text") or "").strip(),
                 })
 
             if not listings:

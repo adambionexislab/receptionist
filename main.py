@@ -72,7 +72,7 @@ class Listing(BaseModel):
     price: int
     currency: str
     available: bool
-    notes: str
+    text: str
 
 
 @app.get("/listings", response_model=list[Listing])

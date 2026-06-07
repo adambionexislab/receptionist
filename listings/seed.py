@@ -9,7 +9,7 @@ def get_seed_listings() -> list[dict]:
             "price": 750,
             "currency": "EUR",
             "available": True,
-            "notes": "Piano secondo, ascensore, posto auto incluso",
+            "text": "Piano secondo, ascensore, posto auto incluso",
         },
         {
             "address": "Via Mazzini 45, Mulazzano",
@@ -20,7 +20,7 @@ def get_seed_listings() -> list[dict]:
             "price": 180000,
             "currency": "EUR",
             "available": True,
-            "notes": "Ottimo stato, cantina e box auto",
+            "text": "Ottimo stato, cantina e box auto",
         },
         {
             "address": "Via Emilia 100, San Donato Milanese",
@@ -31,7 +31,7 @@ def get_seed_listings() -> list[dict]:
             "price": 1200,
             "currency": "EUR",
             "available": True,
-            "notes": "Ufficio open space, parcheggio privato",
+            "text": "Ufficio open space, parcheggio privato",
         },
         {
             "address": "Corso Adda 8, Lodi",
@@ -42,7 +42,7 @@ def get_seed_listings() -> list[dict]:
             "price": 320000,
             "currency": "EUR",
             "available": True,
-            "notes": "Appartamento ristrutturato, terrazza, doppi servizi",
+            "text": "Appartamento ristrutturato, terrazza, doppi servizi",
         },
         {
             "address": "Via Garibaldi 3, Lodi",
@@ -53,7 +53,7 @@ def get_seed_listings() -> list[dict]:
             "price": 550,
             "currency": "EUR",
             "available": True,
-            "notes": "Monolocale arredato, ideale per studenti",
+            "text": "Monolocale arredato, ideale per studenti",
         },
         {
             "address": "Via Torino 22, Mulazzano",
@@ -64,7 +64,7 @@ def get_seed_listings() -> list[dict]:
             "price": 120000,
             "currency": "EUR",
             "available": True,
-            "notes": "Bilocale piano terra con giardino privato",
+            "text": "Bilocale piano terra con giardino privato",
         },
         {
             "address": "Via dei Mille 17, Peschiera Borromeo",
@@ -75,7 +75,7 @@ def get_seed_listings() -> list[dict]:
             "price": 1100,
             "currency": "EUR",
             "available": True,
-            "notes": "Trilocale luminoso, vicino fermata MM3",
+            "text": "Trilocale luminoso, vicino fermata MM3",
         },
         {
             "address": "Via della Pace 5, Mulazzano",
@@ -86,6 +86,6 @@ def get_seed_listings() -> list[dict]:
             "price": 450000,
             "currency": "EUR",
             "available": True,
-            "notes": "Villetta a schiera con giardino, garage doppio",
+            "text": "Villetta a schiera con giardino, garage doppio",
         },
     ]
