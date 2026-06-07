@@ -324,6 +324,7 @@ async def inbound_call(request: Request) -> Response:
     """
     form = await request.form()
     caller = str(form.get("From", "sconosciuto"))
+    logger.info("Inbound call webhook hit — caller=%s", caller)
 
     wss_base = settings.PUBLIC_BASE_URL.replace("https://", "wss://").replace(
         "http://", "ws://"
@@ -424,6 +425,7 @@ async def stream_ws(websocket: WebSocket) -> None:
     summary email is sent in the finally block.
     """
     await websocket.accept()
+    logger.info("Twilio media stream WebSocket connected")
 
     session: dict[str, Any] = {
         "stream_sid": None,
