@@ -38,6 +38,14 @@ def _detect_language(text: str) -> str:
     return best if count > 0 else "altra"
 
 
+def _format_listing_brief(listing: dict[str, Any]) -> str:
+    return (
+        f"{listing.get('address', '?')} — {listing.get('zone', '?')} — "
+        f"{listing.get('type', '?')} — {listing.get('rooms', '?')} locali — "
+        f"{listing.get('size_sqm', '?')}mq — €{listing.get('price', '?')}"
+    )
+
+
 def _load_greeting() -> str | None:
     """Load static/greeting.wav and return base64 mulaw 8kHz, or None if missing."""
     path = Path(__file__).parent.parent / "static" / "greeting.wav"
@@ -74,7 +82,8 @@ _SYSTEM_PROMPT = (
     "un immobile specifico ('chiamo per l'appartamento in Via Roma...').\n"
     "Procedura:\n"
     "1. Usa get_listing_by_address per cercare quell'immobile.\n"
-    "2. Se trovato: conferma che è disponibile e descrivi brevemente.\n"
+    "2. Se trovato: usa subito mark_listing_interest con l'indirizzo esatto\n"
+    "   dell'immobile, poi conferma che è disponibile e descrivi brevemente.\n"
     "3. PRIMA di fare domande, di' al chiamante che, per poter presentare\n"
     "   la sua richiesta all'agente immobiliare, hai bisogno di fargli\n"
     "   qualche domanda in più. Solo dopo questa frase di transizione\n"
@@ -108,8 +117,9 @@ _SYSTEM_PROMPT = (
     "4. Se trovi risultati: descrivili in modo naturale, come farebbe un\n"
     "   agente umano (non leggere tutti i campi), poi chiedi al chiamante\n"
     "   se uno di questi immobili lo interessa.\n"
-    "5. Se risponde di sì: PRIMA di fare altre domande, di' al chiamante\n"
-    "   che, per poter presentare la sua richiesta all'agente immobiliare,\n"
+    "5. Se risponde di sì: usa subito mark_listing_interest con l'indirizzo\n"
+    "   esatto di quell'immobile. PRIMA di fare altre domande, di' al\n"
+    "   chiamante che, per poter presentare la sua richiesta all'agente immobiliare,\n"
     "   hai bisogno di fargli qualche domanda in più. Solo dopo questa\n"
     "   frase di transizione inizia con le domande qualificanti (le stesse\n"
     "   del TIPO A, in base ad affitto o vendita).\n"
@@ -212,6 +222,26 @@ _GET_LISTING_TOOL: dict[str, Any] = {
     },
 }
 
+_MARK_INTEREST_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "mark_listing_interest",
+    "description": (
+        "Record that the caller has confirmed interest in a specific listing. "
+        "Call this as soon as the caller says they are interested in a "
+        "particular property, passing its exact address."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "address": {
+                "type": "string",
+                "description": "The exact address of the listing the caller is interested in",
+            }
+        },
+        "required": ["address"],
+    },
+}
+
 _END_CALL_TOOL: dict[str, Any] = {
     "type": "function",
     "name": "end_call",
@@ -244,13 +274,14 @@ _SESSION_UPDATE: dict[str, Any] = {
                     "prefix_padding_ms": 500,
                     "silence_duration_ms": 800,
                 },
+                "transcription": {"model": "whisper-1"},
             },
             "output": {
                 "format": {"type": "audio/pcm", "rate": 24000},
                 "voice": "marin",
             },
         },
-        "tools": [_SEARCH_TOOL, _GET_LISTING_TOOL, _END_CALL_TOOL],
+        "tools": [_SEARCH_TOOL, _GET_LISTING_TOOL, _MARK_INTEREST_TOOL, _END_CALL_TOOL],
         "tool_choice": "auto",
     },
 }
@@ -315,6 +346,18 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
         "",
     ]
 
+    lines += ["=== Immobile di interesse ==="]
+    if session["interested_listings"]:
+        for listing in session["interested_listings"]:
+            lines.append(_format_listing_brief(listing))
+            text = (listing.get("text") or "").strip()
+            if text:
+                lines.append(text)
+            lines.append("")
+    else:
+        lines.append("Nessuno specificato dal chiamante.")
+        lines.append("")
+
     lines += ["=== Trascrizione ==="]
     if session["transcript"]:
         for turn in session["transcript"]:
@@ -322,12 +365,16 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
     else:
         lines.append("(nessuna trascrizione disponibile)")
 
-    lines += ["", "=== Immobili mostrati ==="]
-    if session["listings_shown"]:
-        for listing in session["listings_shown"]:
-            lines.append(json.dumps(listing, ensure_ascii=False))
+    others = [
+        listing for listing in session["listings_shown"]
+        if listing not in session["interested_listings"]
+    ]
+    lines += ["", "=== Altri immobili presentati ==="]
+    if others:
+        for listing in others:
+            lines.append(_format_listing_brief(listing))
     else:
-        lines.append("Nessun immobile mostrato.")
+        lines.append("Nessuno.")
 
     msg = EmailMessage()
     msg["Subject"] = f"Nuovo lead — {caller}"
@@ -369,6 +416,7 @@ async def stream_ws(websocket: WebSocket) -> None:
         "caller_number": "sconosciuto",
         "transcript": [],
         "listings_shown": [],
+        "interested_listings": [],
         "caller_language": "italiano",
         "last_speech_at": 0.0,
     }
@@ -509,7 +557,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                                 )
                             )
 
-                    elif etype == "response.audio_transcript.done":
+                    elif etype == "response.output_audio_transcript.done":
                         session["last_speech_at"] = asyncio.get_event_loop().time()
                         text = msg.get("transcript", "").strip()
                         if text:
@@ -577,6 +625,30 @@ async def stream_ws(websocket: WebSocket) -> None:
                                     "type": "function_call_output",
                                     "call_id": call_id,
                                     "output": json.dumps(results, ensure_ascii=False),
+                                },
+                            }))
+                            await oai_ws.send(json.dumps({"type": "response.create"}))
+
+                        elif msg.get("name") == "mark_listing_interest":
+                            call_id = msg.get("call_id")
+                            try:
+                                args = json.loads(msg.get("arguments", "{}"))
+                            except json.JSONDecodeError:
+                                args = {}
+                            address = args.get("address", "")
+                            match = next(
+                                (l for l in session["listings_shown"] if l["address"] == address),
+                                None,
+                            )
+                            if match and match not in session["interested_listings"]:
+                                session["interested_listings"].append(match)
+                            logger.info("Caller interested in: %s (found=%s)", address, bool(match))
+                            await oai_ws.send(json.dumps({
+                                "type": "conversation.item.create",
+                                "item": {
+                                    "type": "function_call_output",
+                                    "call_id": call_id,
+                                    "output": json.dumps({"recorded": bool(match)}),
                                 },
                             }))
                             await oai_ws.send(json.dumps({"type": "response.create"}))
