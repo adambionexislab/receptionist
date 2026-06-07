@@ -126,7 +126,8 @@ _SYSTEM_PROMPT = (
     "  lingua del chiamante, dalla prima parola — senza dire prima nulla in\n"
     "  italiano. Continua in quella lingua per tutta la chiamata.\n"
     "- Aspetta SEMPRE che il chiamante finisca di parlare prima di rispondere.\n"
-    "- Non terminare mai la chiamata — aspetta che sia il chiamante a salutare.\n"
+    "- Non terminare mai la chiamata di tua iniziativa, TRANNE nel caso\n"
+    "  descritto sotto in '# Come chiudere la chiamata'.\n"
     "- Non inventare mai dati non presenti nei risultati degli strumenti.\n"
     "- Il campo 'text' contiene la descrizione completa dell'immobile. Usalo per\n"
     "  rispondere a domande specifiche del chiamante (piano, esposizione, condizioni,\n"
@@ -147,6 +148,15 @@ _SYSTEM_PROMPT = (
     "- TIPO B: hai trovato immobili corrispondenti E hai raccolto nome, budget,\n"
     "  zona e numero di camere dal chiamante.\n"
     "In tutti gli altri casi NON menzionare mai un agente.\n"
+    "\n"
+    "# Come chiudere la chiamata\n"
+    "Subito dopo aver detto al chiamante che inoltrerai la sua richiesta a\n"
+    "un agente immobiliare:\n"
+    "1. Chiedi se può aiutarlo con qualcos'altro.\n"
+    "2. Se dice di no: salutalo calorosamente, poi usa lo strumento\n"
+    "   end_call per terminare la chiamata.\n"
+    "3. Se dice di sì: continua ad aiutarlo normalmente, e ripeti questa\n"
+    "   procedura quando hai finito.\n"
 )
 
 _SEARCH_TOOL: dict[str, Any] = {
@@ -202,6 +212,22 @@ _GET_LISTING_TOOL: dict[str, Any] = {
     },
 }
 
+_END_CALL_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "end_call",
+    "description": (
+        "End the phone call. Use this ONLY after telling the caller you'll "
+        "forward their request to a real estate agent, asking if there's "
+        "anything else you can help with, the caller says no, and you've "
+        "said goodbye."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+}
+
 _SESSION_UPDATE: dict[str, Any] = {
     "type": "session.update",
     "session": {
@@ -224,7 +250,7 @@ _SESSION_UPDATE: dict[str, Any] = {
                 "voice": "marin",
             },
         },
-        "tools": [_SEARCH_TOOL, _GET_LISTING_TOOL],
+        "tools": [_SEARCH_TOOL, _GET_LISTING_TOOL, _END_CALL_TOOL],
         "tool_choice": "auto",
     },
 }
@@ -554,6 +580,12 @@ async def stream_ws(websocket: WebSocket) -> None:
                                 },
                             }))
                             await oai_ws.send(json.dumps({"type": "response.create"}))
+
+                        elif msg.get("name") == "end_call":
+                            logger.info(
+                                "Apollonia ending call sid=%s", session["stream_sid"]
+                            )
+                            await websocket.close()
 
                     elif etype == "input_audio_buffer.speech_started":
                         session["last_speech_at"] = asyncio.get_event_loop().time()
