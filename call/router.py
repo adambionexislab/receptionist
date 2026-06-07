@@ -144,6 +144,11 @@ _SYSTEM_PROMPT = (
     "  riscaldamento, ecc.)\n"
     "- Non trasferire mai la chiamata.\n"
     "- Raccogli sempre il nome del chiamante.\n"
+    "- NON anticipare mai i prossimi passi della conversazione (es. non dire\n"
+    "  'dopo questa domanda ti dirò che...' o 'poi ti chiederò se...').\n"
+    "  Fai solo la domanda o l'affermazione del momento presente, una alla\n"
+    "  volta, e procedi silenziosamente al passo successivo solo dopo aver\n"
+    "  ricevuto la risposta del chiamante.\n"
     "\n"
     "# Quando dire che inoltrerai la richiesta a un agente\n"
     "Di' che inoltrerai la richiesta a un agente immobiliare SOLO nelle\n"
@@ -340,47 +345,57 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
         return
 
     caller = session.get("caller_number", "sconosciuto")
-    lines: list[str] = [
-        f"Chiamante: {caller}",
-        f"Lingua: {session.get('caller_language', 'italiano')}",
-        "",
-    ]
 
-    lines += ["=== Immobile di interesse ==="]
-    if session["interested_listings"]:
-        for listing in session["interested_listings"]:
-            lines.append(_format_listing_brief(listing))
-            text = (listing.get("text") or "").strip()
-            if text:
-                lines.append(text)
+    try:
+        lines: list[str] = [
+            f"Chiamante: {caller}",
+            f"Lingua: {session.get('caller_language', 'italiano')}",
+            "",
+        ]
+
+        lines += ["=== Immobile di interesse ==="]
+        if session["interested_listings"]:
+            for listing in session["interested_listings"]:
+                lines.append(_format_listing_brief(listing))
+                text = (listing.get("text") or "").strip()
+                if text:
+                    lines.append(text)
+                lines.append("")
+        else:
+            lines.append("Nessuno specificato dal chiamante.")
             lines.append("")
-    else:
-        lines.append("Nessuno specificato dal chiamante.")
-        lines.append("")
 
-    lines += ["=== Trascrizione ==="]
-    if session["transcript"]:
-        for turn in session["transcript"]:
-            lines.append(f"{turn['role'].upper()}: {turn['text']}")
-    else:
-        lines.append("(nessuna trascrizione disponibile)")
+        lines += ["=== Trascrizione ==="]
+        if session["transcript"]:
+            for turn in session["transcript"]:
+                lines.append(f"{turn['role'].upper()}: {turn['text']}")
+        else:
+            lines.append("(nessuna trascrizione disponibile)")
 
-    others = [
-        listing for listing in session["listings_shown"]
-        if listing not in session["interested_listings"]
-    ]
-    lines += ["", "=== Altri immobili presentati ==="]
-    if others:
-        for listing in others:
-            lines.append(_format_listing_brief(listing))
-    else:
-        lines.append("Nessuno.")
+        others = [
+            listing for listing in session["listings_shown"]
+            if listing not in session["interested_listings"]
+        ]
+        lines += ["", "=== Altri immobili presentati ==="]
+        if others:
+            for listing in others:
+                lines.append(_format_listing_brief(listing))
+        else:
+            lines.append("Nessuno.")
+
+        body = "\n".join(lines)
+    except Exception as exc:
+        logger.error("Failed to format lead email body: %s", exc)
+        body = (
+            f"Chiamante: {caller}\n"
+            f"(errore nella formattazione del corpo della mail — controlla i log)"
+        )
 
     msg = EmailMessage()
     msg["Subject"] = f"Nuovo lead — {caller}"
     msg["From"] = settings.SMTP_USER
     msg["To"] = settings.LEAD_EMAIL
-    msg.set_content("\n".join(lines))
+    msg.set_content(body)
 
     smtp_port = int(settings.SMTP_PORT or 587)
     try:
@@ -654,9 +669,19 @@ async def stream_ws(websocket: WebSocket) -> None:
                             await oai_ws.send(json.dumps({"type": "response.create"}))
 
                         elif msg.get("name") == "end_call":
+                            call_id = msg.get("call_id")
                             logger.info(
                                 "Apollonia ending call sid=%s", session["stream_sid"]
                             )
+                            await oai_ws.send(json.dumps({
+                                "type": "conversation.item.create",
+                                "item": {
+                                    "type": "function_call_output",
+                                    "call_id": call_id,
+                                    "output": json.dumps({"ended": True}),
+                                },
+                            }))
+                            await asyncio.sleep(1.5)
                             await websocket.close()
 
                     elif etype == "input_audio_buffer.speech_started":
