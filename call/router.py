@@ -251,7 +251,7 @@ _GET_LISTING_TOOL: dict[str, Any] = {
         "properties": {
             "address_query": {
                 "type": "string",
-                "description": "The address or partial address mentioned by the caller",
+                "description": "The address exactly as spoken by the caller — copy it verbatim, do not paraphrase or reinterpret",
             }
         },
         "required": ["address_query"],

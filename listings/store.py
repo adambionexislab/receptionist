@@ -3,6 +3,7 @@ import base64
 import csv
 import io
 import logging
+from difflib import SequenceMatcher
 from typing import Optional
 
 import httpx
@@ -281,6 +282,16 @@ class ListingsStore:
             results.append(dict(listing))
         return results
 
+    @staticmethod
+    def _fuzzy_word_in(word: str, text: str, threshold: float = 0.75) -> bool:
+        if word in text:
+            return True
+        return any(
+            SequenceMatcher(None, word, t).ratio() >= threshold
+            for t in text.split()
+            if len(t) > 3
+        )
+
     def get_by_address(self, address_query: str) -> list[dict]:
         query = address_query.lower().strip()
         words = [w for w in query.split() if len(w) > 3]
@@ -289,7 +300,8 @@ class ListingsStore:
             if query in l["address"].lower()
             or query in l["zone"].lower()
             or any(
-                w in l["address"].lower() or w in l["zone"].lower()
+                self._fuzzy_word_in(w, l["address"].lower())
+                or self._fuzzy_word_in(w, l["zone"].lower())
                 for w in words
             )
         ]
