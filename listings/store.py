@@ -283,10 +283,15 @@ class ListingsStore:
 
     def get_by_address(self, address_query: str) -> list[dict]:
         query = address_query.lower().strip()
+        words = [w for w in query.split() if len(w) > 3]
         return [
             l for l in self._listings
-            if query in l["address"].lower() or
-               any(word in l["address"].lower() for word in query.split() if len(word) > 3)
+            if query in l["address"].lower()
+            or query in l["zone"].lower()
+            or any(
+                w in l["address"].lower() or w in l["zone"].lower()
+                for w in words
+            )
         ]
 
 
