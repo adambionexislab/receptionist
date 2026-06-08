@@ -45,9 +45,24 @@ def _format_listing_brief(listing: dict[str, Any]) -> str:
     )
 
 
-def _load_greeting() -> str | None:
-    """Load static/greeting.wav and return base64 mulaw 8kHz, or None if missing."""
-    path = Path(__file__).parent.parent / "static" / "greeting.wav"
+_CALLER_INFO_LABELS: dict[str, str] = {
+    "name": "Nome",
+    "employment_status": "Situazione lavorativa",
+    "monthly_income": "Reddito mensile netto",
+    "household_size": "Persone nel nucleo familiare",
+    "has_pets": "Animali domestici",
+    "move_in_date": "Data di ingresso desiderata",
+    "has_mortgage_preapproval": "Mutuo pre-approvato",
+    "has_property_to_sell": "Immobile da vendere",
+    "sale_timeline": "Tempistiche per il rogito",
+    "visit_availability": "Disponibilità per visita",
+}
+
+
+def _load_static_audio(filename: str) -> tuple[str, float] | None:
+    """Load static/<filename> and return (base64 mulaw 8kHz payload, duration
+    in seconds), or None if the file is missing or fails to load."""
+    path = Path(__file__).parent.parent / "static" / filename
     if not path.exists():
         return None
     try:
@@ -62,13 +77,19 @@ def _load_greeting() -> str | None:
             pcm = audioop.tomono(pcm, 2, 1)
         if rate != 8000:
             pcm, _ = audioop.ratecv(pcm, 2, 1, rate, 8000, None)
-        return base64.b64encode(audioop.lin2ulaw(pcm, 2)).decode()
+        mulaw = audioop.lin2ulaw(pcm, 2)
+        return base64.b64encode(mulaw).decode(), len(mulaw) / 8000.0
     except Exception as exc:
-        logger.error("Failed to load greeting audio: %s", exc)
+        logger.error("Failed to load audio file %s: %s", filename, exc)
         return None
 
 
-_GREETING_AUDIO: str | None = _load_greeting()
+_greeting = _load_static_audio("greeting.wav")
+_GREETING_AUDIO: str | None = _greeting[0] if _greeting else None
+
+_goodbye = _load_static_audio("goodbye.wav")
+_GOODBYE_AUDIO: str | None = _goodbye[0] if _goodbye else None
+_GOODBYE_DURATION: float = _goodbye[1] if _goodbye else 0.0
 
 _SYSTEM_PROMPT = (
     "Sei Apollonia, la receptionist virtuale di uno studio immobiliare.\n"
@@ -130,10 +151,13 @@ _SYSTEM_PROMPT = (
     "\n"
     "# Regole generali\n"
     "- Rispondi nel modo più breve possibile. Una frase, mai più di due.\n"
-    "- ATTENZIONE LINGUA: ascolta la primissima frase del chiamante. Se non è\n"
-    "  in italiano, la TUA RISPOSTA SUCCESSIVA deve essere interamente nella\n"
-    "  lingua del chiamante, dalla prima parola — senza dire prima nulla in\n"
-    "  italiano. Continua in quella lingua per tutta la chiamata.\n"
+    "- ATTENZIONE LINGUA: se ti accorgi che il chiamante sta parlando in una\n"
+    "  lingua diversa dall'italiano, chiedigli gentilmente — in quella stessa\n"
+    "  lingua — se preferisce continuare la chiamata in quella lingua. Se\n"
+    "  conferma, chiama SUBITO lo strumento switch_language passando il\n"
+    "  codice ISO-639-1 e il nome della lingua in italiano, e da quel\n"
+    "  momento in poi continua l'intera conversazione in quella lingua.\n"
+    "  Se invece preferisce continuare in italiano, prosegui in italiano.\n"
     "- Aspetta SEMPRE che il chiamante finisca di parlare prima di rispondere.\n"
     "- Non terminare mai la chiamata di tua iniziativa, TRANNE nel caso\n"
     "  descritto sotto in '# Come chiudere la chiamata'.\n"
@@ -150,6 +174,10 @@ _SYSTEM_PROMPT = (
     "  ricevuto la risposta del chiamante.\n"
     "\n"
     "# Quando dire che inoltrerai la richiesta a un agente\n"
+    "Subito dopo aver raccolto TUTTE le risposte alle domande qualificanti\n"
+    "(incluso il nome del chiamante), e PRIMA di dire che inoltrerai la\n"
+    "richiesta, chiama lo strumento record_caller_info passando tutti i\n"
+    "dati raccolti durante la chiamata. Poi prosegui normalmente.\n"
     "Di' che inoltrerai la richiesta a un agente immobiliare SOLO nelle\n"
     "seguenti situazioni, e SOLO dopo aver raccolto tutte le informazioni\n"
     "qualificanti. Non dire MAI che l'agente lo ricontatterà o che lo farà\n"
@@ -167,8 +195,10 @@ _SYSTEM_PROMPT = (
     "Subito dopo aver detto al chiamante che inoltrerai la sua richiesta a\n"
     "un agente immobiliare:\n"
     "1. Chiedi se può aiutarlo con qualcos'altro.\n"
-    "2. Se dice di no: salutalo calorosamente, poi usa lo strumento\n"
-    "   end_call per terminare la chiamata.\n"
+    "2. Se dice di no: chiama SUBITO lo strumento end_call, senza dire tu\n"
+    "   stesso 'arrivederci' o altri saluti — end_call riproduce in automatico\n"
+    "   un saluto di commiato preregistrato, e un saluto detto da te lo\n"
+    "   sovrapporrebbe in modo innaturale.\n"
     "3. Se dice di sì: continua ad aiutarlo normalmente, e ripeti questa\n"
     "   procedura quando hai finito.\n"
 )
@@ -246,6 +276,87 @@ _MARK_INTEREST_TOOL: dict[str, Any] = {
     },
 }
 
+_RECORD_CALLER_INFO_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "record_caller_info",
+    "description": (
+        "Record the caller's qualifying answers as structured data so they "
+        "can be included in the lead summary sent to the agent. Call this "
+        "once, right after you've collected all the qualifying answers for "
+        "the current request (rental or purchase) — and before telling the "
+        "caller you'll forward their request. Only include fields the "
+        "caller actually answered."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Caller's name"},
+            "employment_status": {
+                "type": "string",
+                "description": "Employment situation (e.g. dipendente, autonomo, studente) — rentals",
+            },
+            "monthly_income": {
+                "type": "string",
+                "description": "Approximate net monthly income — rentals",
+            },
+            "household_size": {
+                "type": "string",
+                "description": "Number of people who would live in the property — rentals",
+            },
+            "has_pets": {
+                "type": "string",
+                "description": "Whether the caller has pets — rentals",
+            },
+            "move_in_date": {
+                "type": "string",
+                "description": "Desired move-in date — rentals",
+            },
+            "has_mortgage_preapproval": {
+                "type": "string",
+                "description": "Mortgage pre-approval / bank discussions status — purchases",
+            },
+            "has_property_to_sell": {
+                "type": "string",
+                "description": "Whether the caller has a property to sell before buying — purchases",
+            },
+            "sale_timeline": {
+                "type": "string",
+                "description": "Desired timeline for closing (rogito) — purchases",
+            },
+            "visit_availability": {
+                "type": "string",
+                "description": "When the caller is available for a viewing — purchases",
+            },
+        },
+        "required": [],
+    },
+}
+
+_SWITCH_LANGUAGE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "switch_language",
+    "description": (
+        "Reconfigure speech recognition for a different language. Call this "
+        "ONLY after the caller has explicitly confirmed they'd like to "
+        "continue the call in a language other than Italian — this improves "
+        "how accurately their speech is understood for the rest of the call."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "language_code": {
+                "type": "string",
+                "description": "ISO-639-1 code of the new language (e.g. 'en', 'de', 'fr', 'es')",
+            },
+            "language_name": {
+                "type": "string",
+                "description": "Name of the language in Italian (e.g. 'inglese', 'tedesco', 'francese')",
+            },
+        },
+        "required": ["language_code", "language_name"],
+    },
+}
+
 _END_CALL_TOOL: dict[str, Any] = {
     "type": "function",
     "name": "end_call",
@@ -278,14 +389,21 @@ _SESSION_UPDATE: dict[str, Any] = {
                     "prefix_padding_ms": 500,
                     "silence_duration_ms": 800,
                 },
-                "transcription": {"model": "whisper-1"},
+                "transcription": {"model": "whisper-1", "language": "it"},
             },
             "output": {
                 "format": {"type": "audio/pcm", "rate": 24000},
                 "voice": "marin",
             },
         },
-        "tools": [_SEARCH_TOOL, _GET_LISTING_TOOL, _MARK_INTEREST_TOOL, _END_CALL_TOOL],
+        "tools": [
+            _SEARCH_TOOL,
+            _GET_LISTING_TOOL,
+            _MARK_INTEREST_TOOL,
+            _RECORD_CALLER_INFO_TOOL,
+            _SWITCH_LANGUAGE_TOOL,
+            _END_CALL_TOOL,
+        ],
         "tool_choice": "auto",
     },
 }
@@ -353,14 +471,20 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
             "",
         ]
 
+        lines += ["=== Dati raccolti dal chiamante ==="]
+        caller_info = session.get("caller_info") or {}
+        if caller_info:
+            for key, label in _CALLER_INFO_LABELS.items():
+                if caller_info.get(key):
+                    lines.append(f"{label}: {caller_info[key]}")
+        else:
+            lines.append("Nessun dato raccolto.")
+        lines.append("")
+
         lines += ["=== Immobile di interesse ==="]
         if session["interested_listings"]:
             for listing in session["interested_listings"]:
                 lines.append(_format_listing_brief(listing))
-                text = (listing.get("text") or "").strip()
-                if text:
-                    lines.append(text)
-                lines.append("")
         else:
             lines.append("Nessuno specificato dal chiamante.")
             lines.append("")
@@ -429,6 +553,7 @@ async def stream_ws(websocket: WebSocket) -> None:
         "transcript": [],
         "listings_shown": [],
         "interested_listings": [],
+        "caller_info": {},
         "caller_language": "italiano",
         "last_speech_at": 0.0,
     }
@@ -665,6 +790,56 @@ async def stream_ws(websocket: WebSocket) -> None:
                             }))
                             await oai_ws.send(json.dumps({"type": "response.create"}))
 
+                        elif msg.get("name") == "record_caller_info":
+                            call_id = msg.get("call_id")
+                            try:
+                                args = json.loads(msg.get("arguments", "{}"))
+                            except json.JSONDecodeError:
+                                args = {}
+                            session["caller_info"].update(
+                                {k: v for k, v in args.items() if v}
+                            )
+                            logger.info("Recorded caller info: %s", args)
+                            await oai_ws.send(json.dumps({
+                                "type": "conversation.item.create",
+                                "item": {
+                                    "type": "function_call_output",
+                                    "call_id": call_id,
+                                    "output": json.dumps({"recorded": True}),
+                                },
+                            }))
+                            await oai_ws.send(json.dumps({"type": "response.create"}))
+
+                        elif msg.get("name") == "switch_language":
+                            call_id = msg.get("call_id")
+                            try:
+                                args = json.loads(msg.get("arguments", "{}"))
+                            except json.JSONDecodeError:
+                                args = {}
+                            code = args.get("language_code", "it")
+                            name = args.get("language_name", "italiano")
+                            session["caller_language"] = name
+                            audio_cfg = json.loads(
+                                json.dumps(_SESSION_UPDATE["session"]["audio"])
+                            )
+                            audio_cfg["input"]["transcription"]["language"] = code
+                            await oai_ws.send(json.dumps({
+                                "type": "session.update",
+                                "session": {"type": "realtime", "audio": audio_cfg},
+                            }))
+                            logger.info(
+                                "Switched transcription language to %s (%s)", code, name
+                            )
+                            await oai_ws.send(json.dumps({
+                                "type": "conversation.item.create",
+                                "item": {
+                                    "type": "function_call_output",
+                                    "call_id": call_id,
+                                    "output": json.dumps({"switched": True}),
+                                },
+                            }))
+                            await oai_ws.send(json.dumps({"type": "response.create"}))
+
                         elif msg.get("name") == "end_call":
                             call_id = msg.get("call_id")
                             logger.info(
@@ -678,7 +853,18 @@ async def stream_ws(websocket: WebSocket) -> None:
                                     "output": json.dumps({"ended": True}),
                                 },
                             }))
-                            await asyncio.sleep(1.5)
+                            if _GOODBYE_AUDIO and session["stream_sid"]:
+                                await websocket.send_text(json.dumps({
+                                    "event": "media",
+                                    "streamSid": session["stream_sid"],
+                                    "media": {
+                                        "track": "outbound",
+                                        "payload": _GOODBYE_AUDIO,
+                                    },
+                                }))
+                                await asyncio.sleep(_GOODBYE_DURATION + 0.5)
+                            else:
+                                await asyncio.sleep(1.5)
                             await websocket.close()
 
                     elif etype == "input_audio_buffer.speech_started":
