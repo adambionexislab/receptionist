@@ -22,20 +22,6 @@ router = APIRouter(prefix="/call")
 
 _GREETING_TEXT = "Buongiorno, sono Apollonia. Come posso aiutarla?"
 
-_LANG_WORDS: dict[str, frozenset[str]] = {
-    "italiano": frozenset({"sono", "per", "che", "con", "una", "del", "della", "nel", "anche", "come", "buongiorno", "ciao", "vorrei", "cerco", "affitto", "vendita", "appartamento"}),
-    "inglese":  frozenset({"the", "and", "for", "with", "that", "this", "hello", "good", "morning", "looking", "apartment", "rent", "buy", "would", "like", "calling"}),
-    "tedesco":  frozenset({"ich", "sie", "und", "die", "der", "das", "ist", "nicht", "hallo", "guten", "morgen", "suche", "miete", "wohnung"}),
-    "francese": frozenset({"je", "vous", "les", "des", "est", "avec", "pour", "bonjour", "cherche", "louer", "acheter", "appartement"}),
-}
-
-
-def _detect_language(text: str) -> str:
-    words = frozenset(text.lower().split())
-    scores = {lang: len(words & vocab) for lang, vocab in _LANG_WORDS.items()}
-    best, count = max(scores.items(), key=lambda x: x[1])
-    return best if count > 0 else "altra"
-
 
 def _format_listing_brief(listing: dict[str, Any]) -> str:
     return (
@@ -367,7 +353,6 @@ _SESSION_UPDATE: dict[str, Any] = {
                     "prefix_padding_ms": 500,
                     "silence_duration_ms": 800,
                 },
-                "transcription": {"model": "whisper-1"},
             },
             "output": {
                 "format": {"type": "audio/pcm", "rate": 24000},
@@ -444,7 +429,6 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
     try:
         lines: list[str] = [
             f"Chiamante: {caller}",
-            f"Lingua: {session.get('caller_language', 'italiano')}",
             "",
         ]
 
@@ -465,13 +449,6 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
         else:
             lines.append("Nessuno specificato dal chiamante.")
             lines.append("")
-
-        lines += ["=== Trascrizione ==="]
-        if session["transcript"]:
-            for turn in session["transcript"]:
-                lines.append(f"{turn['role'].upper()}: {turn['text']}")
-        else:
-            lines.append("(nessuna trascrizione disponibile)")
 
         others = [
             listing for listing in session["listings_shown"]
@@ -527,11 +504,9 @@ async def stream_ws(websocket: WebSocket) -> None:
         "stream_sid": None,
         "call_sid": None,
         "caller_number": "sconosciuto",
-        "transcript": [],
         "listings_shown": [],
         "interested_listings": [],
         "caller_info": {},
-        "caller_language": "italiano",
         "suppress_input_until": 0.0,
         "last_speech_at": 0.0,
     }
@@ -682,24 +657,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                         session["last_speech_at"] = asyncio.get_event_loop().time()
                         text = msg.get("transcript", "").strip()
                         if text:
-                            session["transcript"].append(
-                                {"role": "assistant", "text": text}
-                            )
                             logger.info("Apollonia: %s", text)
-
-                    elif (
-                        etype
-                        == "conversation.item.input_audio_transcription.completed"
-                    ):
-                        text = msg.get("transcript", "").strip()
-                        if text:
-                            session["transcript"].append(
-                                {"role": "user", "text": text}
-                            )
-                            detected = _detect_language(text)
-                            if detected != "italiano":
-                                session["caller_language"] = detected
-                            logger.info("Caller said: %s", text)
 
                     elif etype == "response.function_call_arguments.done":
                         if msg.get("name") == "search_listings":
@@ -794,35 +752,6 @@ async def stream_ws(websocket: WebSocket) -> None:
                             }))
                             await oai_ws.send(json.dumps({"type": "response.create"}))
 
-                        elif msg.get("name") == "switch_language":
-                            call_id = msg.get("call_id")
-                            try:
-                                args = json.loads(msg.get("arguments", "{}"))
-                            except json.JSONDecodeError:
-                                args = {}
-                            code = args.get("language_code", "it")
-                            name = args.get("language_name", "italiano")
-                            session["caller_language"] = name
-                            audio_cfg = json.loads(
-                                json.dumps(_SESSION_UPDATE["session"]["audio"])
-                            )
-                            audio_cfg["input"]["transcription"]["language"] = code
-                            await oai_ws.send(json.dumps({
-                                "type": "session.update",
-                                "session": {"type": "realtime", "audio": audio_cfg},
-                            }))
-                            logger.info(
-                                "Switched transcription language to %s (%s)", code, name
-                            )
-                            await oai_ws.send(json.dumps({
-                                "type": "conversation.item.create",
-                                "item": {
-                                    "type": "function_call_output",
-                                    "call_id": call_id,
-                                    "output": json.dumps({"switched": True}),
-                                },
-                            }))
-                            await oai_ws.send(json.dumps({"type": "response.create"}))
 
                         elif msg.get("name") == "end_call":
                             call_id = msg.get("call_id")
