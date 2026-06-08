@@ -271,8 +271,12 @@ class ListingsStore:
         for listing in self._listings:
             if type is not None and listing["type"] != type.lower():
                 continue
-            if zone is not None and zone.lower() not in listing["zone"].lower():
-                continue
+            if zone is not None:
+                z = zone.lower()
+                lz = listing["zone"].lower()
+                zone_words = [w for w in z.split() if len(w) > 3]
+                if z not in lz and lz not in z and not any(w in lz for w in zone_words):
+                    continue
             if rooms_min is not None and listing["rooms"] < rooms_min:
                 continue
             if rooms_max is not None and listing["rooms"] > rooms_max:
