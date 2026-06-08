@@ -389,7 +389,8 @@ _SESSION_UPDATE: dict[str, Any] = {
                     "prefix_padding_ms": 500,
                     "silence_duration_ms": 800,
                 },
-                "transcription": {"model": "whisper-1", "language": "it"},
+                "transcription": {"model": "gpt-4o-mini-transcribe"},
+                "noise_reduction": {"type": "near_field"},
             },
             "output": {
                 "format": {"type": "audio/pcm", "rate": 24000},
