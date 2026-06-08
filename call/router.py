@@ -152,13 +152,10 @@ _SYSTEM_PROMPT = (
     "\n"
     "# Regole generali\n"
     "- Rispondi nel modo più breve possibile. Una frase, mai più di due.\n"
-    "- ATTENZIONE LINGUA: se ti accorgi che il chiamante sta parlando in una\n"
-    "  lingua diversa dall'italiano, chiedigli gentilmente — in quella stessa\n"
-    "  lingua — se preferisce continuare la chiamata in quella lingua. Se\n"
-    "  conferma, chiama SUBITO lo strumento switch_language passando il\n"
-    "  codice ISO-639-1 e il nome della lingua in italiano, e da quel\n"
-    "  momento in poi continua l'intera conversazione in quella lingua.\n"
-    "  Se invece preferisce continuare in italiano, prosegui in italiano.\n"
+    "- ATTENZIONE LINGUA: ascolta la primissima frase del chiamante. Se non è\n"
+    "  in italiano, la TUA RISPOSTA SUCCESSIVA deve essere interamente nella\n"
+    "  lingua del chiamante, dalla prima parola — senza dire prima nulla in\n"
+    "  italiano. Continua in quella lingua per tutta la chiamata.\n"
     "- Aspetta SEMPRE che il chiamante finisca di parlare prima di rispondere.\n"
     "- Non terminare mai la chiamata di tua iniziativa, TRANNE nel caso\n"
     "  descritto sotto in '# Come chiudere la chiamata'.\n"
@@ -196,10 +193,8 @@ _SYSTEM_PROMPT = (
     "Subito dopo aver detto al chiamante che inoltrerai la sua richiesta a\n"
     "un agente immobiliare:\n"
     "1. Chiedi se può aiutarlo con qualcos'altro.\n"
-    "2. Se dice di no: chiama SUBITO lo strumento end_call, senza dire tu\n"
-    "   stesso 'arrivederci' o altri saluti — end_call riproduce in automatico\n"
-    "   un saluto di commiato preregistrato, e un saluto detto da te lo\n"
-    "   sovrapporrebbe in modo innaturale.\n"
+    "2. Se dice di no: salutalo calorosamente, poi usa lo strumento\n"
+    "   end_call per terminare la chiamata.\n"
     "3. Se dice di sì: continua ad aiutarlo normalmente, e ripeti questa\n"
     "   procedura quando hai finito.\n"
 )
@@ -333,30 +328,6 @@ _RECORD_CALLER_INFO_TOOL: dict[str, Any] = {
     },
 }
 
-_SWITCH_LANGUAGE_TOOL: dict[str, Any] = {
-    "type": "function",
-    "name": "switch_language",
-    "description": (
-        "Reconfigure speech recognition for a different language. Call this "
-        "ONLY after the caller has explicitly confirmed they'd like to "
-        "continue the call in a language other than Italian — this improves "
-        "how accurately their speech is understood for the rest of the call."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "language_code": {
-                "type": "string",
-                "description": "ISO-639-1 code of the new language (e.g. 'en', 'de', 'fr', 'es')",
-            },
-            "language_name": {
-                "type": "string",
-                "description": "Name of the language in Italian (e.g. 'inglese', 'tedesco', 'francese')",
-            },
-        },
-        "required": ["language_code", "language_name"],
-    },
-}
 
 _END_CALL_TOOL: dict[str, Any] = {
     "type": "function",
@@ -390,8 +361,7 @@ _SESSION_UPDATE: dict[str, Any] = {
                     "prefix_padding_ms": 500,
                     "silence_duration_ms": 800,
                 },
-                "transcription": {"model": "gpt-4o-mini-transcribe"},
-                "noise_reduction": {"type": "near_field"},
+                "transcription": {"model": "whisper-1"},
             },
             "output": {
                 "format": {"type": "audio/pcm", "rate": 24000},
@@ -403,7 +373,6 @@ _SESSION_UPDATE: dict[str, Any] = {
             _GET_LISTING_TOOL,
             _MARK_INTEREST_TOOL,
             _RECORD_CALLER_INFO_TOOL,
-            _SWITCH_LANGUAGE_TOOL,
             _END_CALL_TOOL,
         ],
         "tool_choice": "auto",
