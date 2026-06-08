@@ -25,12 +25,10 @@ class Settings(BaseSettings):
     # Deployment
     PUBLIC_BASE_URL: str = "http://localhost:8000"
 
-    # Lead capture
+    # Lead capture (sent via Resend's HTTP API — Render blocks outbound SMTP)
     LEAD_EMAIL: Optional[str] = None
-    SMTP_HOST: Optional[str] = None
-    SMTP_PORT: Optional[int] = None
-    SMTP_USER: Optional[str] = None
-    SMTP_PASSWORD: Optional[str] = None
+    RESEND_API_KEY: Optional[str] = None
+    RESEND_FROM: str = "onboarding@resend.dev"
 
     model_config = {"env_file": ".env"}
 

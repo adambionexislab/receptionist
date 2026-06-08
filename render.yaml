@@ -25,11 +25,7 @@ services:
         sync: false
       - key: GITHUB_REPO
         sync: false
-      - key: SMTP_HOST
+      - key: RESEND_API_KEY
         sync: false
-      - key: SMTP_PORT
-        sync: false
-      - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASSWORD
+      - key: RESEND_FROM
         sync: false

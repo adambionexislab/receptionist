@@ -4,11 +4,10 @@ import base64
 import json
 import logging
 import wave
-from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 
-import aiosmtplib
+import httpx
 import websockets
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
@@ -341,8 +340,8 @@ async def inbound_call(request: Request) -> Response:
 
 
 async def _send_lead_email(session: dict[str, Any]) -> None:
-    if not settings.SMTP_USER or not settings.LEAD_EMAIL:
-        logger.warning("SMTP/LEAD_EMAIL not configured — lead email skipped")
+    if not settings.RESEND_API_KEY or not settings.LEAD_EMAIL:
+        logger.warning("RESEND_API_KEY/LEAD_EMAIL not configured — lead email skipped")
         return
 
     caller = session.get("caller_number", "sconosciuto")
@@ -392,23 +391,19 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
             f"(errore nella formattazione del corpo della mail — controlla i log)"
         )
 
-    msg = EmailMessage()
-    msg["Subject"] = f"Nuovo lead — {caller}"
-    msg["From"] = settings.SMTP_USER
-    msg["To"] = settings.LEAD_EMAIL
-    msg.set_content(body)
-
-    smtp_port = int(settings.SMTP_PORT or 587)
     try:
-        await aiosmtplib.send(
-            msg,
-            hostname=settings.SMTP_HOST or "smtp.gmail.com",
-            port=smtp_port,
-            username=settings.SMTP_USER,
-            password=settings.SMTP_PASSWORD,
-            use_tls=(smtp_port == 465),
-            start_tls=(smtp_port != 465),
-        )
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+                json={
+                    "from": settings.RESEND_FROM,
+                    "to": [settings.LEAD_EMAIL],
+                    "subject": f"Nuovo lead — {caller}",
+                    "text": body,
+                },
+            )
+            response.raise_for_status()
         logger.info("Lead email sent for caller %s", caller)
     except Exception as exc:
         logger.error("Failed to send lead email: %s", exc)
