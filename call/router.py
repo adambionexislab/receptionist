@@ -86,6 +86,7 @@ def _load_static_audio(filename: str) -> tuple[str, float] | None:
 
 _greeting = _load_static_audio("greeting.wav")
 _GREETING_AUDIO: str | None = _greeting[0] if _greeting else None
+_GREETING_DURATION: float = _greeting[1] if _greeting else 0.0
 
 _goodbye = _load_static_audio("goodbye.wav")
 _GOODBYE_AUDIO: str | None = _goodbye[0] if _goodbye else None
@@ -556,6 +557,7 @@ async def stream_ws(websocket: WebSocket) -> None:
         "interested_listings": [],
         "caller_info": {},
         "caller_language": "italiano",
+        "suppress_input_until": 0.0,
         "last_speech_at": 0.0,
     }
 
@@ -593,7 +595,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                     "item": {
                         "type": "message",
                         "role": "assistant",
-                        "content": [{"type": "text", "text": _GREETING_TEXT}],
+                        "content": [{"type": "output_text", "text": _GREETING_TEXT}],
                     },
                 }))
                 logger.info("Prerecorded greeting injected into context")
@@ -648,8 +650,14 @@ async def stream_ws(websocket: WebSocket) -> None:
                                     "payload": _GREETING_AUDIO,
                                 },
                             }))
+                            session["suppress_input_until"] = (
+                                asyncio.get_event_loop().time()
+                                + _GREETING_DURATION + 0.5
+                            )
 
                     elif event == "media":
+                        if asyncio.get_event_loop().time() < session["suppress_input_until"]:
+                            continue
                         mulaw = base64.b64decode(msg["media"]["payload"])
                         pcm16 = audioop.ulaw2lin(mulaw, 2)
                         pcm24k, upsample_state = audioop.ratecv(
