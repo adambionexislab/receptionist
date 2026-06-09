@@ -850,7 +850,7 @@
       <div class="flex items-center justify-between mb-6">
         <div>
           <p class="text-[11px] font-medium uppercase tracking-[.14em]" style="color:var(--accent)">Inizia con ApollonIA</p>
-          <h3 id="modal-title" class="text-lg font-medium mt-0.5" style="color:var(--fg)">Scegli il tuo piano</h3>
+          <h3 id="modal-title" class="text-lg font-medium mt-0.5" style="color:var(--fg)">Controlla le informazioni</h3>
         </div>
         <button id="modal-close" class="modal-close-btn" type="button" aria-label="Chiudi">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -879,9 +879,9 @@
             <div>
               <label class="modal-label" for="f-plan">Piano</label>
               <select id="f-plan" class="modal-input" name="plan" required>
-                <option value="Base">Base — €145 / mese</option>
-                <option value="Pro">Pro — €395 / mese</option>
-                <option value="Max">Max — €795 / mese</option>
+                <option value="Base">Base</option>
+                <option value="Pro">Pro</option>
+                <option value="Max">Max</option>
               </select>
             </div>
             <div>
@@ -892,10 +892,17 @@
               </select>
             </div>
           </div>
+          <div class="mt-5 pt-4 flex items-center justify-between" style="border-top:1px solid var(--border)">
+            <div>
+              <p class="text-[11px] font-medium uppercase tracking-[.14em]" style="color:var(--muted)">Totale</p>
+              <p id="modal-price-detail" class="text-xs mt-0.5" style="color:var(--muted)"></p>
+            </div>
+            <p id="modal-price-amount" class="text-2xl font-semibold" style="color:var(--accent)"></p>
+          </div>
           <p id="modal-error" class="mt-3 text-sm" style="color:#f87171;display:none"></p>
-          <div class="flex gap-3 mt-6">
+          <div class="flex gap-3 mt-4">
             <button type="button" id="modal-cancel" class="price-cta is-outline" style="flex:1">Annulla</button>
-            <button type="submit" id="modal-confirm" class="price-cta is-solid" style="flex:1">Conferma</button>
+            <button type="submit" id="modal-confirm" class="price-cta is-solid" style="flex:1">Vai al pagamento</button>
           </div>
         </form>
       </div>
@@ -1247,16 +1254,48 @@
       var form       = document.getElementById('signup-form');
       var errorEl    = document.getElementById('modal-error');
       var planSel    = document.getElementById('f-plan');
+      var pagSel     = document.getElementById('f-pagamento');
       var confirmBtn = document.getElementById('modal-confirm');
+      var priceAmt   = document.getElementById('modal-price-amount');
+      var priceDetail= document.getElementById('modal-price-detail');
+
+      var PRICES = {
+        Base: { monthly: 145, annual: 125 },
+        Pro:  { monthly: 395, annual: 335 },
+        Max:  { monthly: 795, annual: 675 }
+      };
+
+      function fmt(n) {
+        return n.toLocaleString('it-IT');
+      }
+
+      function updatePrice() {
+        var p   = PRICES[planSel.value];
+        var pag = pagSel.value;
+        if (!p) return;
+        if (pag === 'Annuale') {
+          var total = p.annual * 12;
+          priceAmt.textContent    = '€' + fmt(total) + ' / anno';
+          priceDetail.textContent = '€' + fmt(p.annual) + ' / mese · fatturato annualmente';
+        } else {
+          priceAmt.textContent    = '€' + fmt(p.monthly) + ' / mese';
+          priceDetail.textContent = 'Fatturato mensilmente';
+        }
+      }
+
+      planSel.addEventListener('change', updatePrice);
+      pagSel.addEventListener('change', updatePrice);
 
       function openModal(plan) {
         form.reset();
-        planSel.value          = plan || 'Base';
-        formWrap.style.display = '';
+        planSel.value           = plan || 'Base';
+        pagSel.value            = 'Mensile';
+        formWrap.style.display  = '';
         successEl.style.display = 'none';
-        errorEl.style.display  = 'none';
-        confirmBtn.disabled    = false;
-        confirmBtn.textContent = 'Conferma';
+        errorEl.style.display   = 'none';
+        confirmBtn.disabled     = false;
+        confirmBtn.textContent  = 'Conferma';
+        updatePrice();
         backdrop.classList.add('is-open');
         document.body.style.overflow = 'hidden';
         setTimeout(function () { document.getElementById('f-studio').focus(); }, 320);
@@ -1296,7 +1335,7 @@
         }
 
         confirmBtn.disabled    = true;
-        confirmBtn.textContent = 'Invio…';
+        confirmBtn.textContent = 'Invio in corso…';
         errorEl.style.display  = 'none';
 
         fetch('/signup', {
@@ -1316,7 +1355,7 @@
           errorEl.textContent    = 'Si è verificato un errore. Riprova tra poco.';
           errorEl.style.display  = '';
           confirmBtn.disabled    = false;
-          confirmBtn.textContent = 'Conferma';
+          confirmBtn.textContent = 'Vai al pagamento';
         });
       });
     })();
