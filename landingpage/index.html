@@ -873,11 +873,22 @@
               <input id="f-phone" class="modal-input" type="tel" name="phone" placeholder="+39 02 1234567" required />
             </div>
             <div>
+              <label class="modal-label" for="f-email">Indirizzo email</label>
+              <input id="f-email" class="modal-input" type="email" name="email" placeholder="info@tuaagenzia.it" required />
+            </div>
+            <div>
               <label class="modal-label" for="f-plan">Piano</label>
               <select id="f-plan" class="modal-input" name="plan" required>
                 <option value="Base">Base — €145 / mese</option>
                 <option value="Pro">Pro — €395 / mese</option>
                 <option value="Max">Max — €795 / mese</option>
+              </select>
+            </div>
+            <div>
+              <label class="modal-label" for="f-pagamento">Pagamento</label>
+              <select id="f-pagamento" class="modal-input" name="pagamento" required>
+                <option value="Mensile">Mensile</option>
+                <option value="Annuale">Annuale — risparmia 15%</option>
               </select>
             </div>
           </div>
@@ -1271,12 +1282,14 @@
 
       form.addEventListener('submit', function (e) {
         e.preventDefault();
-        var studio = document.getElementById('f-studio').value.trim();
-        var url    = document.getElementById('f-url').value.trim();
-        var phone  = document.getElementById('f-phone').value.trim();
-        var plan   = planSel.value;
+        var studio    = document.getElementById('f-studio').value.trim();
+        var url       = document.getElementById('f-url').value.trim();
+        var phone     = document.getElementById('f-phone').value.trim();
+        var email     = document.getElementById('f-email').value.trim();
+        var plan      = planSel.value;
+        var pagamento = document.getElementById('f-pagamento').value;
 
-        if (!studio || !url || !phone) {
+        if (!studio || !url || !phone || !email) {
           errorEl.textContent   = 'Compila tutti i campi obbligatori.';
           errorEl.style.display = '';
           return;
@@ -1289,7 +1302,7 @@
         fetch('/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ studio_name: studio, immobiliare_url: url, phone: phone, plan: plan })
+          body: JSON.stringify({ studio_name: studio, immobiliare_url: url, phone: phone, email: email, plan: plan, pagamento: pagamento })
         })
         .then(function (r) {
           if (!r.ok) throw new Error(r.status);

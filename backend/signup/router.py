@@ -30,7 +30,9 @@ class SignupData(BaseModel):
     studio_name: str
     immobiliare_url: str
     phone: str
+    email: str
     plan: Literal["Base", "Pro", "Max"]
+    pagamento: Literal["Mensile", "Annuale"]
 
     @field_validator("studio_name")
     @classmethod
@@ -59,6 +61,14 @@ class SignupData(BaseModel):
             raise ValueError("Numero di telefono non valido")
         return v
 
+    @field_validator("email")
+    @classmethod
+    def email_valid(cls, v: str) -> str:
+        v = v.strip()
+        if not v or "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("Indirizzo email non valido")
+        return v
+
 
 def _write_csv(data: SignupData) -> None:
     _DATA_DIR.mkdir(exist_ok=True)
@@ -67,13 +77,15 @@ def _write_csv(data: SignupData) -> None:
         with open(_SIGNUPS_CSV, "a", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             if first:
-                w.writerow(["timestamp", "studio_name", "immobiliare_url", "phone", "plan"])
+                w.writerow(["timestamp", "studio_name", "immobiliare_url", "phone", "email", "plan", "pagamento"])
             w.writerow([
                 datetime.datetime.now(_ROME).isoformat(),
                 data.studio_name,
                 data.immobiliare_url,
                 data.phone,
+                data.email,
                 data.plan,
+                data.pagamento,
             ])
 
 
@@ -86,7 +98,9 @@ async def _send_notification(data: SignupData) -> None:
     body = "\n".join([
         f"Nuova richiesta di attivazione ApollonIA\n",
         f"Piano:              {data.plan} ({price})",
+        f"Pagamento:          {data.pagamento}",
         f"Studio:             {data.studio_name}",
+        f"Email:              {data.email}",
         f"Telefono:           {data.phone}",
         f"URL immobiliare.it: {data.immobiliare_url}",
         f"\nTimestamp: {datetime.datetime.now(_ROME).strftime('%d/%m/%Y %H:%M')} (Rome)",
