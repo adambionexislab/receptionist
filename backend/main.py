@@ -21,7 +21,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-_LANDING_DIR = Path(__file__).parent.parent / "landingpage"
+_LANDING_DIR = Path(__file__).parent / "landingpage"
 
 _ROME = ZoneInfo("Europe/Rome")
 _SYNC_HOURS = (9, 12, 15, 19)
