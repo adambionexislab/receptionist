@@ -1,7 +1,6 @@
 Convert the AI voice receptionist from a single-tenant app into a
 multi-tenant SaaS platform. Each tenant is a real estate agency with
-their own Twilio US number, Immobiliare.it listings, lead email, and
-AI persona.
+their own Twilio US number, Immobiliare.it listings, lead email.
 
 ## Current state
 - Single FastAPI app deployed on Render
@@ -11,7 +10,7 @@ AI persona.
 - Twilio number is manually provisioned
 
 ## Target architecture
-- SQLite database (one file, no external DB needed) stores tenant records
+- csv file as a database (one file, no external DB needed) stores tenant records
 - Each inbound call is matched to a tenant by the called Twilio number
 - Listings are stored per-tenant in memory (dict keyed by tenant_id)
 - Apify scraping runs per-tenant on the shared 4x daily schedule

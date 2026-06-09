@@ -1,5 +1,9 @@
+from pathlib import Path
 from typing import Optional
+
 from pydantic_settings import BaseSettings
+
+_ENV_FILE = Path(__file__).parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -30,7 +34,7 @@ class Settings(BaseSettings):
     RESEND_API_KEY: Optional[str] = None
     RESEND_FROM: str = "onboarding@resend.dev"
 
-    model_config = {"env_file": ".env"}
+    model_config = {"env_file": str(_ENV_FILE)}
 
 
 settings = Settings()
