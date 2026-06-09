@@ -891,6 +891,13 @@
                 <option value="Annuale">Annuale — risparmia 15%</option>
               </select>
             </div>
+            <div>
+              <label class="modal-label" for="f-modalita">Modalità di gestione</label>
+              <select id="f-modalita" class="modal-input" name="modalita" required>
+                <option value="Tutte le chiamate">Tutte le chiamate</option>
+                <option value="Solo chiamate perse/cancellate">Solo chiamate perse / cancellate</option>
+              </select>
+            </div>
           </div>
           <div class="mt-5 pt-4 flex items-center justify-between" style="border-top:1px solid var(--border)">
             <div>
@@ -1341,7 +1348,7 @@
         fetch('/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ studio_name: studio, immobiliare_url: url, phone: phone, email: email, plan: plan, pagamento: pagamento })
+          body: JSON.stringify({ studio_name: studio, immobiliare_url: url, phone: phone, email: email, plan: plan, pagamento: pagamento, modalita: document.getElementById('f-modalita').value })
         })
         .then(function (r) {
           if (!r.ok) return r.text().then(function (t) { throw new Error(r.status + ': ' + t); });

@@ -33,6 +33,7 @@ class SignupData(BaseModel):
     email: str
     plan: Literal["Base", "Pro", "Max"]
     pagamento: Literal["Mensile", "Annuale"]
+    modalita: Literal["Tutte le chiamate", "Solo chiamate perse/cancellate"]
 
     @field_validator("studio_name")
     @classmethod
@@ -77,7 +78,7 @@ def _write_csv(data: SignupData) -> None:
         with open(_SIGNUPS_CSV, "a", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             if first:
-                w.writerow(["timestamp", "studio_name", "immobiliare_url", "phone", "email", "plan", "pagamento"])
+                w.writerow(["timestamp", "studio_name", "immobiliare_url", "phone", "email", "plan", "pagamento", "modalita"])
             w.writerow([
                 datetime.datetime.now(_ROME).isoformat(),
                 data.studio_name,
@@ -86,6 +87,7 @@ def _write_csv(data: SignupData) -> None:
                 data.email,
                 data.plan,
                 data.pagamento,
+                data.modalita,
             ])
 
 
@@ -103,6 +105,7 @@ async def _send_notification(data: SignupData) -> None:
         f"Email:              {data.email}",
         f"Telefono:           {data.phone}",
         f"URL immobiliare.it: {data.immobiliare_url}",
+        f"Modalità:           {data.modalita}",
         f"\nTimestamp: {datetime.datetime.now(_ROME).strftime('%d/%m/%Y %H:%M')} (Rome)",
     ])
 
