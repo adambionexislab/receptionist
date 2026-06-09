@@ -49,7 +49,7 @@ class SignupData(BaseModel):
         if not v:
             raise ValueError("L'URL non può essere vuoto")
         if not v.startswith(("http://", "https://")):
-            raise ValueError("Inserisci un URL valido (es. https://...)")
+            v = "https://" + v
         return v
 
     @field_validator("phone")
