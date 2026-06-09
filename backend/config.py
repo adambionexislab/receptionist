@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     # GitHub / listings sync
     GITHUB_TOKEN: Optional[str] = None
     GITHUB_REPO: str = ""
-    GITHUB_CSV_PATH: str = "data/listings.csv"
+    GITHUB_CSV_PATH: str = "backend/data/listings.csv"
     GITHUB_BRANCH: str = "main"
     LISTINGS_SYNC_INTERVAL_SECONDS: int = 900
 
