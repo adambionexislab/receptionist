@@ -1344,15 +1344,17 @@
           body: JSON.stringify({ studio_name: studio, immobiliare_url: url, phone: phone, email: email, plan: plan, pagamento: pagamento })
         })
         .then(function (r) {
-          if (!r.ok) throw new Error(r.status);
+          if (!r.ok) return r.text().then(function (t) { throw new Error(r.status + ': ' + t); });
           return r.json();
         })
         .then(function () {
           formWrap.style.display  = 'none';
           successEl.style.display = '';
         })
-        ['catch'](function () {
-          errorEl.textContent    = 'Si è verificato un errore. Riprova tra poco.';
+        ['catch'](function (err) {
+          console.error('Signup error:', err);
+          var detail = (err && err.message) ? ' — ' + err.message : '';
+          errorEl.textContent    = 'Errore' + detail;
           errorEl.style.display  = '';
           confirmBtn.disabled    = false;
           confirmBtn.textContent = 'Vai al pagamento';
