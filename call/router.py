@@ -142,6 +142,20 @@ _SYSTEM_PROMPT = (
     "7. Se finisci gli immobili senza che il chiamante ne scelga uno, di'\n"
     "   che al momento non avete nulla che soddisfi le sue esigenze.\n"
     "\n"
+    "## TIPO C — Qualsiasi altra richiesta\n"
+    "Se la richiesta del chiamante non riguarda la ricerca o l'acquisto\n"
+    "di un immobile, gestiscila così:\n"
+    "1. Ascolta con attenzione l'intera richiesta senza interrompere.\n"
+    "2. Fai UNA domanda di chiarimento se necessario per capire bene.\n"
+    "3. Chiedi il nome del chiamante se non lo conosci già.\n"
+    "4. Usa leave_message per registrare nome e messaggio.\n"
+    "5. Dopo che leave_message ha risposto con status 'saved', di':\n"
+    "   'Ho preso nota. Un nostro agente la ricontatterà al più presto.\n"
+    "    Può contare su di noi. Buona giornata!'\n"
+    "6. Aspetta che il chiamante saluti e poi concludi naturalmente.\n"
+    "Non tentare mai di rispondere a domande fuori dalla tua competenza.\n"
+    "Non inventare procedure, prezzi, o informazioni legali/contrattuali.\n"
+    "\n"
     "# Regole generali\n"
     "- Rispondi nel modo più breve possibile. Una frase, mai più di due.\n"
     "- ATTENZIONE LINGUA: ascolta la primissima frase del chiamante. Se non è\n"
@@ -337,6 +351,42 @@ _END_CALL_TOOL: dict[str, Any] = {
     },
 }
 
+_LEAVE_MESSAGE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "leave_message",
+    "description": (
+        "Use this when the caller's request does not involve searching "
+        "for a property to buy or rent, and does not involve a specific "
+        "listing inquiry. Saves the caller's name, phone, and their "
+        "message so an agent can follow up."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "caller_name": {
+                "type": "string",
+                "description": "Full name of the caller",
+            },
+            "message": {
+                "type": "string",
+                "description": (
+                    "A clear summary of what the caller needs, "
+                    "written as if taking a note for the agent: "
+                    "e.g. 'Il chiamante vuole una valutazione del "
+                    "suo appartamento in Via Roma 5, Lodi. "
+                    "Disponibile il mattino.'"
+                ),
+            },
+            "urgency": {
+                "type": "string",
+                "enum": ["normale", "urgente"],
+                "description": "Whether the caller indicated urgency",
+            },
+        },
+        "required": ["caller_name", "message"],
+    },
+}
+
 _SESSION_UPDATE: dict[str, Any] = {
     "type": "session.update",
     "session": {
@@ -365,6 +415,7 @@ _SESSION_UPDATE: dict[str, Any] = {
             _MARK_INTEREST_TOOL,
             _RECORD_CALLER_INFO_TOOL,
             _END_CALL_TOOL,
+            _LEAVE_MESSAGE_TOOL,
         ],
         "tool_choice": "auto",
     },
@@ -461,6 +512,13 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
         else:
             lines.append("Nessuno.")
 
+        if session.get("left_message"):
+            msg_data = session["left_message"]
+            lines += ["", "=== Messaggio lasciato ==="]
+            lines.append(f"Nome: {msg_data.get('caller_name', 'sconosciuto')}")
+            lines.append(f"Urgenza: {msg_data.get('urgency', 'normale')}")
+            lines.append(f"Messaggio: {msg_data.get('message', '')}")
+
         body = "\n".join(lines)
     except Exception as exc:
         logger.error("Failed to format lead email body: %s", exc)
@@ -477,7 +535,13 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
                 json={
                     "from": settings.RESEND_FROM,
                     "to": [settings.LEAD_EMAIL],
-                    "subject": f"Nuovo lead — {caller}",
+                    "subject": (
+                        f"Nuovo lead — {caller}"
+                        if session.get("listings_shown")
+                        else f"Nuovo messaggio — {caller}"
+                        if session.get("left_message") is not None
+                        else f"Chiamata — {caller}"
+                    ),
                     "text": body,
                 },
             )
@@ -507,6 +571,7 @@ async def stream_ws(websocket: WebSocket) -> None:
         "listings_shown": [],
         "interested_listings": [],
         "caller_info": {},
+        "left_message": None,
         "suppress_input_until": 0.0,
         "last_speech_at": 0.0,
     }
@@ -752,6 +817,24 @@ async def stream_ws(websocket: WebSocket) -> None:
                             }))
                             await oai_ws.send(json.dumps({"type": "response.create"}))
 
+
+                        elif msg.get("name") == "leave_message":
+                            call_id = msg.get("call_id")
+                            try:
+                                args = json.loads(msg.get("arguments", "{}"))
+                            except json.JSONDecodeError:
+                                args = {}
+                            session["left_message"] = args
+                            logger.info("leave_message: %s", args)
+                            await oai_ws.send(json.dumps({
+                                "type": "conversation.item.create",
+                                "item": {
+                                    "type": "function_call_output",
+                                    "call_id": call_id,
+                                    "output": json.dumps({"status": "saved"}, ensure_ascii=False),
+                                },
+                            }))
+                            await oai_ws.send(json.dumps({"type": "response.create"}))
 
                         elif msg.get("name") == "end_call":
                             call_id = msg.get("call_id")
