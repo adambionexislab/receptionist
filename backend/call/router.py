@@ -14,7 +14,8 @@ from fastapi.responses import Response
 from twilio.twiml.voice_response import Connect, Stream, VoiceResponse
 
 from config import settings
-from listings.store import store
+from listings.store import store, tenant_stores
+from tenants import db
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +79,12 @@ _goodbye = _load_static_audio("goodbye.wav")
 _GOODBYE_AUDIO: str | None = _goodbye[0] if _goodbye else None
 _GOODBYE_DURATION: float = _goodbye[1] if _goodbye else 0.0
 
-_SYSTEM_PROMPT = (
-    "Sei Apollonia, la receptionist virtuale di uno studio immobiliare.\n"
+# Only the first line of the system prompt is tenant-specific; the body
+# (language rule, Type A/B/C flows, geography rules, qualifying questions)
+# is identical for every tenant.
+_DEFAULT_FIRST_LINE = "Sei Apollonia, la receptionist virtuale di uno studio immobiliare.\n"
+
+_SYSTEM_PROMPT_BODY = (
     "\n"
     "# REGOLA SULLA LINGUA — PRIORITÀ MASSIMA\n"
     "Ascolta la primissima frase del chiamante. Se non è in italiano, da quel\n"
@@ -217,6 +222,17 @@ _SYSTEM_PROMPT = (
     "3. Se dice di sì: continua ad aiutarlo normalmente, e ripeti questa\n"
     "   procedura quando hai finito.\n"
 )
+
+_SYSTEM_PROMPT = _DEFAULT_FIRST_LINE + _SYSTEM_PROMPT_BODY
+
+
+def _build_system_prompt(agency_name: str | None, agent_name: str | None) -> str:
+    """Inject the tenant's agency/agent name into the first line of the
+    prompt; everything else stays identical to the single-tenant version."""
+    if not agency_name:
+        return _SYSTEM_PROMPT
+    name = agent_name or "Apollonia"
+    return f"Sei {name}, la receptionist virtuale di {agency_name}.\n" + _SYSTEM_PROMPT_BODY
 
 _SEARCH_TOOL: dict[str, Any] = {
     "type": "function",
@@ -487,8 +503,18 @@ async def inbound_call(request: Request) -> Response:
     """
     form = await request.form()
     caller = str(form.get("From", "sconosciuto"))
+    called = str(form.get("To", ""))
     call_sid = str(form.get("CallSid", ""))
-    logger.info("Inbound call webhook hit — caller=%s", caller)
+    logger.info("Inbound call webhook hit — caller=%s called=%s", caller, called)
+
+    tenant = db.get_by_twilio_number(called) if called else None
+    if tenant is None and called and called != settings.TWILIO_PHONE_NUMBER:
+        # Unknown number and not the env-var demo number: reject.
+        logger.warning("No tenant found for called number %s — rejecting", called)
+        response = VoiceResponse()
+        response.say("Numero non attivo.", language="it-IT")
+        response.hangup()
+        return Response(content=str(response), media_type="text/xml")
 
     if call_sid and settings.TWILIO_ACCOUNT_SID:
         asyncio.create_task(asyncio.to_thread(_start_call_recording, call_sid))
@@ -501,6 +527,8 @@ async def inbound_call(request: Request) -> Response:
     connect = Connect()
     stream = Stream(url=f"{wss_base}/call/stream", track="inbound_track")
     stream.parameter(name="caller", value=caller)
+    if tenant is not None:
+        stream.parameter(name="tenant_id", value=tenant["id"])
     connect.append(stream)
     response.append(connect)
 
@@ -522,8 +550,9 @@ async def recording_status(request: Request) -> Response:
 
 
 async def _send_lead_email(session: dict[str, Any]) -> None:
-    if not settings.RESEND_API_KEY or not settings.LEAD_EMAIL:
-        logger.warning("RESEND_API_KEY/LEAD_EMAIL not configured — lead email skipped")
+    recipient = session.get("lead_email") or settings.LEAD_EMAIL
+    if not settings.RESEND_API_KEY or not recipient:
+        logger.warning("RESEND_API_KEY/lead email not configured — lead email skipped")
         return
 
     caller = session.get("caller_number", "sconosciuto")
@@ -585,7 +614,7 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
                 headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
                 json={
                     "from": settings.RESEND_FROM,
-                    "to": [settings.LEAD_EMAIL],
+                    "to": [recipient],
                     "subject": (
                         f"Nuovo lead — {caller}"
                         if session.get("listings_shown")
@@ -619,6 +648,7 @@ async def stream_ws(websocket: WebSocket) -> None:
         "stream_sid": None,
         "call_sid": None,
         "caller_number": "sconosciuto",
+        "lead_email": None,
         "listings_shown": [],
         "interested_listings": [],
         "caller_info": {},
@@ -626,6 +656,49 @@ async def stream_ws(websocket: WebSocket) -> None:
         "suppress_input_until": 0.0,
         "last_speech_at": 0.0,
     }
+
+    # Twilio sends "connected" then "start" as the first frames. Read them
+    # before opening the OpenAI session so we know which tenant is being
+    # called and can inject its agency name into the instructions.
+    tenant_id = ""
+    try:
+        while True:
+            msg = json.loads(await websocket.receive_text())
+            event = msg.get("event")
+            if event == "start":
+                start = msg.get("start", {})
+                session["stream_sid"] = msg.get("streamSid") or start.get("streamSid")
+                session["call_sid"] = start.get("callSid")
+                params = start.get("customParameters", {})
+                session["caller_number"] = params.get("caller", session["caller_number"])
+                tenant_id = params.get("tenant_id", "")
+                logger.info(
+                    "Stream started sid=%s caller=%s tenant=%s",
+                    session["stream_sid"],
+                    session["caller_number"],
+                    tenant_id or "(env fallback)",
+                )
+                break
+            if event == "stop":
+                logger.info("Stream stopped before start event")
+                return
+    except WebSocketDisconnect:
+        logger.info("Twilio WebSocket disconnected before start event")
+        return
+
+    tenant = db.get_by_id(tenant_id) if tenant_id else None
+    if tenant is not None:
+        instructions = _build_system_prompt(tenant["agency_name"], tenant["agent_name"])
+        tenant_store = tenant_stores.get_or_create(tenant["id"])
+        session["lead_email"] = tenant.get("lead_email") or settings.LEAD_EMAIL
+    else:
+        # Env-var fallback: demo behaviour, global store, owner's lead email.
+        instructions = _SYSTEM_PROMPT
+        tenant_store = store
+        session["lead_email"] = settings.LEAD_EMAIL
+
+    session_update = json.loads(json.dumps(_SESSION_UPDATE))
+    session_update["session"]["instructions"] = instructions
 
     oai_headers = [
         ("Authorization", f"Bearer {settings.OPENAI_API_KEY}"),
@@ -636,7 +709,7 @@ async def stream_ws(websocket: WebSocket) -> None:
             "wss://api.openai.com/v1/realtime?model=gpt-realtime-2",
             additional_headers=oai_headers,
         ) as oai_ws:
-            await oai_ws.send(json.dumps(_SESSION_UPDATE))
+            await oai_ws.send(json.dumps(session_update))
             logger.info("OpenAI Realtime session initialised")
 
             # Wait for OpenAI to confirm the session is ready before greeting.
@@ -665,6 +738,19 @@ async def stream_ws(websocket: WebSocket) -> None:
                     },
                 }))
                 logger.info("Prerecorded greeting injected into context")
+                if session["stream_sid"]:
+                    await websocket.send_text(json.dumps({
+                        "event": "media",
+                        "streamSid": session["stream_sid"],
+                        "media": {
+                            "track": "outbound",
+                            "payload": _GREETING_AUDIO,
+                        },
+                    }))
+                    session["suppress_input_until"] = (
+                        asyncio.get_event_loop().time()
+                        + _GREETING_DURATION + 0.5
+                    )
             else:
                 # Fallback: let OpenAI generate the greeting.
                 await oai_ws.send(json.dumps({
@@ -692,36 +778,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                     msg = json.loads(raw)
                     event = msg.get("event")
 
-                    if event == "start":
-                        start = msg.get("start", {})
-                        session["stream_sid"] = msg.get("streamSid") or start.get(
-                            "streamSid"
-                        )
-                        session["call_sid"] = start.get("callSid")
-                        params = start.get("customParameters", {})
-                        session["caller_number"] = params.get(
-                            "caller", session["caller_number"]
-                        )
-                        logger.info(
-                            "Stream started sid=%s caller=%s",
-                            session["stream_sid"],
-                            session["caller_number"],
-                        )
-                        if _GREETING_AUDIO:
-                            await websocket.send_text(json.dumps({
-                                "event": "media",
-                                "streamSid": session["stream_sid"],
-                                "media": {
-                                    "track": "outbound",
-                                    "payload": _GREETING_AUDIO,
-                                },
-                            }))
-                            session["suppress_input_until"] = (
-                                asyncio.get_event_loop().time()
-                                + _GREETING_DURATION + 0.5
-                            )
-
-                    elif event == "media":
+                    if event == "media":
                         if asyncio.get_event_loop().time() < session["suppress_input_until"]:
                             continue
                         mulaw = base64.b64decode(msg["media"]["payload"])
@@ -782,7 +839,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                                 args = json.loads(msg.get("arguments", "{}"))
                             except json.JSONDecodeError:
                                 args = {}
-                            results = store.search(**args)
+                            results = tenant_store.search(**args)
                             session["listings_shown"].extend(results)
                             logger.info(
                                 "search_listings(%s) → %d results", args, len(results)
@@ -809,7 +866,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                                 args = json.loads(msg.get("arguments", "{}"))
                             except json.JSONDecodeError:
                                 args = {}
-                            results = store.get_by_address(args.get("address_query", ""))
+                            results = tenant_store.get_by_address(args.get("address_query", ""))
                             session["listings_shown"].extend(results)
                             logger.info(
                                 "get_listing_by_address(%s) → %d results", args, len(results)

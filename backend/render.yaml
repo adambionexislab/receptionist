@@ -2,13 +2,22 @@ services:
   - type: web
     name: ai-receptionist
     runtime: python
+    plan: starter # persistent disks require a paid instance
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
     envVars:
       - key: PORT
         value: 10000
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: DATA_DIR
+        value: /data
+      - key: ADMIN_TOKEN
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: TWILIO_ACCOUNT_SID
@@ -20,6 +29,10 @@ services:
       - key: PUBLIC_BASE_URL
         sync: false
       - key: LEAD_EMAIL
+        sync: false
+      - key: APIFY_TOKEN
+        sync: false
+      - key: IMMOBILIARE_SEARCH_URL
         sync: false
       - key: GITHUB_TOKEN
         sync: false

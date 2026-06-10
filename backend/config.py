@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # Deployment
     PUBLIC_BASE_URL: str = "http://localhost:8000"
 
+    # Multi-tenant
+    ADMIN_TOKEN: Optional[str] = None
+    DATA_DIR: str = "/data"
+
     # Lead capture (sent via Resend's HTTP API — Render blocks outbound SMTP)
     LEAD_EMAIL: Optional[str] = None
     RESEND_API_KEY: Optional[str] = None

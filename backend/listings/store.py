@@ -67,26 +67,59 @@ def _listings_to_csv(listings: list[dict]) -> str:
 
 
 class ListingsStore:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        immobiliare_url: Optional[str] = None,
+        use_github_csv: bool = False,
+    ) -> None:
         self._listings: list[dict] = []
+        self.immobiliare_url = immobiliare_url
+        self.use_github_csv = use_github_csv
 
     async def load(self) -> None:
-        """Phase 1 (fast): load GitHub CSV so the agent is live immediately.
-        Phase 2 (background): trigger Apify scrape which updates memory and
-        writes the result back to the GitHub CSV cache on success."""
-        loaded = await self._load_from_github()
-        if not loaded:
-            self._listings = get_seed_listings()
-            logger.info("Loaded %d seed listings as fallback", len(self._listings))
+        """Two loading strategies:
 
-        if _APIFY_SYNC_PAUSED:
-            logger.info("Apify sync is paused (_APIFY_SYNC_PAUSED=True) — skipping background scrape")
-        elif settings.APIFY_TOKEN and settings.IMMOBILIARE_SEARCH_URL:
-            asyncio.create_task(self._apify_scrape_and_cache())
-        elif not settings.APIFY_TOKEN:
-            logger.info("APIFY_TOKEN not set — skipping background Apify scrape")
+        Demo tenant (use_github_csv=True — the original single-tenant flow):
+          Phase 1 (fast): load GitHub CSV so the agent is live immediately.
+          Phase 2 (background): trigger Apify scrape which updates memory and
+          writes the result back to the GitHub CSV cache on success.
+          _APIFY_SYNC_PAUSED applies ONLY here, protecting the hand-edited CSV.
+
+        Regular tenants: scrape their immobiliare_url via Apify directly
+        (no GitHub cache); seed data if they have no URL or nothing loaded.
+        """
+        if self.use_github_csv:
+            loaded = await self._load_from_github()
+            if not loaded:
+                self._listings = get_seed_listings()
+                logger.info("Loaded %d seed listings as fallback", len(self._listings))
+
+            if _APIFY_SYNC_PAUSED:
+                logger.info("Apify sync is paused (_APIFY_SYNC_PAUSED=True) — skipping background scrape")
+            elif settings.APIFY_TOKEN and settings.IMMOBILIARE_SEARCH_URL:
+                asyncio.create_task(
+                    self._apify_scrape(settings.IMMOBILIARE_SEARCH_URL, write_github=True)
+                )
+            elif not settings.APIFY_TOKEN:
+                logger.info("APIFY_TOKEN not set — skipping background Apify scrape")
+            else:
+                logger.warning("IMMOBILIARE_SEARCH_URL not set — skipping background Apify scrape")
+            return
+
+        if not self.immobiliare_url:
+            if not self._listings:
+                self._listings = get_seed_listings()
+                logger.info("Tenant has no immobiliare_url — loaded %d seed listings", len(self._listings))
+            return
+
+        if not settings.APIFY_TOKEN:
+            logger.warning("APIFY_TOKEN not set — cannot scrape %s", self.immobiliare_url)
         else:
-            logger.warning("IMMOBILIARE_SEARCH_URL not set — skipping background Apify scrape")
+            await self._apify_scrape(self.immobiliare_url, write_github=False)
+
+        if not self._listings:
+            self._listings = get_seed_listings()
+            logger.info("Scrape yielded nothing — loaded %d seed listings as fallback", len(self._listings))
 
     async def _load_from_github(self) -> bool:
         """Load listings from the GitHub CSV cache. Returns True if at least one listing loaded."""
@@ -144,8 +177,9 @@ class ListingsStore:
             logger.error("Failed to load listings from GitHub CSV: %s", exc)
             return False
 
-    async def _apify_scrape_and_cache(self) -> None:
-        """Run Apify scrape. On success: update memory and write back to GitHub CSV.
+    async def _apify_scrape(self, start_url: str, write_github: bool) -> None:
+        """Run Apify scrape of start_url. On success: update memory and, for
+        the demo tenant (write_github=True), write back to the GitHub CSV.
         On any failure: log and leave current listings and CSV untouched."""
         apify_headers = {"Authorization": f"Bearer {settings.APIFY_TOKEN}"}
 
@@ -156,7 +190,7 @@ class ListingsStore:
                     f"https://api.apify.com/v2/acts/{_ACTOR_ID}/runs",
                     headers=apify_headers,
                     json={
-                        "startUrl": settings.IMMOBILIARE_SEARCH_URL,
+                        "startUrl": start_url,
                         "maxItems": 200,
                     },
                 )
@@ -208,7 +242,8 @@ class ListingsStore:
             self._listings = listings
             logger.info("Updated %d listings in memory from Apify/Immobiliare.it", len(self._listings))
 
-            await self._write_github_csv(listings)
+            if write_github:
+                await self._write_github_csv(listings)
 
         except Exception as exc:
             logger.error("Apify scrape failed: %s — keeping current listings", exc)
@@ -311,4 +346,34 @@ class ListingsStore:
         ]
 
 
-store = ListingsStore()
+class TenantListingsStore:
+    """One in-memory ListingsStore per tenant, keyed by tenant_id."""
+
+    def __init__(self) -> None:
+        self._stores: dict[str, ListingsStore] = {}
+
+    def attach(self, tenant_id: str, listings_store: "ListingsStore") -> None:
+        """Bind an existing store (the demo tenant's GitHub-CSV store) to a tenant id."""
+        self._stores[tenant_id] = listings_store
+
+    def get_or_create(self, tenant_id: str) -> ListingsStore:
+        if tenant_id not in self._stores:
+            self._stores[tenant_id] = ListingsStore()
+        return self._stores[tenant_id]
+
+    async def load(self, tenant_id: str, immobiliare_url: Optional[str] = None) -> None:
+        tenant_store = self.get_or_create(tenant_id)
+        if not tenant_store.use_github_csv:
+            tenant_store.immobiliare_url = immobiliare_url
+        await tenant_store.load()
+
+    def counts(self) -> dict[str, int]:
+        return {tid: len(s._listings) for tid, s in self._stores.items()}
+
+
+tenant_stores = TenantListingsStore()
+
+# The original single-tenant store, kept as the demo tenant's store: it loads
+# from the hand-edited GitHub CSV and is also what /listings, /listings/reload
+# and the env-var fallback call path use.
+store = ListingsStore(use_github_csv=True)

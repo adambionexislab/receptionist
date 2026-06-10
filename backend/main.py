@@ -6,14 +6,16 @@ from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from call.router import router as call_router
 from call.router import setup_twilio_webhook
-from listings.store import store
+from config import settings
+from listings.store import store, tenant_stores
 from signup.router import router as signup_router
+from tenants import db
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,18 +41,54 @@ def _seconds_until_next_slot() -> float:
     return (slot - now).total_seconds()
 
 
+def _startup_migration() -> None:
+    """If the tenants table is empty and env vars define the original demo
+    number, recreate it as a tenant so the demo keeps working. Either way,
+    bind the demo tenant (matched by its Twilio number) to the original
+    GitHub-CSV-backed global store."""
+    if db.count() == 0 and settings.TWILIO_PHONE_NUMBER:
+        db.create(
+            agency_name="Studio Demo",
+            agent_name="Apollonia",
+            twilio_number=settings.TWILIO_PHONE_NUMBER,
+            immobiliare_url=settings.IMMOBILIARE_SEARCH_URL,
+            lead_email=settings.LEAD_EMAIL or "",
+        )
+        logger.info("Migrated env-var config into demo tenant 'Studio Demo'")
+
+    if settings.TWILIO_PHONE_NUMBER:
+        demo = db.get_by_twilio_number(settings.TWILIO_PHONE_NUMBER)
+        if demo:
+            tenant_stores.attach(demo["id"], store)
+
+
+async def _load_all_tenant_listings() -> None:
+    tenants = await asyncio.to_thread(db.get_all_active)
+    if not tenants:
+        # No tenants at all (fresh install without env vars): still load the
+        # global store so /listings and the env fallback have data.
+        await store.load()
+        return
+    for tenant in tenants:
+        try:
+            await tenant_stores.load(tenant["id"], tenant.get("immobiliare_url"))
+        except Exception:
+            logger.exception("Listings load failed for tenant %s", tenant["id"])
+
+
 async def _sync_loop() -> None:
     while True:
         delay = _seconds_until_next_slot()
         next_dt = datetime.datetime.now(_ROME) + datetime.timedelta(seconds=delay)
         logger.info("Next listings sync in %.0fs (at %s Rome time)", delay, next_dt.strftime("%H:%M"))
         await asyncio.sleep(delay)
-        await store.load()
+        await _load_all_tenant_listings()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await store.load()
+    await asyncio.to_thread(_startup_migration)
+    await _load_all_tenant_listings()
     await asyncio.to_thread(setup_twilio_webhook)
     task = asyncio.create_task(_sync_loop())
     try:
@@ -101,6 +139,17 @@ async def get_listings(
 async def reload_listings():
     await store.load()
     return {"status": "ok", "count": len(store._listings)}
+
+
+@app.get("/admin/tenants")
+async def admin_tenants(authorization: str = Header(default="")):
+    if not settings.ADMIN_TOKEN or authorization != f"Bearer {settings.ADMIN_TOKEN}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    tenants = await asyncio.to_thread(db.get_all_active)
+    counts = tenant_stores.counts()
+    for tenant in tenants:
+        tenant["listing_count"] = counts.get(tenant["id"], 0)
+    return tenants
 
 
 if _LANDING_DIR.is_dir():
