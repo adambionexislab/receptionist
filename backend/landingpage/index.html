@@ -778,10 +778,10 @@
     <section id="contatti" class="py-28 lg:py-40 px-6 text-center" style="background:var(--accent)">
       <div class="reveal max-w-2xl mx-auto">
         <h2 class="text-4xl md:text-5xl font-light tracking-tight leading-[1.08] text-white">
-          Nessuna chiamata persa,<br />mai più
+          Parliamone
         </h2>
         <p class="mt-6 text-base leading-relaxed" style="color:rgba(255,255,255,.7)">
-          Attiva ApollonIA oggi. Setup in pochi minuti, prima lead nella tua casella entro la prima ora.
+          Hai domande su ApollonIA o vuoi attivarlo per la tua agenzia? Scrivici o chiamaci: ti rispondiamo rapidamente.
         </p>
         <div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
           <a href="mailto:info@apollon-ia.com"
@@ -1406,8 +1406,7 @@
         })
         ['catch'](function (err) {
           console.error('Signup error:', err);
-          var detail = (err && err.message) ? ' — ' + err.message : '';
-          errorEl.textContent    = 'Errore' + detail;
+          errorEl.textContent    = 'Si è verificato un errore. Riprova più tardi o contattaci direttamente.';
           errorEl.style.display  = '';
           confirmBtn.disabled    = false;
           confirmBtn.textContent = 'Vai al pagamento';

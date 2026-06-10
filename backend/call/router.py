@@ -459,6 +459,26 @@ def setup_twilio_webhook() -> None:
         logger.error("Failed to configure Twilio webhook: %s", exc)
 
 
+def _start_call_recording(call_sid: str) -> None:
+    """Start a dual-channel recording of the call via the Twilio REST API.
+
+    <Connect><Stream> doesn't support a record="true" attribute like <Dial>
+    does, so recording is started out-of-band on the Call resource — it runs
+    in parallel and doesn't affect the media stream.
+    """
+    try:
+        from twilio.rest import Client as TwilioClient
+
+        client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+        client.calls(call_sid).recordings.create(
+            recording_status_callback=f"{settings.PUBLIC_BASE_URL}/call/recording-status",
+            recording_status_callback_method="POST",
+        )
+        logger.info("Started recording for call_sid=%s", call_sid)
+    except Exception as exc:
+        logger.error("Failed to start call recording for %s: %s", call_sid, exc)
+
+
 @router.post("/inbound")
 async def inbound_call(request: Request) -> Response:
     """
@@ -467,7 +487,11 @@ async def inbound_call(request: Request) -> Response:
     """
     form = await request.form()
     caller = str(form.get("From", "sconosciuto"))
+    call_sid = str(form.get("CallSid", ""))
     logger.info("Inbound call webhook hit — caller=%s", caller)
+
+    if call_sid and settings.TWILIO_ACCOUNT_SID:
+        asyncio.create_task(asyncio.to_thread(_start_call_recording, call_sid))
 
     wss_base = settings.PUBLIC_BASE_URL.replace("https://", "wss://").replace(
         "http://", "ws://"
@@ -481,6 +505,20 @@ async def inbound_call(request: Request) -> Response:
     response.append(connect)
 
     return Response(content=str(response), media_type="text/xml")
+
+
+@router.post("/recording-status")
+async def recording_status(request: Request) -> Response:
+    """Twilio calls this when a call recording's status changes (e.g. completed)."""
+    form = await request.form()
+    logger.info(
+        "Recording status callback — call_sid=%s recording_sid=%s status=%s url=%s",
+        form.get("CallSid"),
+        form.get("RecordingSid"),
+        form.get("RecordingStatus"),
+        form.get("RecordingUrl"),
+    )
+    return Response(status_code=204)
 
 
 async def _send_lead_email(session: dict[str, Any]) -> None:
@@ -875,6 +913,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                             else:
                                 await asyncio.sleep(1.5)
                             await websocket.close()
+                            return
 
                     elif etype == "input_audio_buffer.speech_started":
                         session["last_speech_at"] = asyncio.get_event_loop().time()
