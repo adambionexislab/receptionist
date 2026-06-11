@@ -224,8 +224,9 @@ _SYSTEM_PROMPT_BODY = (
     "Subito dopo aver detto al chiamante che inoltrerai la sua richiesta a\n"
     "un agente immobiliare:\n"
     "1. Chiedi se può aiutarlo con qualcos'altro.\n"
-    "2. Se dice di no: salutalo calorosamente, poi usa lo strumento\n"
-    "   end_call per terminare la chiamata.\n"
+    "2. Se dice di no: NON salutare a voce e non dire arrivederci — il saluto\n"
+    "   di chiusura viene riprodotto automaticamente dal sistema. Chiama\n"
+    "   semplicemente lo strumento end_call senza aggiungere altro.\n"
     "3. Se dice di sì: continua ad aiutarlo normalmente, e ripeti questa\n"
     "   procedura quando hai finito.\n"
     "\n"
@@ -247,9 +248,12 @@ _SYSTEM_PROMPT_BODY = (
     "  invece di riempirla con suoni.\n"
     "- Mantieni un tono caldo e professionale, da receptionist esperta di uno\n"
     "  studio immobiliare italiano.\n"
-    "- IMPORTANTE: non esagerare. Le esitazioni devono restare sottili e\n"
-    "  occasionali (non in ogni risposta), mai ripetute o caricate. Devono\n"
-    "  rendere il parlato più umano, non rallentarlo o renderlo artificioso.\n"
+    "- IMPORTANTE: usa un'esitazione iniziale di rado — al massimo in circa una\n"
+    "  risposta su tre, mai in turni consecutivi. La maggior parte delle tue\n"
+    "  risposte deve iniziare diritta, senza intercalare. Quando ne usi una,\n"
+    "  varia la parola e non ripetere mai lo stesso intercalare due volte di\n"
+    "  fila (es. non aprire ogni volta con 'Allora'). Devono rendere il parlato\n"
+    "  più umano, non rallentarlo o renderlo artificioso.\n"
 )
 
 _SYSTEM_PROMPT = _DEFAULT_FIRST_LINE + _SYSTEM_PROMPT_BODY
@@ -399,8 +403,9 @@ _END_CALL_TOOL: dict[str, Any] = {
     "description": (
         "End the phone call. Use this ONLY after telling the caller you'll "
         "forward their request to a real estate agent, asking if there's "
-        "anything else you can help with, the caller says no, and you've "
-        "said goodbye."
+        "anything else you can help with, and the caller says no. Do NOT say "
+        "goodbye yourself first — a closing message is played automatically; "
+        "just call this tool."
     ),
     "parameters": {
         "type": "object",
