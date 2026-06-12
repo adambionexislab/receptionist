@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /signup
+Disallow: /call/
+
+Sitemap: https://www.apollon-ia.com/sitemap.xml

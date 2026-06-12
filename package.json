@@ -1,0 +1,11 @@
+{
+  "name": "apollonia-landing",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./styles/tailwind.input.css -o ./backend/landingpage/assets/tailwind.css --minify",
+    "watch:css": "tailwindcss -i ./styles/tailwind.input.css -o ./backend/landingpage/assets/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}
