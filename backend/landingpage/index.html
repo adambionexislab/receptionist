@@ -1457,10 +1457,12 @@
 
       // Stripe price IDs per plan + billing period. Price IDs are public (not
       // secret); the secret key stays server-side. Keys match pagSel values.
+      // NOTE: test-mode price IDs (work with sk_test_ keys). Swap to the
+      // live-mode IDs when going live with sk_live_ keys.
       var PRICE_IDS = {
-        Base: { Mensile: 'price_1TgQYV17IdyiO0xX72ug1Pig', Annuale: 'price_1Tfofo17IdyiO0xXUnRm0P96' },
-        Pro:  { Mensile: 'price_1TgQVJ17IdyiO0xXUcMAkGrW', Annuale: 'price_1Tfoif17IdyiO0xXewui5ZYo' },
-        Max:  { Mensile: 'price_1TgQaJ17IdyiO0xXBB4Dl52v', Annuale: 'price_1TgQbj17IdyiO0xX6lzHNXk6' }
+        Base: { Mensile: 'price_1TiAhL17IdyiO0xXtrRZmfxq', Annuale: 'price_1TiAhN17IdyiO0xXeK6a3Sdu' },
+        Pro:  { Mensile: 'price_1TiAhQ17IdyiO0xXJmdu5JdY', Annuale: 'price_1TiAhR17IdyiO0xXPZPN9SaP' },
+        Max:  { Mensile: 'price_1TiAhT17IdyiO0xXXoLEgZBb', Annuale: 'price_1TiAhV17IdyiO0xXKCIUZrCe' }
       };
 
       function fmt(n) {
