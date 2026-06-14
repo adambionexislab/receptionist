@@ -26,15 +26,15 @@ router = APIRouter()
 # price_id → human-readable plan label. Doubles as an allowlist: only these six
 # prices may be checked out, so a tampered request can't substitute an arbitrary
 # (e.g. €0) price. The label is stored on the session so the webhook can log it.
-# NOTE: test-mode price IDs (work with sk_test_ keys). Swap to the live-mode
-# IDs when going live with sk_live_ keys.
+# NOTE: live-mode price IDs (require sk_live_ keys + live webhook secret).
+# Test-mode IDs are recorded in project memory for switching back.
 _PRICE_TO_PLAN = {
-    "price_1TiAhL17IdyiO0xXtrRZmfxq": "Base (Mensile)",
-    "price_1TiAhQ17IdyiO0xXJmdu5JdY": "Pro (Mensile)",
-    "price_1TiAhT17IdyiO0xXXoLEgZBb": "Max (Mensile)",
-    "price_1TiAhN17IdyiO0xXeK6a3Sdu": "Base (Annuale)",
-    "price_1TiAhR17IdyiO0xXPZPN9SaP": "Pro (Annuale)",
-    "price_1TiAhV17IdyiO0xXKCIUZrCe": "Max (Annuale)",
+    "price_1TgQYV17IdyiO0xX72ug1Pig": "Base (Mensile)",
+    "price_1TgQVJ17IdyiO0xXUcMAkGrW": "Pro (Mensile)",
+    "price_1TgQaJ17IdyiO0xXBB4Dl52v": "Max (Mensile)",
+    "price_1Tfofo17IdyiO0xXUnRm0P96": "Base (Annuale)",
+    "price_1Tfoif17IdyiO0xXewui5ZYo": "Pro (Annuale)",
+    "price_1TgQbj17IdyiO0xX6lzHNXk6": "Max (Annuale)",
 }
 
 
