@@ -12,3 +12,15 @@ cookies
 analytics
 calling leads
 saving a caller who does not find what he needs in a list and comapring lisitngs to that list  ---> apollonIA calls lead
+when there is a missing listing from the previous scrape keep it in the list but set it to unavailable.
+----------------
+lets add a new feature to apollonia. when a caller calls and the appartment 
+they are interested is unavailable, or when they search for one and they 
+dont have anything that meets their criteria apollonia wil ask them if 
+they would like to be contacted if they have a new listing that meets 
+their criteria. If they agree she then saves their phone number and 
+requests (number of rooms, price, ...) When the scraping finds a new listing
+ that wasnt in the list previously it will get compared to the list of 
+ potential buyers for a match. First look at the current structure and 
+ tell me how you plan to implemnet this feature.
+ ----------------

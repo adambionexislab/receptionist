@@ -10,9 +10,12 @@ The Stripe secret key and webhook secret are read from the environment and are
 never sent to the browser. Only price IDs (which are not secret) reach the JS.
 """
 
+import datetime
 import logging
 from typing import Optional
+from zoneinfo import ZoneInfo
 
+import httpx
 import stripe
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -22,6 +25,8 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_ROME = ZoneInfo("Europe/Rome")
 
 # price_id → human-readable plan label. Doubles as an allowlist: only these six
 # prices may be checked out, so a tampered request can't substitute an arbitrary
@@ -91,6 +96,87 @@ async def create_checkout_session(data: CheckoutRequest):
     return {"url": session.url}
 
 
+async def _send_email(to: str, subject: str, body: str) -> None:
+    """Send a plain-text email via Resend's HTTP API (Render blocks SMTP)."""
+    if not settings.RESEND_API_KEY:
+        logger.warning("RESEND_API_KEY not configured — email to %s skipped", to)
+        return
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+            json={
+                "from": settings.RESEND_FROM,
+                "to": [to],
+                "subject": subject,
+                "text": body,
+            },
+        )
+        resp.raise_for_status()
+
+
+async def _send_signup_notification(session: dict, meta: dict, email: Optional[str]) -> None:
+    """Notify the platform owner (LEAD_EMAIL) that a checkout completed."""
+    if not settings.LEAD_EMAIL:
+        logger.warning("LEAD_EMAIL not configured — payment notification skipped")
+        return
+
+    plan = meta.get("plan_label") or meta.get("plan") or "?"
+    studio = meta.get("studio_name") or "—"
+    body = "\n".join([
+        "Nuovo pagamento ApollonIA\n",
+        f"Piano:              {plan}",
+        f"Email cliente:      {email or '—'}",
+        f"Studio:             {studio}",
+        f"Telefono:           {meta.get('phone') or '—'}",
+        f"URL immobiliare.it: {meta.get('immobiliare_url') or '—'}",
+        f"Modalità:           {meta.get('modalita') or '—'}",
+        f"Stripe session:     {session.get('id')}",
+        f"Stripe customer:    {session.get('customer') or '—'}",
+        f"Subscription:       {session.get('subscription') or '—'}",
+        f"\nTimestamp: {datetime.datetime.now(_ROME).strftime('%d/%m/%Y %H:%M')} (Rome)",
+        "\nContatta lo studio entro 24 ore per configurare il numero Apollonia.",
+    ])
+    try:
+        await _send_email(
+            settings.LEAD_EMAIL,
+            f"[ApollonIA] Nuovo pagamento {plan} — {studio}",
+            body,
+        )
+        logger.info("Payment notification sent for studio=%s plan=%s", studio, plan)
+    except Exception as exc:
+        logger.error("Failed to send payment notification: %s", exc)
+
+
+async def _send_customer_confirmation(meta: dict, email: Optional[str]) -> None:
+    """Confirm the payment to the customer who just checked out."""
+    if not email:
+        logger.warning("No customer email on session — confirmation skipped")
+        return
+
+    studio = meta.get("studio_name")
+    greeting = f"Gentile {studio}," if studio else "Buongiorno,"
+    plan = meta.get("plan_label") or meta.get("plan") or ""
+    body = "\n".join([
+        greeting,
+        "",
+        "grazie! Abbiamo ricevuto il tuo pagamento" + (f" per il piano {plan}." if plan else "."),
+        "",
+        "Il nostro team ti contatterà entro 24 ore per configurare il tuo "
+        "numero Apollonia e attivare l'inoltro delle chiamate.",
+        "",
+        "Se hai domande, rispondi pure a questa email.",
+        "",
+        "A presto,",
+        "il team ApollonIA",
+    ])
+    try:
+        await _send_email(email, "ApollonIA — pagamento confermato", body)
+        logger.info("Customer confirmation sent to %s", email)
+    except Exception as exc:
+        logger.error("Failed to send customer confirmation to %s: %s", email, exc)
+
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
     if not settings.STRIPE_WEBHOOK_SECRET:
@@ -123,5 +209,7 @@ async def stripe_webhook(request: Request):
             "checkout.session.completed — email=%s plan=%s studio=%s phone=%s",
             email, plan, meta.get("studio_name"), meta.get("phone"),
         )
+        await _send_signup_notification(session, meta, email)
+        await _send_customer_confirmation(meta, email)
 
     return {"status": "ok"}
