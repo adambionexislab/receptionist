@@ -1,5 +1,5 @@
 change the silenece hang up time. right now 100 seconds
-apify scraping of immobiliare.it  - done (u will need pai apify account)
+apify scraping of immobiliare.it  - done (u will need paid apify account)
 change language when other language is detected - done - need to test
 have your phoneringing display an apollonIA button that will redirect the phonecall to apollonIA
     - PROMPT FOR THIS: multitentant_prompt.txt
@@ -7,3 +7,8 @@ the scraping is paused. you need to tell claude to unpause it in this session ( 
 goe context - if i ask close to ..., lombardy, provincia, 
 handle ambiguity
 twilio upgrade
+stripe
+cookies
+analytics
+calling leads
+saving a caller who does not find what he needs in a list and comapring lisitngs to that list  ---> apollonIA calls lead

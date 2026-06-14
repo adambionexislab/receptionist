@@ -7,9 +7,11 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from billing.router import router as billing_router
 from call.router import router as call_router
 from call.router import setup_twilio_webhook
 from config import settings
@@ -104,6 +106,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AI Voice Receptionist", lifespan=lifespan)
 app.include_router(call_router)
 app.include_router(signup_router)
+app.include_router(billing_router)
 
 
 class Listing(BaseModel):
@@ -150,6 +153,13 @@ async def admin_tenants(authorization: str = Header(default="")):
     for tenant in tenants:
         tenant["listing_count"] = counts.get(tenant["id"], 0)
     return tenants
+
+
+@app.get("/success")
+async def success_page():
+    # Explicit route so domain/success (Stripe success_url) resolves before the
+    # catch-all static mount below.
+    return FileResponse(str(_LANDING_DIR / "success.html"))
 
 
 if _LANDING_DIR.is_dir():

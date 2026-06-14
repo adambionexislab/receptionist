@@ -1455,6 +1455,14 @@
         Max:  { monthly: 795, annual: 675 }
       };
 
+      // Stripe price IDs per plan + billing period. Price IDs are public (not
+      // secret); the secret key stays server-side. Keys match pagSel values.
+      var PRICE_IDS = {
+        Base: { Mensile: 'price_1TgQYV17IdyiO0xX72ug1Pig', Annuale: 'price_1Tfofo17IdyiO0xXUnRm0P96' },
+        Pro:  { Mensile: 'price_1TgQVJ17IdyiO0xXUcMAkGrW', Annuale: 'price_1Tfoif17IdyiO0xXewui5ZYo' },
+        Max:  { Mensile: 'price_1TgQaJ17IdyiO0xXBB4Dl52v', Annuale: 'price_1TgQbj17IdyiO0xX6lzHNXk6' }
+      };
+
       function fmt(n) {
         return n.toLocaleString('it-IT');
       }
@@ -1517,6 +1525,7 @@
         var email     = document.getElementById('f-email').value.trim();
         var plan      = planSel.value;
         var pagamento = document.getElementById('f-pagamento').value;
+        var modalita  = document.getElementById('f-modalita').value;
 
         if (!studio || !url || !phone || !email) {
           errorEl.textContent   = 'Compila tutti i campi obbligatori.';
@@ -1524,25 +1533,45 @@
           return;
         }
 
+        var priceId = (PRICE_IDS[plan] || {})[pagamento];
+        if (!priceId) {
+          errorEl.textContent   = 'Piano non valido. Riprova.';
+          errorEl.style.display = '';
+          return;
+        }
+
         confirmBtn.disabled    = true;
-        confirmBtn.textContent = 'Invio in corso…';
+        confirmBtn.textContent = 'Reindirizzamento…';
         errorEl.style.display  = 'none';
 
-        fetch('/signup', {
+        // Create a Stripe Checkout Session, then redirect to its hosted page.
+        fetch('/create-checkout-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ studio_name: studio, immobiliare_url: url, phone: phone, email: email, plan: plan, pagamento: pagamento, modalita: document.getElementById('f-modalita').value })
+          body: JSON.stringify({
+            price_id: priceId,
+            customer_email: email,
+            studio_name: studio,
+            immobiliare_url: url,
+            phone: phone,
+            plan: plan,
+            pagamento: pagamento,
+            modalita: modalita
+          })
         })
         .then(function (r) {
           if (!r.ok) return r.text().then(function (t) { throw new Error(r.status + ': ' + t); });
           return r.json();
         })
-        .then(function () {
-          form.style.display      = 'none';
-          successEl.style.display = '';
+        .then(function (data) {
+          if (data && data.url) {
+            window.location.href = data.url;
+          } else {
+            throw new Error('URL di pagamento mancante');
+          }
         })
         ['catch'](function (err) {
-          console.error('Signup error:', err);
+          console.error('Checkout error:', err);
           errorEl.textContent    = 'Si è verificato un errore. Riprova più tardi o contattaci direttamente.';
           errorEl.style.display  = '';
           confirmBtn.disabled    = false;

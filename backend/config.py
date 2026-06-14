@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     RESEND_API_KEY: Optional[str] = None
     RESEND_FROM: str = "onboarding@resend.dev"
 
+    # Stripe billing (Checkout)
+    STRIPE_SECRET_KEY: Optional[str] = None
+    STRIPE_WEBHOOK_SECRET: Optional[str] = None
+
     model_config = {"env_file": str(_ENV_FILE)}
 
 

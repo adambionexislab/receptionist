@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>Pagamento completato | ApollonIA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:           #0c0c0d;
+      --fg:           #f4f4f5;
+      --muted:        #a1a1aa;
+      --border:       #27272a;
+      --accent:       #8b6914;
+      --accent-hover: #7a5810;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--fg);
+      font-family: 'Outfit', sans-serif;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .card {
+      width: 100%;
+      max-width: 480px;
+      text-align: center;
+      background: rgba(255,255,255,.02);
+      border: 1px solid var(--border);
+      border-radius: 1.25rem;
+      padding: 3rem 2rem;
+    }
+    .check {
+      width: 56px; height: 56px;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+      background: rgba(139,105,20,0.15);
+      color: var(--accent);
+    }
+    h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -.01em; margin-bottom: 1rem; }
+    p  { font-size: 1rem; line-height: 1.65; color: var(--muted); margin-bottom: 2rem; }
+    a.btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      background: var(--accent);
+      color: #0c0c0d;
+      border: 1px solid var(--accent);
+      transition: background .25s ease, border-color .25s ease;
+    }
+    a.btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="check" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <h1>Pagamento completato!</h1>
+    <p>Il nostro team ti contatterà entro 24 ore per configurare il tuo numero Apollonia.</p>
+    <a class="btn" href="/">Torna alla homepage</a>
+  </main>
+</body>
+</html>
