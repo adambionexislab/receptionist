@@ -24,3 +24,5 @@ requests (number of rooms, price, ...) When the scraping finds a new listing
  potential buyers for a match. First look at the current structure and 
  tell me how you plan to implemnet this feature.
  ----------------
+
+add more text to knowledge base for the demo
