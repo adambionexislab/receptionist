@@ -41,7 +41,7 @@ Si può personalizzare il modo in cui l'assistente si presenta, le domande che p
 ## 3. Come funziona
 
 **Passo 1 — Sincronizzazione annunci**
-ApollonIA legge gli annunci da immobiliare.it e li importa automaticamente. Ogni nuovo annuncio viene recepito in tempo reale.
+ApollonIA legge gli annunci da immobiliare.it e li importa automaticamente. Ogni nuovo annuncio viene recepito in tempo reale. Non è necessario alcun inserimento manuale.
 
 **Passo 2 — Trasferimento chiamate (il tuo numero, gestito da ApollonIA)**
 Collegamento in pochi minuti, con due modalità a scelta:

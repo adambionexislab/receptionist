@@ -1427,12 +1427,12 @@
       var pc = null, micStream = null, audioEl = null;
       var audioCtx = null, analyser = null, rafId = null;
 
-      // Cost guardrails for this public demo: end after 10s with neither side
-      // talking, and cap any single session at 5 minutes.
+      // Cost guardrails for this public demo: end after 10s of true silence
+      // (neither side talking), and cap any single session at 5 minutes.
       var IDLE_MS = 10000;
       var MAX_MS  = 5 * 60 * 1000;
-      var idleTimer = null, maxTimer = null;
-      var userSpeaking = false, assistantSpeaking = false;
+      var idleInterval = null, maxTimer = null;
+      var lastActivityAt = 0, userSpeaking = false;
 
       function show(name) {
         Object.keys(states).forEach(function (k) {
@@ -1446,23 +1446,24 @@
         bars.forEach(function (b) { b.style.height = ''; });
       }
 
-      function clearTimers() {
-        if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
-        if (maxTimer)  { clearTimeout(maxTimer);  maxTimer = null; }
-      }
+      function bumpActivity() { lastActivityAt = Date.now(); }
 
-      // (Re)start the idle countdown, unless someone is currently talking.
-      function armIdleTimer() {
-        if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
-        if (userSpeaking || assistantSpeaking) return;
-        idleTimer = setTimeout(function () { disconnect(); }, IDLE_MS);
+      function clearTimers() {
+        if (idleInterval) { clearInterval(idleInterval); idleInterval = null; }
+        if (maxTimer)     { clearTimeout(maxTimer);      maxTimer = null; }
       }
 
       function startSessionTimers() {
         clearTimers();
-        userSpeaking = false; assistantSpeaking = false;
+        userSpeaking = false;
+        bumpActivity();
         maxTimer = setTimeout(function () { disconnect(); }, MAX_MS);
-        armIdleTimer();
+        // Poll for true mutual silence: the visitor isn't mid-utterance and
+        // there's been no audio or server-event activity for IDLE_MS.
+        idleInterval = setInterval(function () {
+          if (userSpeaking) return;
+          if (Date.now() - lastActivityAt >= IDLE_MS) disconnect();
+        }, 1000);
       }
 
       function cleanup() {
@@ -1506,10 +1507,13 @@
           visualizer.classList.remove('is-anim'); // drive heights from live audio
           (function tick() {
             analyser.getByteFrequencyData(data);
+            var sum = 0;
             for (var i = 0; i < n; i++) {
               var v = data[Math.min(data.length - 1, 2 + i * 2)] / 255;
               bars[i].style.height = (16 + v * 64).toFixed(1) + 'px';
+              sum += v;
             }
+            if (sum / n > 0.02) bumpActivity(); // Apollonia is audibly talking
             rafId = requestAnimationFrame(tick);
           })();
         } catch (e) {
@@ -1575,17 +1579,16 @@
             } catch (e) {}
           });
 
-          // Track who's talking so the idle timer only counts true mutual
-          // silence (server VAD + response lifecycle events from OpenAI).
+          // Any server event means the session is doing something (response
+          // lifecycle + transcript deltas stream while she talks), so it counts
+          // as activity. speech_started/stopped track the visitor's own turn so
+          // we never cut someone off mid-sentence.
           dc.addEventListener('message', function (e) {
+            bumpActivity();
             var evt;
             try { evt = JSON.parse(e.data); } catch (err) { return; }
-            switch (evt.type) {
-              case 'input_audio_buffer.speech_started': userSpeaking = true;  armIdleTimer(); break;
-              case 'input_audio_buffer.speech_stopped': userSpeaking = false; armIdleTimer(); break;
-              case 'response.created':                  assistantSpeaking = true;  armIdleTimer(); break;
-              case 'response.done':                     assistantSpeaking = false; armIdleTimer(); break;
-            }
+            if (evt.type === 'input_audio_buffer.speech_started') userSpeaking = true;
+            else if (evt.type === 'input_audio_buffer.speech_stopped') userSpeaking = false;
           });
 
           pc.onconnectionstatechange = function () {
