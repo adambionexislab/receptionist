@@ -219,20 +219,47 @@
     .faq-panel-inner { overflow: hidden; }
     .faq-panel p { padding: 0 20px 18px; font-size: 14px; line-height: 1.65; color: var(--muted); }
 
-    /* Demo call player */
-    .demo-card { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 2.5rem 2rem; border-radius: 1.25rem; background: rgba(255,255,255,.02); border: 1px solid var(--border); }
-    .waveform { position: relative; width: 100%; max-width: 520px; height: 64px; border-radius: .5rem; cursor: pointer; overflow: hidden; }
-    .waveform-bars { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
-    .waveform-bar { width: 3px; border-radius: 2px; background: var(--border); flex-shrink: 0; }
-    .waveform-progress { position: absolute; inset: 0 auto 0 0; width: 0%; overflow: hidden; pointer-events: none; }
-    .waveform-progress .waveform-bars { position: absolute; inset: 0; }
-    .waveform-progress .waveform-bar { background: var(--accent); }
-    .waveform-progress { transition: width .08s linear; }
-    .demo-playbtn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 64px; height: 64px; border-radius: 9999px; background: var(--accent); color: #0c0c0d; border: none; cursor: pointer; transition: background .25s ease, transform .2s ease, box-shadow .25s ease; }
-    .demo-playbtn:hover { background: var(--accent-hover); box-shadow: 0 0 24px rgba(139,105,20,.4); }
-    .demo-playbtn:active { transform: scale(.93); }
-    .demo-playbtn svg { display: block; }
-    .demo-meta { font-size: 13px; color: var(--muted); letter-spacing: .02em; }
+    /* Live demo — Parla con Apollonia (WebRTC) */
+    .live-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 2.75rem 2rem; min-height: 300px; border-radius: 1.25rem; background: rgba(255,255,255,.02); border: 1px solid var(--border); text-align: center; }
+    .live-state { display: none; flex-direction: column; align-items: center; gap: 22px; width: 100%; }
+    .live-state.is-shown { display: flex; }
+
+    .live-connect-btn { display: inline-flex; align-items: center; justify-content: center; width: 104px; height: 104px; border-radius: 9999px; background: var(--accent); color: #0c0c0d; border: none; cursor: pointer; transition: background .25s ease, transform .2s ease, box-shadow .25s ease; }
+    .live-connect-btn:hover { background: var(--accent-hover); box-shadow: 0 0 32px rgba(139,105,20,.45); }
+    .live-connect-btn:active { transform: scale(.94); }
+    .live-connect-btn svg { display: block; }
+    .live-connect-label { font-size: 14px; font-weight: 500; color: var(--fg); }
+    .live-hint { font-size: 12px; color: var(--muted); max-width: 38ch; line-height: 1.6; }
+
+    .live-spinner { width: 46px; height: 46px; border-radius: 9999px; border: 3px solid var(--border); border-top-color: var(--accent); animation: liveSpin .8s linear infinite; }
+    @keyframes liveSpin { to { transform: rotate(360deg); } }
+
+    .live-visualizer { display: flex; align-items: center; justify-content: center; gap: 6px; height: 88px; width: 100%; max-width: 340px; }
+    .live-bar { width: 7px; height: 16px; min-height: 6px; border-radius: 9999px; background: var(--accent); transform-origin: center; transition: height .09s ease-out; }
+    .live-visualizer.is-anim .live-bar { animation: liveBar 1.15s ease-in-out infinite; }
+    .live-visualizer.is-anim .live-bar:nth-child(1) { animation-delay: -.95s; }
+    .live-visualizer.is-anim .live-bar:nth-child(2) { animation-delay: -.55s; }
+    .live-visualizer.is-anim .live-bar:nth-child(3) { animation-delay: -.20s; }
+    .live-visualizer.is-anim .live-bar:nth-child(4) { animation-delay: -.75s; }
+    .live-visualizer.is-anim .live-bar:nth-child(5) { animation-delay: -.35s; }
+    .live-visualizer.is-anim .live-bar:nth-child(6) { animation-delay: -.65s; }
+    .live-visualizer.is-anim .live-bar:nth-child(7) { animation-delay: -.10s; }
+    @keyframes liveBar { 0%, 100% { height: 16px; } 50% { height: 64px; } }
+
+    .live-status { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; color: var(--muted); letter-spacing: .02em; }
+    .live-dot { width: 9px; height: 9px; border-radius: 9999px; background: var(--accent); animation: livePulse 1.6s ease-in-out infinite; }
+    @keyframes livePulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.7); } }
+
+    .live-pill-btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 24px; font-size: 14px; font-weight: 500; font-family: inherit; border-radius: 9999px; border: 1px solid var(--border); color: var(--fg); background: transparent; cursor: pointer; transition: border-color .25s ease, color .25s ease, background .25s ease; }
+    .live-pill-btn:hover { border-color: #ef4444; color: #ef4444; }
+    .live-pill-btn.is-retry:hover { border-color: var(--accent); color: var(--accent); }
+    .live-error-msg { font-size: 14px; color: var(--muted); max-width: 42ch; line-height: 1.65; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .live-visualizer.is-anim .live-bar { animation: none; }
+      .live-dot { animation: none; }
+      .live-spinner { animation-duration: 1.6s; }
+    }
 
     @media (prefers-reduced-motion: reduce) {
       .reveal { opacity:1; transform:none; transition:none; }
@@ -602,35 +629,6 @@
       </div>
     </section>
 
-    <!-- ── DEMO CALL (hidden until a real call recording is available) ─────── -->
-    <section id="demo" class="max-w-3xl mx-auto px-6 py-24 lg:py-32" style="display:none; border-top:1px solid var(--border)">
-      <div class="reveal text-center mb-12">
-        <p class="text-[11px] font-medium uppercase tracking-[.2em] mb-4" style="color:var(--muted)">Demo</p>
-        <h2 class="text-3xl md:text-4xl font-light tracking-tight" style="color:var(--fg)">
-          Ascolta ApollonIA gestire una chiamata
-        </h2>
-        <p class="mt-3 max-w-xl mx-auto text-base leading-relaxed" style="color:var(--muted)">
-          Una vera richiesta di un potenziale cliente, gestita dall'assistente AI dall'inizio alla fine — niente copioni, nessun operatore umano.
-        </p>
-      </div>
-
-      <div class="reveal d1 demo-card">
-        <button class="demo-playbtn" id="demo-playbtn" type="button" aria-label="Riproduci la registrazione">
-          <svg id="demo-icon-play" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-          <svg id="demo-icon-pause" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="display:none"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
-        </button>
-
-        <div class="waveform" id="demo-waveform">
-          <div class="waveform-bars" id="demo-bars-bg"></div>
-          <div class="waveform-progress" id="demo-progress">
-            <div class="waveform-bars" id="demo-bars-fg"></div>
-          </div>
-        </div>
-
-        <p class="demo-meta" id="demo-time">0:00 / 0:00</p>
-      </div>
-    </section>
-
     <!-- ── FEATURES BENTO ────────────────────────────────────────────────── -->
     <section id="funzionalita" class="max-w-[1400px] mx-auto px-6 lg:px-12 py-24 lg:py-32" style="border-top:1px solid var(--border)">
       <p class="text-[11px] font-medium uppercase tracking-[.2em] mb-10" style="color:var(--muted)">Funzionalità</p>
@@ -792,6 +790,71 @@
         Non trovi quello che cerchi? Scrivi al nostro
         <a href="#contatti" class="transition-colors" style="color:var(--accent)" onmouseover="this.style.color='var(--accent-hover)'" onmouseout="this.style.color='var(--accent)'">team di assistenza</a>.
       </p>
+    </section>
+
+    <!-- ── LIVE DEMO — Parla con Apollonia (WebRTC ↔ OpenAI Realtime) ──────── -->
+    <section id="demo-live" class="max-w-3xl mx-auto px-6 py-24 lg:py-32" style="border-top:1px solid var(--border)">
+      <div class="reveal text-center mb-12">
+        <p class="text-[11px] font-medium uppercase tracking-[.2em] mb-4" style="color:var(--muted)">Demo dal vivo</p>
+        <h2 class="text-3xl md:text-4xl font-light tracking-tight" style="color:var(--fg)">
+          Parla con Apollonia
+        </h2>
+        <p class="mt-3 max-w-xl mx-auto text-base leading-relaxed" style="color:var(--muted)">
+          Premi il pulsante, consenti l'accesso al microfono e parla con Apollonia direttamente dal browser. Chiedile cosa sa fare, come funziona o quanto costa.
+        </p>
+      </div>
+
+      <div class="reveal d1 live-card">
+
+        <!-- IDLE -->
+        <div class="live-state is-shown" id="live-idle">
+          <button class="live-connect-btn" id="live-connect" type="button" aria-label="Avvia la conversazione con Apollonia">
+            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
+          <span class="live-connect-label">Avvia la conversazione</span>
+          <p class="live-hint">Conversazione vocale in tempo reale. Il microfono viene usato solo durante la demo.</p>
+        </div>
+
+        <!-- CONNECTING -->
+        <div class="live-state" id="live-connecting">
+          <div class="live-spinner" role="status" aria-label="Connessione in corso"></div>
+          <span class="live-status">Connessione ad Apollonia…</span>
+        </div>
+
+        <!-- ACTIVE -->
+        <div class="live-state" id="live-active">
+          <div class="live-visualizer is-anim" id="live-visualizer" aria-hidden="true">
+            <span class="live-bar"></span>
+            <span class="live-bar"></span>
+            <span class="live-bar"></span>
+            <span class="live-bar"></span>
+            <span class="live-bar"></span>
+            <span class="live-bar"></span>
+            <span class="live-bar"></span>
+          </div>
+          <span class="live-status"><span class="live-dot"></span> In conversazione con Apollonia</span>
+          <button class="live-pill-btn" id="live-disconnect" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+            Termina
+          </button>
+        </div>
+
+        <!-- ERROR -->
+        <div class="live-state" id="live-error">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--muted)"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <p class="live-error-msg" id="live-error-msg">Non è stato possibile avviare la demo. Riprova tra poco.</p>
+          <button class="live-pill-btn is-retry" id="live-retry" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Riprova
+          </button>
+        </div>
+
+      </div>
     </section>
 
     <!-- ── PRICING ───────────────────────────────────────────────────────── -->
@@ -1340,78 +1403,178 @@
       }, 12000);
     })();
 
-    // ── Demo call waveform player
+    // ── Live demo: Parla con Apollonia (WebRTC ↔ OpenAI Realtime)
+    // Flow: mic permission → fetch short-lived token from /session-token →
+    // RTCPeerConnection straight to OpenAI (SDP handshake). The backend is
+    // never in the audio path; only the ephemeral token passes through it.
     (function () {
-      var section = document.getElementById('demo');
+      var section = document.getElementById('demo-live');
       if (!section) return;
 
-      var playBtn   = document.getElementById('demo-playbtn');
-      var iconPlay  = document.getElementById('demo-icon-play');
-      var iconPause = document.getElementById('demo-icon-pause');
-      var waveform  = document.getElementById('demo-waveform');
-      var barsBg    = document.getElementById('demo-bars-bg');
-      var barsFg    = document.getElementById('demo-bars-fg');
-      var progress  = document.getElementById('demo-progress');
-      var timeEl    = document.getElementById('demo-time');
+      var states = {
+        idle:       document.getElementById('live-idle'),
+        connecting: document.getElementById('live-connecting'),
+        active:     document.getElementById('live-active'),
+        error:      document.getElementById('live-error')
+      };
+      var connectBtn    = document.getElementById('live-connect');
+      var disconnectBtn = document.getElementById('live-disconnect');
+      var retryBtn      = document.getElementById('live-retry');
+      var errorMsg      = document.getElementById('live-error-msg');
+      var visualizer    = document.getElementById('live-visualizer');
+      var bars          = visualizer ? visualizer.querySelectorAll('.live-bar') : [];
 
-      var BAR_COUNT = 48;
-      var heights = [];
-      for (var i = 0; i < BAR_COUNT; i++) heights.push(8 + Math.random() * 40);
+      var pc = null, micStream = null, audioEl = null;
+      var audioCtx = null, analyser = null, rafId = null;
 
-      function buildBars(container) {
-        heights.forEach(function (h) {
-          var bar = document.createElement('div');
-          bar.className = 'waveform-bar';
-          bar.style.height = h + 'px';
-          container.appendChild(bar);
+      function show(name) {
+        Object.keys(states).forEach(function (k) {
+          states[k].classList.toggle('is-shown', k === name);
         });
       }
-      buildBars(barsBg);
-      buildBars(barsFg);
 
-      var audio = new Audio('audio/demo-chiamata.mp3');
-      audio.preload = 'metadata';
-      var isPlaying = false;
-
-      function fmt(t) {
-        if (!isFinite(t) || t < 0) t = 0;
-        var m = Math.floor(t / 60);
-        var s = Math.floor(t % 60);
-        return m + ':' + (s < 10 ? '0' : '') + s;
+      function resetVisualizer() {
+        if (!visualizer) return;
+        visualizer.classList.add('is-anim');
+        bars.forEach(function (b) { b.style.height = ''; });
       }
 
-      function updateTime() {
-        timeEl.textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration);
-      }
-
-      audio.addEventListener('loadedmetadata', updateTime);
-      audio.addEventListener('timeupdate', function () {
-        if (audio.duration) progress.style.width = (audio.currentTime / audio.duration * 100) + '%';
-        updateTime();
-      });
-      audio.addEventListener('ended', function () {
-        isPlaying = false;
-        iconPlay.style.display  = '';
-        iconPause.style.display = 'none';
-      });
-
-      playBtn.addEventListener('click', function () {
-        if (isPlaying) {
-          audio.pause();
-        } else {
-          audio.play()['catch'](function () {});
+      function cleanup() {
+        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+        if (analyser) { try { analyser.disconnect(); } catch (e) {} analyser = null; }
+        if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
+        if (pc) {
+          try { pc.getSenders().forEach(function (s) { if (s.track) s.track.stop(); }); } catch (e) {}
+          try { pc.close(); } catch (e) {}
+          pc = null;
         }
-        isPlaying = !isPlaying;
-        iconPlay.style.display  = isPlaying ? 'none' : '';
-        iconPause.style.display = isPlaying ? '' : 'none';
-      });
+        if (micStream) { micStream.getTracks().forEach(function (t) { t.stop(); }); micStream = null; }
+        if (audioEl) {
+          try { audioEl.pause(); } catch (e) {}
+          audioEl.srcObject = null;
+          if (audioEl.parentNode) audioEl.parentNode.removeChild(audioEl);
+          audioEl = null;
+        }
+        resetVisualizer();
+      }
 
-      waveform.addEventListener('click', function (e) {
-        if (!audio.duration) return;
-        var rect = waveform.getBoundingClientRect();
-        var ratio = (e.clientX - rect.left) / rect.width;
-        audio.currentTime = ratio * audio.duration;
-      });
+      function fail(message) {
+        cleanup();
+        if (message) errorMsg.textContent = message;
+        show('error');
+      }
+
+      function startVisualizer(stream) {
+        try {
+          var AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          audioCtx = new AC();
+          if (audioCtx.resume) audioCtx.resume();
+          analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 64;
+          analyser.smoothingTimeConstant = 0.75;
+          audioCtx.createMediaStreamSource(stream).connect(analyser);
+          var data = new Uint8Array(analyser.frequencyBinCount);
+          var n = bars.length;
+          visualizer.classList.remove('is-anim'); // drive heights from live audio
+          (function tick() {
+            analyser.getByteFrequencyData(data);
+            for (var i = 0; i < n; i++) {
+              var v = data[Math.min(data.length - 1, 2 + i * 2)] / 255;
+              bars[i].style.height = (16 + v * 64).toFixed(1) + 'px';
+            }
+            rafId = requestAnimationFrame(tick);
+          })();
+        } catch (e) {
+          visualizer.classList.add('is-anim'); // fall back to CSS animation
+        }
+      }
+
+      async function connect() {
+        show('connecting');
+        try {
+          // 1. Microphone permission first, so a denial fails fast and clearly.
+          try {
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (e) {
+            fail('Per parlare con Apollonia serve l\'accesso al microfono. Consentilo e riprova.');
+            return;
+          }
+
+          // 2. Ephemeral token from our backend (API key stays server-side).
+          var tokenResp = await fetch('/session-token', { method: 'POST' });
+          if (!tokenResp.ok) throw new Error('token ' + tokenResp.status);
+          var tokenData = await tokenResp.json();
+          var ephemeral = tokenData.value ||
+                          (tokenData.client_secret && tokenData.client_secret.value);
+          var model = (tokenData.session && tokenData.session.model) || 'gpt-realtime-2';
+          if (!ephemeral) throw new Error('no ephemeral key');
+
+          // 3. WebRTC peer connection straight to OpenAI.
+          pc = new RTCPeerConnection();
+
+          audioEl = document.createElement('audio');
+          audioEl.autoplay = true;
+          audioEl.style.display = 'none';
+          document.body.appendChild(audioEl);
+          pc.ontrack = function (e) {
+            audioEl.srcObject = e.streams[0];
+            startVisualizer(e.streams[0]);
+          };
+
+          pc.addTrack(micStream.getAudioTracks()[0], micStream);
+
+          // Data channel carries Realtime events; we use it to greet on open.
+          var dc = pc.createDataChannel('oai-events');
+          dc.addEventListener('open', function () {
+            try { dc.send(JSON.stringify({ type: 'response.create' })); } catch (e) {}
+          });
+
+          pc.onconnectionstatechange = function () {
+            if (!pc) return;
+            if (pc.connectionState === 'connected') {
+              show('active');
+            } else if (pc.connectionState === 'failed' ||
+                       pc.connectionState === 'disconnected') {
+              fail('Connessione interrotta. Riprova.');
+            }
+          };
+
+          var offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+
+          // 4. SDP handshake with OpenAI using the ephemeral token.
+          var sdpResp = await fetch(
+            'https://api.openai.com/v1/realtime/calls?model=' + encodeURIComponent(model),
+            {
+              method: 'POST',
+              body: offer.sdp,
+              headers: {
+                'Authorization': 'Bearer ' + ephemeral,
+                'Content-Type': 'application/sdp'
+              }
+            }
+          );
+          if (!sdpResp.ok) throw new Error('sdp ' + sdpResp.status);
+          await pc.setRemoteDescription({ type: 'answer', sdp: await sdpResp.text() });
+
+          // Show active optimistically; onconnectionstatechange keeps it in sync.
+          show('active');
+        } catch (err) {
+          console.error('Live demo error:', err);
+          fail('Non è stato possibile avviare la demo. Riprova tra poco.');
+        }
+      }
+
+      function disconnect() {
+        cleanup();
+        show('idle');
+      }
+
+      connectBtn.addEventListener('click', connect);
+      disconnectBtn.addEventListener('click', disconnect);
+      retryBtn.addEventListener('click', connect);
+      window.addEventListener('beforeunload', cleanup);
     })();
 
     // ── FAQ accordion (single open)

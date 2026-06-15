@@ -7,6 +7,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -15,6 +16,7 @@ from billing.router import router as billing_router
 from call.router import router as call_router
 from call.router import setup_twilio_webhook
 from config import settings
+from demo.router import router as demo_router
 from listings.store import store, tenant_stores
 from signup.router import router as signup_router
 from tenants import db
@@ -104,9 +106,27 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AI Voice Receptionist", lifespan=lifespan)
+
+# The landing page is served by this same app (StaticFiles mount below), so
+# /session-token is normally a same-origin call. CORS is added so the live demo
+# keeps working if the page is ever served from the apex/www split or a separate
+# host. Only the POST token endpoint needs it; the audio path is browser↔OpenAI.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://www.apollon-ia.com",
+        "https://apollon-ia.com",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
 app.include_router(call_router)
 app.include_router(signup_router)
 app.include_router(billing_router)
+app.include_router(demo_router)
 
 
 class Listing(BaseModel):
