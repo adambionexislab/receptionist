@@ -36,9 +36,16 @@ _OPENAI_CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets"
 _DEMO_MODEL = _SESSION_UPDATE["session"]["model"]
 _DEMO_VOICE = _SESSION_UPDATE["session"]["audio"]["output"]["voice"]
 
+# Reuse the phone agent's tuned server VAD instead of the Realtime defaults, which
+# are more trigger-happy: on a noisy browser mic the defaults create spurious
+# "user turns" that the model can mis-detect as another language.
+_DEMO_TURN_DETECTION = _SESSION_UPDATE["session"]["audio"]["input"]["turn_detection"]
+
 # Demo override: there are no listing tools in the WebRTC demo, so Apollonia must
-# decline property searches instead of pretending to run them. Placed last so it
-# takes priority over the phone prompt's tool-driven call flows.
+# decline property searches instead of pretending to run them. It also replaces
+# the body's brittle "switch language on the first non-Italian sentence and never
+# switch back" rule, which makes one mis-heard word flip the demo to English for
+# good. Placed last so it takes priority over the phone prompt's flows.
 _DEMO_NOTE = (
     "# Demo dal sito — nessuna ricerca immobili\n"
     "Questa è una demo dal vivo sul sito web, non una vera chiamata. In questa\n"
@@ -51,7 +58,23 @@ _DEMO_NOTE = (
     "fare, come funzioni o quanto costi.\n"
     "Non usare, citare né simulare strumenti (search_listings,\n"
     "get_listing_by_address, record_caller_info, leave_message, end_call,\n"
-    "ecc.): in questa demo non esistono."
+    "ecc.): in questa demo non esistono.\n"
+    "\n"
+    "# Lingua nella demo — SOSTITUISCE la regola '## REGOLA SULLA LINGUA'\n"
+    "In questa demo ignora la regola sulla lingua indicata sopra e segui SOLO\n"
+    "questa:\n"
+    "- Parla in italiano per impostazione predefinita, incluse la prima frase e\n"
+    "  il saluto iniziale.\n"
+    "- Cambia lingua SOLTANTO se il visitatore pronuncia una frase intera e\n"
+    "  chiara in un'altra lingua (una domanda o richiesta completa), oppure se\n"
+    "  chiede esplicitamente di cambiare lingua.\n"
+    "- NON cambiare lingua a causa dell'accento, di singole parole straniere o\n"
+    "  prestiti comuni (es. 'ok', 'email', 'app'), di nomi, di rumori di fondo\n"
+    "  o di audio poco chiaro. Nel dubbio, RESTA in italiano.\n"
+    "- Se hai cambiato lingua e poi il visitatore torna a parlare italiano,\n"
+    "  torna anche tu all'italiano.\n"
+    "- Se non capisci o l'audio non è chiaro, chiedi di ripetere IN ITALIANO;\n"
+    "  non passare a un'altra lingua per questo motivo."
 )
 
 
@@ -82,9 +105,13 @@ async def session_token():
         "type": "realtime",
         "model": _DEMO_MODEL,
         "instructions": _demo_instructions(),
-        # WebRTC negotiates Opus audio itself, so only the voice is pinned here
-        # (no PCM format fields, which apply to the raw WebSocket phone path).
-        "audio": {"output": {"voice": _DEMO_VOICE}},
+        # WebRTC negotiates Opus audio itself, so no PCM format fields here (they
+        # apply to the raw WebSocket phone path). Pin the voice and reuse the
+        # phone agent's tuned VAD to cut spurious turns from browser-mic noise.
+        "audio": {
+            "input": {"turn_detection": _DEMO_TURN_DETECTION},
+            "output": {"voice": _DEMO_VOICE},
+        },
     }
 
     try:
