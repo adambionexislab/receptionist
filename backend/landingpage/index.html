@@ -1525,9 +1525,27 @@
           pc.addTrack(micStream.getAudioTracks()[0], micStream);
 
           // Data channel carries Realtime events; we use it to greet on open.
+          // A bare response.create makes her invent the first turn (and sometimes
+          // open by reciting demo limitations), so we direct the opening turn.
           var dc = pc.createDataChannel('oai-events');
           dc.addEventListener('open', function () {
-            try { dc.send(JSON.stringify({ type: 'response.create' })); } catch (e) {}
+            try {
+              dc.send(JSON.stringify({
+                type: 'conversation.item.create',
+                item: {
+                  type: 'message',
+                  role: 'user',
+                  content: [{
+                    type: 'input_text',
+                    text: 'Il visitatore si è appena collegato alla demo. Salutalo' +
+                          ' in una frase breve in italiano: presentati come' +
+                          ' Apollonia e chiedi come puoi aiutarlo. Non elencare' +
+                          ' cosa non puoi fare.'
+                  }]
+                }
+              }));
+              dc.send(JSON.stringify({ type: 'response.create' }));
+            } catch (e) {}
           });
 
           pc.onconnectionstatechange = function () {
