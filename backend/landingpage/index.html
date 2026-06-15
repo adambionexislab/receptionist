@@ -1427,6 +1427,13 @@
       var pc = null, micStream = null, audioEl = null;
       var audioCtx = null, analyser = null, rafId = null;
 
+      // Cost guardrails for this public demo: end after 10s with neither side
+      // talking, and cap any single session at 5 minutes.
+      var IDLE_MS = 10000;
+      var MAX_MS  = 5 * 60 * 1000;
+      var idleTimer = null, maxTimer = null;
+      var userSpeaking = false, assistantSpeaking = false;
+
       function show(name) {
         Object.keys(states).forEach(function (k) {
           states[k].classList.toggle('is-shown', k === name);
@@ -1439,7 +1446,27 @@
         bars.forEach(function (b) { b.style.height = ''; });
       }
 
+      function clearTimers() {
+        if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+        if (maxTimer)  { clearTimeout(maxTimer);  maxTimer = null; }
+      }
+
+      // (Re)start the idle countdown, unless someone is currently talking.
+      function armIdleTimer() {
+        if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+        if (userSpeaking || assistantSpeaking) return;
+        idleTimer = setTimeout(function () { disconnect(); }, IDLE_MS);
+      }
+
+      function startSessionTimers() {
+        clearTimers();
+        userSpeaking = false; assistantSpeaking = false;
+        maxTimer = setTimeout(function () { disconnect(); }, MAX_MS);
+        armIdleTimer();
+      }
+
       function cleanup() {
+        clearTimers();
         if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
         if (analyser) { try { analyser.disconnect(); } catch (e) {} analyser = null; }
         if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
@@ -1548,6 +1575,19 @@
             } catch (e) {}
           });
 
+          // Track who's talking so the idle timer only counts true mutual
+          // silence (server VAD + response lifecycle events from OpenAI).
+          dc.addEventListener('message', function (e) {
+            var evt;
+            try { evt = JSON.parse(e.data); } catch (err) { return; }
+            switch (evt.type) {
+              case 'input_audio_buffer.speech_started': userSpeaking = true;  armIdleTimer(); break;
+              case 'input_audio_buffer.speech_stopped': userSpeaking = false; armIdleTimer(); break;
+              case 'response.created':                  assistantSpeaking = true;  armIdleTimer(); break;
+              case 'response.done':                     assistantSpeaking = false; armIdleTimer(); break;
+            }
+          });
+
           pc.onconnectionstatechange = function () {
             if (!pc) return;
             if (pc.connectionState === 'connected') {
@@ -1578,6 +1618,7 @@
 
           // Show active optimistically; onconnectionstatechange keeps it in sync.
           show('active');
+          startSessionTimers();
         } catch (err) {
           console.error('Live demo error:', err);
           fail('Non è stato possibile avviare la demo. Riprova tra poco.');
