@@ -725,13 +725,12 @@ async def _generate_lead_summary(detail_body: str, session: dict[str, Any]) -> s
                     ),
                     "input": detail_body,
                     # nano on a simple summarisation task: lightest supported
-                    # reasoning, terse, low-temperature output for consistent
-                    # one-liners. max_output_tokens covers reasoning + text.
-                    # (gpt-5.4-nano supports none/low/medium/high/xhigh — not
-                    # "minimal".)
+                    # reasoning + terse output. max_output_tokens covers
+                    # reasoning + text. Notes on this model's quirks:
+                    #   - reasoning.effort: none/low/medium/high/xhigh (no "minimal")
+                    #   - temperature is NOT supported on the Responses API
                     "reasoning": {"effort": "low"},
                     "text": {"verbosity": "low"},
-                    "temperature": 0.2,
                     "max_output_tokens": 400,
                 },
             )
