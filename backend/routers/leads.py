@@ -16,7 +16,14 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from leadgen import db
-from services.outreach import send_outreach_emails
+from services.outreach import (
+    DEFAULT_BODY,
+    DEFAULT_SUBJECT,
+    PLACEHOLDERS,
+    get_template,
+    save_template,
+    send_outreach_emails,
+)
 from services.places_scraper import scrape_city
 
 logger = logging.getLogger(__name__)
@@ -38,6 +45,11 @@ class LeadResponse(BaseModel):
     lead_id: int
     response_type: Literal["interested", "not_interested", "booked"]
     notes: Optional[str] = None
+
+
+class TemplateUpdate(BaseModel):
+    subject: str = Field(..., min_length=1)
+    body: str = Field(..., min_length=1)
 
 
 # ── background pipeline ──────────────────────────────────────────────────────
@@ -179,6 +191,26 @@ def record_response(data: LeadResponse):
         lead_id=data.lead_id,
     )
     return {"status": "ok", "lead_id": data.lead_id, "response_type": data.response_type}
+
+
+# ── outreach template ────────────────────────────────────────────────────────
+@router.get("/outreach/template")
+def get_outreach_template():
+    subject, body = get_template()
+    return {
+        "subject": subject,
+        "body": body,
+        "default_subject": DEFAULT_SUBJECT,
+        "default_body": DEFAULT_BODY,
+        "placeholders": list(PLACEHOLDERS),
+    }
+
+
+@router.put("/outreach/template")
+def update_outreach_template(data: TemplateUpdate):
+    save_template(data.subject, data.body)
+    db.log_event(None, "template_updated", "outreach email template saved")
+    return {"status": "ok", "subject": data.subject, "body": data.body}
 
 
 @router.post("/leads/inbound-email")

@@ -21,26 +21,52 @@ logger = logging.getLogger(__name__)
 _RESEND_URL = "https://api.resend.com/emails"
 _SEND_DELAY = 1.0  # seconds between sends, to stay under Resend rate limits
 
+# Settings keys for the (editable) template stored in app_settings.
+_SUBJECT_KEY = "outreach_subject"
+_BODY_KEY = "outreach_body"
 
-def _subject(agency_name: str) -> str:
-    name = agency_name or "la vostra agenzia"
-    return f"{name} – un'idea per qualificare i lead in entrata"
+# Placeholders the dashboard advertises and that _render substitutes.
+PLACEHOLDERS = ("{agency_name}", "{city}", "{calendly_link}")
+
+DEFAULT_SUBJECT = "{agency_name} – un'idea per qualificare i lead in entrata"
+
+DEFAULT_BODY = (
+    "Buongiorno,\n\n"
+    "mi chiamo Adam e volevo presentarvi ApollonIA, un assistente vocale AI "
+    "per agenzie immobiliari.\n\n"
+    "Apollonia gestisce le chiamate in arrivo, risponde alle domande sugli "
+    "immobili e qualifica i contatti, segnalandovi solo chi è davvero "
+    "interessato a comprare o vendere.\n\n"
+    "Il modo più semplice per capirla è provarla: potete parlare con lei "
+    "gratuitamente sul sito 👉 https://apollon-ia.com\n\n"
+    "Bastano un paio di minuti. Se poi vi interessa, vi spiego volentieri "
+    "come potrebbe funzionare per la vostra agenzia.\n\n"
+    "Un saluto,\n"
+    "Adam"
+)
 
 
-def _body() -> str:
+def get_template() -> tuple[str, str]:
+    """Return the (subject, body) template — the dashboard-saved version if any,
+    otherwise the built-in defaults."""
+    subject = db.get_setting(_SUBJECT_KEY) or DEFAULT_SUBJECT
+    body = db.get_setting(_BODY_KEY) or DEFAULT_BODY
+    return subject, body
+
+
+def save_template(subject: str, body: str) -> None:
+    db.set_setting(_SUBJECT_KEY, subject)
+    db.set_setting(_BODY_KEY, body)
+
+
+def _render(template: str, agency_name: str = "", city: str = "") -> str:
+    """Safe placeholder substitution (plain .replace, never str.format — the
+    template is user-edited and may contain stray braces)."""
     return (
-        "Buongiorno,\n\n"
-        "mi chiamo Adam e volevo presentarvi ApollonIA, un assistente vocale AI "
-        "per agenzie immobiliari.\n\n"
-        "Apollonia gestisce le chiamate in arrivo, risponde alle domande sugli "
-        "immobili e qualifica i contatti, segnalandovi solo chi è davvero "
-        "interessato a comprare o vendere.\n\n"
-        "Il modo più semplice per capirla è provarla: potete parlare con lei "
-        "gratuitamente sul sito 👉 https://apollon-ia.com\n\n"
-        "Bastano un paio di minuti. Se poi vi interessa, vi spiego volentieri "
-        "come potrebbe funzionare per la vostra agenzia.\n\n"
-        "Un saluto,\n"
-        "Adam"
+        template
+        .replace("{agency_name}", agency_name or "la vostra agenzia")
+        .replace("{city}", city or "")
+        .replace("{calendly_link}", settings.CALENDLY_LINK or "")
     )
 
 
@@ -74,7 +100,9 @@ def send_outreach_emails(campaign_id: int) -> int:
         return 0
 
     db.log_event(campaign_id, "outreach_started", f"{len(leads)} leads to email")
-    body = _body()
+    subject_tmpl, body_tmpl = get_template()
+    start_camp = db.get_campaign(campaign_id)
+    city = start_camp["city"] if start_camp else ""
     sent = 0
 
     with httpx.Client() as client:
@@ -86,8 +114,10 @@ def send_outreach_emails(campaign_id: int) -> int:
                 break
 
             to = lead["email"]
+            subject = _render(subject_tmpl, lead["agency_name"], city)
+            body = _render(body_tmpl, lead["agency_name"], city)
             try:
-                _send_one(client, to, _subject(lead["agency_name"]), body)
+                _send_one(client, to, subject, body)
             except Exception as exc:
                 # Leave email_status='pending' so a later resume can retry.
                 db.log_event(

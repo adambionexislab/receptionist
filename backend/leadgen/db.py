@@ -61,6 +61,12 @@ CREATE TABLE IF NOT EXISTS agent_logs (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_leads_campaign ON leads(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_logs_campaign ON agent_logs(campaign_id);
 """
@@ -314,3 +320,23 @@ def get_logs(campaign_id: int, limit: int = 100) -> list[dict]:
         (campaign_id, limit),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── app_settings (simple key/value store) ────────────────────────────────────
+def get_setting(key: str, default: Optional[str] = None) -> Optional[str]:
+    row = _conn().execute(
+        "SELECT value FROM app_settings WHERE key = ?", (key,)
+    ).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(key: str, value: str) -> None:
+    conn = _conn()
+    with _tenants_db.write_lock:
+        conn.execute(
+            "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+            "updated_at = excluded.updated_at",
+            (key, value, _now()),
+        )
+        conn.commit()

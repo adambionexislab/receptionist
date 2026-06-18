@@ -74,6 +74,17 @@
   }
   input[type=number] { min-width: 110px; }
   input:focus, select:focus { outline: none; border-color: var(--accent); }
+  textarea {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 12px 14px; border-radius: 8px; font-size: .95rem; width: 100%;
+    font-family: inherit; line-height: 1.6; resize: vertical; min-height: 240px;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  code {
+    background: var(--surface-2); color: var(--accent);
+    padding: 2px 7px; border-radius: 5px; font-size: .85em;
+  }
+  .full { width: 100%; }
 
   button.btn {
     background: var(--accent-2); color: #fff; border: none;
@@ -181,6 +192,7 @@
   <div class="brand">Apollon<span>IA</span> · Lead Gen</div>
   <nav>
     <button class="tab active" id="tab-campaigns" onclick="showView('campaigns')">Campagne</button>
+    <button class="tab" id="tab-template" onclick="showView('template')">Email</button>
     <button class="tab" id="tab-detail" onclick="showView('detail')" style="display:none">Dettaglio</button>
   </nav>
   <div class="spacer"></div>
@@ -273,6 +285,39 @@
     </div>
   </section>
 </main>
+
+<!-- ── VIEW 3: EMAIL TEMPLATE ─────────────────────────────── -->
+  <section class="view" id="view-template">
+    <h2>Template email di outreach</h2>
+    <p class="muted">
+      Questo testo viene usato per tutte le email inviate alle agenzie.
+      Placeholder disponibili: <code>{agency_name}</code> <code>{city}</code> <code>{calendly_link}</code>
+    </p>
+    <div class="card" style="padding:18px; margin-bottom:24px;">
+      <div class="field" style="margin-bottom:16px;">
+        <label for="tplSubject">Oggetto</label>
+        <input id="tplSubject" class="full" type="text" />
+      </div>
+      <div class="field" style="margin-bottom:16px;">
+        <label for="tplBody">Corpo</label>
+        <textarea id="tplBody"></textarea>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="btn" id="tplSaveBtn" onclick="saveTemplate()">Salva</button>
+        <button class="btn ghost" onclick="resetTemplate()">Ripristina predefinito</button>
+        <div class="spacer"></div>
+        <span class="muted" id="tplHint"></span>
+      </div>
+    </div>
+
+    <div class="section-title"><h3>Anteprima</h3><span class="muted">esempio: Studio Rossi · Milano</span></div>
+    <div class="card" style="padding:18px;">
+      <div class="muted" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.4px;">Oggetto</div>
+      <div id="prevSubject" style="font-weight:600; margin:4px 0 16px;">—</div>
+      <div class="muted" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.4px;">Corpo</div>
+      <div id="prevBody" style="white-space:pre-wrap; margin-top:4px;">—</div>
+    </div>
+  </section>
 
 <!-- ── response modal ──────────────────────────────────── -->
 <div class="modal-bg" id="modalBg">
@@ -368,12 +413,14 @@ function showView(view) {
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   document.getElementById("view-" + view).classList.add("active");
   document.getElementById("tab-campaigns").classList.toggle("active", view === "campaigns");
+  document.getElementById("tab-template").classList.toggle("active", view === "template");
   document.getElementById("tab-detail").classList.toggle("active", view === "detail");
+  if (view !== "detail") stopLogPolling();
   if (view === "campaigns") {
-    stopLogPolling();
     document.getElementById("tab-detail").style.display = "none";
     loadCampaigns();
   }
+  if (view === "template") loadTemplate();
 }
 
 // ── campaigns list ───────────────────────────────────────
@@ -580,6 +627,57 @@ document.getElementById("modalBg").addEventListener("click", e => {
 document.getElementById("city").addEventListener("keydown", e => {
   if (e.key === "Enter") createCampaign();
 });
+
+// ── email template ───────────────────────────────────────
+let templateDefaults = { subject: "", body: "" };
+
+async function loadTemplate() {
+  try {
+    const t = await api("/outreach/template");
+    templateDefaults = { subject: t.default_subject, body: t.default_body };
+    document.getElementById("tplSubject").value = t.subject;
+    document.getElementById("tplBody").value = t.body;
+    updatePreview();
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  }
+}
+
+async function saveTemplate() {
+  const subject = document.getElementById("tplSubject").value.trim();
+  const body = document.getElementById("tplBody").value.trim();
+  if (!subject || !body) { toast("Oggetto e corpo non possono essere vuoti", true); return; }
+  const btn = document.getElementById("tplSaveBtn");
+  btn.disabled = true; btn.textContent = "Salvataggio…";
+  try {
+    await api("/outreach/template", { method: "PUT", body: JSON.stringify({ subject, body }) });
+    toast("Template salvato");
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Salva";
+  }
+}
+
+function resetTemplate() {
+  document.getElementById("tplSubject").value = templateDefaults.subject;
+  document.getElementById("tplBody").value = templateDefaults.body;
+  updatePreview();
+  toast("Predefinito ripristinato — ricorda di salvare");
+}
+
+function renderTokens(text) {
+  return (text || "")
+    .split("{agency_name}").join("Studio Rossi")
+    .split("{city}").join("Milano")
+    .split("{calendly_link}").join("https://calendly.com/adam/demo");
+}
+function updatePreview() {
+  document.getElementById("prevSubject").textContent = renderTokens(document.getElementById("tplSubject").value) || "—";
+  document.getElementById("prevBody").textContent = renderTokens(document.getElementById("tplBody").value) || "—";
+}
+document.getElementById("tplSubject").addEventListener("input", updatePreview);
+document.getElementById("tplBody").addEventListener("input", updatePreview);
 
 // ── boot ─────────────────────────────────────────────────
 loadCampaigns();
