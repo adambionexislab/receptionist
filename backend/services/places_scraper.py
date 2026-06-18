@@ -53,6 +53,35 @@ _EMAIL_NOISE = (
 
 _CONTACT_PATHS = ("contatti", "contact", "")  # "" = the homepage itself
 
+# ── agency-name blocklist (dashboard-editable) ───────────────────────────────
+# A comma-separated, case-insensitive substring list stored in app_settings. Any
+# place whose name contains one of these is skipped BEFORE its Place Details
+# lookup, so excluded franchises (e.g. Tecnocasa) never cost a credit or become
+# a lead. Defaults to empty (no exclusions) — set the blocklist from the dashboard.
+_EXCLUSIONS_KEY = "exclude_keywords"
+DEFAULT_EXCLUSIONS = ""
+
+
+def get_exclusions_raw() -> str:
+    """The raw comma-separated blocklist string (saved value, or the default)."""
+    value = db.get_setting(_EXCLUSIONS_KEY)
+    return DEFAULT_EXCLUSIONS if value is None else value
+
+
+def get_exclusion_keywords() -> list[str]:
+    """The blocklist parsed into lowercase, non-empty terms."""
+    return [k.strip().lower() for k in get_exclusions_raw().split(",") if k.strip()]
+
+
+def save_exclusions(raw: str) -> None:
+    """Persist the blocklist. An empty string clears it (no exclusions)."""
+    db.set_setting(_EXCLUSIONS_KEY, raw)
+
+
+def _is_excluded(name: str, keywords: list[str]) -> bool:
+    n = (name or "").lower()
+    return any(k in n for k in keywords)
+
 
 def _is_generic(email: str) -> bool:
     domain = email.rsplit("@", 1)[-1].lower()
@@ -143,9 +172,13 @@ def scrape_city(city: str, campaign_id: int, max_results: int = 60) -> int:
 
     query = f"agenzia immobiliare {city}"
     max_results = min(max_results, _MAX_PAGES * _RESULTS_PER_PAGE)
+    exclusions = get_exclusion_keywords()
     db.log_event(campaign_id, "scrape_started", f'query="{query}", max={max_results}')
+    if exclusions:
+        db.log_event(campaign_id, "exclusions_active", ", ".join(exclusions))
 
     new_leads = 0
+    excluded = 0
     api_calls = 0  # credit-usage estimate: 1 per text-search page + 1 per details
     next_page_token: Optional[str] = None
 
@@ -199,6 +232,15 @@ def scrape_city(city: str, campaign_id: int, max_results: int = 60) -> int:
                 if not place_id or db.lead_exists(place_id):
                     continue
 
+                # Skip blocklisted franchises before spending a Place Details call.
+                if exclusions and _is_excluded(place.get("name", ""), exclusions):
+                    excluded += 1
+                    db.log_event(
+                        campaign_id, "skipped_excluded",
+                        place.get("name") or place_id,
+                    )
+                    continue
+
                 try:
                     new_leads += _process_place(client, campaign_id, place, place_id)
                     api_calls += 1  # the Place Details lookup
@@ -217,7 +259,8 @@ def scrape_city(city: str, campaign_id: int, max_results: int = 60) -> int:
 
     db.log_event(
         campaign_id, "scrape_finished",
-        f"{new_leads} new leads · ~{api_calls} Google API calls (credit estimate)",
+        f"{new_leads} new leads · {excluded} excluded · "
+        f"~{api_calls} Google API calls (credit estimate)",
     )
     logger.info(
         "Campaign %s scrape done: %d new leads, ~%d API calls",

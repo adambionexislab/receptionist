@@ -311,11 +311,29 @@
     </div>
 
     <div class="section-title"><h3>Anteprima</h3><span class="muted">esempio: Studio Rossi · Milano</span></div>
-    <div class="card" style="padding:18px;">
+    <div class="card" style="padding:18px; margin-bottom:24px;">
       <div class="muted" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.4px;">Oggetto</div>
       <div id="prevSubject" style="font-weight:600; margin:4px 0 16px;">—</div>
       <div class="muted" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.4px;">Corpo</div>
       <div id="prevBody" style="white-space:pre-wrap; margin-top:4px;">—</div>
+    </div>
+
+    <h2>Agenzie da escludere</h2>
+    <p class="muted">
+      Le agenzie il cui <strong>nome</strong> contiene una di queste parole non verranno
+      contattate (verifica senza distinzione tra maiuscole/minuscole, prima di spendere
+      crediti Google). Separa le parole con una virgola. Lascia vuoto per non escludere nulla.
+    </p>
+    <div class="card" style="padding:18px;">
+      <div class="field" style="margin-bottom:16px;">
+        <label for="exclKeywords">Parole chiave (es. tecnocasa, tempocasa)</label>
+        <input id="exclKeywords" class="full" type="text" placeholder="tecnocasa, tempocasa" />
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="btn" id="exclSaveBtn" onclick="saveExclusions()">Salva</button>
+        <div class="spacer"></div>
+        <span class="muted" id="exclHint"></span>
+      </div>
     </div>
   </section>
 
@@ -420,7 +438,7 @@ function showView(view) {
     document.getElementById("tab-detail").style.display = "none";
     loadCampaigns();
   }
-  if (view === "template") loadTemplate();
+  if (view === "template") { loadTemplate(); loadExclusions(); }
 }
 
 // ── campaigns list ───────────────────────────────────────
@@ -678,6 +696,30 @@ function updatePreview() {
 }
 document.getElementById("tplSubject").addEventListener("input", updatePreview);
 document.getElementById("tplBody").addEventListener("input", updatePreview);
+
+// ── agency-name blocklist ────────────────────────────────
+async function loadExclusions() {
+  try {
+    const x = await api("/outreach/exclusions");
+    document.getElementById("exclKeywords").value = x.keywords || "";
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  }
+}
+
+async function saveExclusions() {
+  const keywords = document.getElementById("exclKeywords").value.trim();
+  const btn = document.getElementById("exclSaveBtn");
+  btn.disabled = true; btn.textContent = "Salvataggio…";
+  try {
+    await api("/outreach/exclusions", { method: "PUT", body: JSON.stringify({ keywords }) });
+    toast(keywords ? "Esclusioni salvate" : "Esclusioni rimosse");
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Salva";
+  }
+}
 
 // ── boot ─────────────────────────────────────────────────
 loadCampaigns();

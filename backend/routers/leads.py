@@ -24,7 +24,12 @@ from services.outreach import (
     save_template,
     send_outreach_emails,
 )
-from services.places_scraper import scrape_city
+from services.places_scraper import (
+    DEFAULT_EXCLUSIONS,
+    get_exclusions_raw,
+    save_exclusions,
+    scrape_city,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +55,11 @@ class LeadResponse(BaseModel):
 class TemplateUpdate(BaseModel):
     subject: str = Field(..., min_length=1)
     body: str = Field(..., min_length=1)
+
+
+class ExclusionsUpdate(BaseModel):
+    # Comma-separated agency-name keywords. Empty string clears the blocklist.
+    keywords: str = ""
 
 
 # ── background pipeline ──────────────────────────────────────────────────────
@@ -211,6 +221,19 @@ def update_outreach_template(data: TemplateUpdate):
     save_template(data.subject, data.body)
     db.log_event(None, "template_updated", "outreach email template saved")
     return {"status": "ok", "subject": data.subject, "body": data.body}
+
+
+# ── agency-name blocklist ─────────────────────────────────────────────────────
+@router.get("/outreach/exclusions")
+def get_outreach_exclusions():
+    return {"keywords": get_exclusions_raw(), "default_keywords": DEFAULT_EXCLUSIONS}
+
+
+@router.put("/outreach/exclusions")
+def update_outreach_exclusions(data: ExclusionsUpdate):
+    save_exclusions(data.keywords)
+    db.log_event(None, "exclusions_updated", data.keywords or "(empty)")
+    return {"status": "ok", "keywords": data.keywords}
 
 
 @router.post("/leads/inbound-email")
