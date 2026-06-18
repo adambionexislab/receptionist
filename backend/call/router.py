@@ -724,13 +724,15 @@ async def _generate_lead_summary(detail_body: str, session: dict[str, Any]) -> s
                         "frase, senza preamboli, virgolette o elenchi."
                     ),
                     "input": detail_body,
-                    # nano on a simple summarisation task: minimal reasoning,
-                    # terse, low-temperature output for consistent one-liners.
-                    # max_output_tokens covers reasoning + text.
-                    "reasoning": {"effort": "minimal"},
+                    # nano on a simple summarisation task: lightest supported
+                    # reasoning, terse, low-temperature output for consistent
+                    # one-liners. max_output_tokens covers reasoning + text.
+                    # (gpt-5.4-nano supports none/low/medium/high/xhigh — not
+                    # "minimal".)
+                    "reasoning": {"effort": "low"},
                     "text": {"verbosity": "low"},
                     "temperature": 0.2,
-                    "max_output_tokens": 200,
+                    "max_output_tokens": 400,
                 },
             )
             if response.status_code >= 400:
