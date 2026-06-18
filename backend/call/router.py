@@ -733,7 +733,15 @@ async def _generate_lead_summary(detail_body: str, session: dict[str, Any]) -> s
                     "max_output_tokens": 200,
                 },
             )
-            response.raise_for_status()
+            if response.status_code >= 400:
+                # Surface OpenAI's actual error body — a bare status code
+                # doesn't tell us which field it's rejecting.
+                logger.error(
+                    "Lead summary request failed: %s — %s",
+                    response.status_code,
+                    response.text,
+                )
+                return _fallback_lead_summary(session)
             summary = _extract_response_text(response.json()).strip()
             if summary:
                 return summary
