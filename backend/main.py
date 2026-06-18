@@ -27,6 +27,10 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s — %(message)s",
 )
+# httpx logs every request URL at INFO, which leaks query-string secrets (e.g.
+# the Google Places API key) into the logs. Quiet it to WARNING; our own modules
+# still log what matters.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 _LANDING_DIR = Path(__file__).parent / "landingpage"

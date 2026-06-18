@@ -105,6 +105,21 @@ def send_outreach_emails(campaign_id: int) -> int:
     city = start_camp["city"] if start_camp else ""
     sent = 0
 
+    # Log exactly what goes out — rendered for the first lead — once per run, so
+    # it's auditable in the dashboard feed and Render logs without flooding them
+    # with one full body per recipient.
+    sample = leads[0]
+    preview_subject = _render(subject_tmpl, sample["agency_name"], city)
+    preview_body = _render(body_tmpl, sample["agency_name"], city)
+    db.log_event(
+        campaign_id, "email_preview",
+        f"FROM: {_from_address()}\nSUBJECT: {preview_subject}\n\n{preview_body}",
+    )
+    logger.info(
+        "Campaign %s outreach — from=%s | subject=%r\n%s",
+        campaign_id, _from_address(), preview_subject, preview_body,
+    )
+
     with httpx.Client() as client:
         for lead in leads:
             # Respect a pause that arrived mid-run.
@@ -129,7 +144,7 @@ def send_outreach_emails(campaign_id: int) -> int:
 
             db.mark_email_sent(lead["id"])
             db.increment_campaign(campaign_id, "total_emailed")
-            db.log_event(campaign_id, "email_sent", to, lead_id=lead["id"])
+            db.log_event(campaign_id, "email_sent", f'{to} · "{subject}"', lead_id=lead["id"])
             sent += 1
             time.sleep(_SEND_DELAY)
 
