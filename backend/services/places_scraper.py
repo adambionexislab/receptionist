@@ -33,6 +33,12 @@ _MAX_PAGES = 3            # Google returns up to 20 results/page → 60 max
 _PAGE_SLEEP = 2.0         # Google needs ~2s before a next_page_token is valid
 _RESULTS_PER_PAGE = 20
 
+# Many agency sites block non-browser user agents (403/empty); present a real one.
+_BROWSER_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 
 # Free-mailbox domains: kept only as a last resort (an agency's real inbox is
@@ -51,7 +57,9 @@ _EMAIL_NOISE = (
     "your-email", "email@", "name@",
 )
 
-_CONTACT_PATHS = ("contatti", "contact", "")  # "" = the homepage itself
+# Common Italian/English contact-page paths, tried in addition to the homepage
+# and any contact links discovered on it.
+_CONTACT_PATHS = ("contatti", "contatti/", "contact", "contattaci", "chi-siamo")
 
 # ── agency-name blocklist (dashboard-editable) ───────────────────────────────
 # A comma-separated, case-insensitive substring list stored in app_settings. Any
@@ -103,33 +111,73 @@ def _clean_emails(html: str) -> list[str]:
     return found
 
 
+_HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
+
+
+def _fetch_html(client: httpx.Client, url: str) -> Optional[str]:
+    """GET a URL, returning its text if it looks like a fetchable HTML page."""
+    try:
+        resp = client.get(url, follow_redirects=True, timeout=10.0)
+    except Exception as exc:
+        logger.debug("Fetch failed for %s: %s", url, exc)
+        return None
+    if resp.status_code >= 400:
+        return None
+    ctype = resp.headers.get("content-type", "")
+    if ctype and not any(t in ctype for t in ("html", "text", "xml")):
+        return None  # binary (pdf/image/etc.) — nothing to scrape
+    return resp.text
+
+
+def _discover_contact_links(base: str, html: str) -> list[str]:
+    """Find up to 3 same-site links whose href hints at a contact page."""
+    links: list[str] = []
+    for href in _HREF_RE.findall(html or ""):
+        low = href.lower()
+        if "contat" in low or "contact" in low:
+            url = urljoin(base + "/", href)
+            if url.startswith(base) and url not in links:
+                links.append(url)
+                if len(links) >= 3:
+                    break
+    return links
+
+
 def _scrape_website_email(client: httpx.Client, website: str) -> Optional[str]:
-    """Try the contact page then the homepage; prefer a non-generic address."""
+    """Scrape an agency site for a contact email: read the homepage (and the
+    contact links it exposes, plus common guessed paths), preferring a
+    non-generic address. Returns None if nothing usable is found."""
     if not website:
         return None
     parsed = urlparse(website if "://" in website else f"https://{website}")
-    base = f"{parsed.scheme}://{parsed.netloc}"
     if not parsed.netloc:
         return None
+    base = f"{parsed.scheme}://{parsed.netloc}"
 
     candidates: list[str] = []
+    # Homepage first: it often has the email in the footer AND links to /contatti.
+    home = _fetch_html(client, base + "/")
+    discovered: list[str] = []
+    if home:
+        candidates.extend(e for e in _clean_emails(home) if e not in candidates)
+        discovered = _discover_contact_links(base, home)
+
+    # Then discovered contact links + guessed paths, until a real address shows up.
+    urls = list(discovered)
     for path in _CONTACT_PATHS:
-        url = urljoin(base + "/", path)
-        try:
-            resp = client.get(url, follow_redirects=True, timeout=8.0)
-            if resp.status_code >= 400 or "text/html" not in resp.headers.get(
-                "content-type", "text/html"
-            ):
-                continue
-            for email in _clean_emails(resp.text):
-                if email not in candidates:
-                    candidates.append(email)
-            # A non-generic hit on this page is good enough — stop early.
-            if any(not _is_generic(e) for e in candidates):
-                break
-        except Exception as exc:
-            logger.debug("Contact-page fetch failed for %s: %s", url, exc)
+        u = urljoin(base + "/", path)
+        if u not in urls:
+            urls.append(u)
+
+    for url in urls:
+        if any(not _is_generic(e) for e in candidates):
+            break
+        html = _fetch_html(client, url)
+        if not html:
             continue
+        for email in _clean_emails(html):
+            if email not in candidates:
+                candidates.append(email)
 
     if not candidates:
         return None
@@ -182,9 +230,7 @@ def scrape_city(city: str, campaign_id: int, max_results: int = 60) -> int:
     api_calls = 0  # credit-usage estimate: 1 per text-search page + 1 per details
     next_page_token: Optional[str] = None
 
-    with httpx.Client(
-        headers={"User-Agent": "ApollonIA-LeadBot/1.0 (+https://apollon-ia.com)"}
-    ) as client:
+    with httpx.Client(headers={"User-Agent": _BROWSER_UA}) as client:
         for page in range(_MAX_PAGES):
             if new_leads >= max_results:
                 break
@@ -296,11 +342,20 @@ def _process_place(client: httpx.Client, campaign_id: int, place: dict, place_id
     if lead_id is None:
         return 0  # raced with another insert of the same place_id
 
-    db.log_event(campaign_id, "place_found", name or place_id, lead_id=lead_id)
+    site_note = website if website else "nessun sito su Google"
+    db.log_event(campaign_id, "place_found", f"{name or place_id} · {site_note}", lead_id=lead_id)
     if email:
         db.log_event(campaign_id, "email_found", f"{name}: {email}", lead_id=lead_id)
+    elif website:
+        db.log_event(
+            campaign_id, "no_email",
+            f"{name} — sito {website}, nessuna email trovata", lead_id=lead_id,
+        )
     else:
-        db.log_event(campaign_id, "no_email", name or place_id, lead_id=lead_id)
+        db.log_event(
+            campaign_id, "no_email",
+            f"{name} — nessun sito web su Google", lead_id=lead_id,
+        )
 
     db.increment_campaign(campaign_id, "total_found")
     return 1
