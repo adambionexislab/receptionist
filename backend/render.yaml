@@ -46,3 +46,9 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      - key: OUTREACH_FROM_EMAIL
+        sync: false
+      - key: CALENDLY_LINK
+        sync: false

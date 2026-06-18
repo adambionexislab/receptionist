@@ -17,7 +17,9 @@ from call.router import router as call_router
 from call.router import setup_twilio_webhook
 from config import settings
 from demo.router import router as demo_router
+from leadgen import db as leadgen_db
 from listings.store import store, tenant_stores
+from routers.leads import router as leads_router
 from signup.router import router as signup_router
 from tenants import db
 
@@ -92,6 +94,7 @@ async def _sync_loop() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await asyncio.to_thread(_startup_migration)
+    await asyncio.to_thread(leadgen_db.init)
     await _load_all_tenant_listings()
     await asyncio.to_thread(setup_twilio_webhook)
     task = asyncio.create_task(_sync_loop())
@@ -108,18 +111,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AI Voice Receptionist", lifespan=lifespan)
 
 # The landing page is served by this same app (StaticFiles mount below), so
-# /session-token is normally a same-origin call. CORS is added so the live demo
-# keeps working if the page is ever served from the apex/www split or a separate
-# host. Only the POST token endpoint needs it; the audio path is browser↔OpenAI.
+# /session-token is normally a same-origin call. CORS still matters because the
+# lead-gen dashboard is deployed as a SEPARATE Render static site (a different
+# origin) and calls /campaigns* with GET/POST/PATCH. Origins are opened to "*"
+# per the dashboard requirement; none of these endpoints use cookies or other
+# credentials, so a wildcard origin carries no extra risk here.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://www.apollon-ia.com",
-        "https://apollon-ia.com",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ],
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_origins=["*"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -127,6 +127,7 @@ app.include_router(call_router)
 app.include_router(signup_router)
 app.include_router(billing_router)
 app.include_router(demo_router)
+app.include_router(leads_router)
 
 
 class Listing(BaseModel):

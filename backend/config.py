@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     RESEND_API_KEY: Optional[str] = None
     RESEND_FROM: str = "onboarding@resend.dev"
 
+    # Lead-generation / cold outreach (ApollonIA agency prospecting)
+    GOOGLE_PLACES_API_KEY: Optional[str] = None
+    # Sender for outreach emails; falls back to RESEND_FROM when unset.
+    OUTREACH_FROM_EMAIL: Optional[str] = None
+    CALENDLY_LINK: Optional[str] = None
+
     # Stripe billing (Checkout)
     STRIPE_SECRET_KEY: Optional[str] = None
     STRIPE_WEBHOOK_SECRET: Optional[str] = None

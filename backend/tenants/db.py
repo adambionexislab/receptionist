@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _conn: Optional[sqlite3.Connection] = None
 
+# Public alias so other data modules (e.g. the lead-gen layer in leadgen/db.py)
+# can serialise their writes on the SAME lock that guards this connection,
+# instead of opening a second connection to the same file.
+write_lock = _lock
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenants (
   id              TEXT PRIMARY KEY,
@@ -68,6 +73,16 @@ def _get_conn() -> sqlite3.Connection:
                 _conn = conn
                 logger.info("Tenants DB opened at %s", db_path)
     return _conn
+
+
+def get_connection() -> sqlite3.Connection:
+    """The process-wide shared SQLite connection.
+
+    Exposed so the lead-gen data layer can create its own tables on the same
+    connection (and reuse `write_lock`) rather than opening a second handle to
+    the same file — which on SQLite invites "database is locked" errors.
+    """
+    return _get_conn()
 
 
 def get_by_twilio_number(number: str) -> Optional[dict]:

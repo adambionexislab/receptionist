@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ApollonIA · Lead Generation</title>
+<style>
+  :root {
+    /* Retheme by editing these — everything else derives from them. */
+    --bg:        #0e1116;
+    --surface:   #171b22;
+    --surface-2: #1f242d;
+    --border:    #2a313c;
+    --text:      #e7ebf0;
+    --text-dim:  #9aa4b2;
+    --accent:    #5b8cff;
+    --accent-2:  #3a6bf0;
+    --green:     #3ecf8e;
+    --amber:     #f0b429;
+    --red:       #f4675b;
+    --radius:    10px;
+    --shadow:    0 6px 24px rgba(0,0,0,.35);
+    font-size: 15px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  a { color: var(--accent); }
+
+  /* ── top nav ─────────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; gap: 24px;
+    padding: 0 24px; height: 60px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .brand { font-weight: 700; font-size: 1.15rem; letter-spacing: .3px; }
+  .brand span { color: var(--accent); }
+  nav { display: flex; gap: 4px; }
+  .tab {
+    background: none; border: none; color: var(--text-dim);
+    padding: 8px 16px; border-radius: var(--radius); cursor: pointer;
+    font-size: .95rem; font-weight: 600;
+  }
+  .tab:hover { color: var(--text); background: var(--surface-2); }
+  .tab.active { color: var(--text); background: var(--surface-2); }
+  .spacer { flex: 1; }
+  .api-hint { color: var(--text-dim); font-size: .8rem; }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  h2 { font-size: 1.25rem; margin: 0 0 16px; }
+  .muted { color: var(--text-dim); }
+
+  /* ── create bar ─────────────────────────────────────── */
+  .bar {
+    display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; margin-bottom: 24px;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: .78rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; }
+  input, select {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 12px; border-radius: 8px; font-size: .95rem; min-width: 200px;
+  }
+  input[type=number] { min-width: 110px; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+  button.btn {
+    background: var(--accent-2); color: #fff; border: none;
+    padding: 11px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;
+    font-size: .95rem;
+  }
+  button.btn:hover { background: var(--accent); }
+  button.btn.ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+  button.btn.ghost:hover { border-color: var(--accent); }
+  button.btn:disabled { opacity: .5; cursor: default; }
+  button.btn.sm { padding: 6px 12px; font-size: .82rem; }
+
+  /* ── tables ─────────────────────────────────────────── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 12px 16px; font-size: .9rem; }
+  th { color: var(--text-dim); font-weight: 600; text-transform: uppercase; font-size: .72rem; letter-spacing: .4px; border-bottom: 1px solid var(--border); }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover { background: var(--surface-2); }
+  .empty { padding: 40px; text-align: center; color: var(--text-dim); }
+
+  /* ── badges ─────────────────────────────────────────── */
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+  }
+  .b-pending,   .b-none      { background: #2a313c; color: var(--text-dim); }
+  .b-running,   .b-interested{ background: rgba(91,140,255,.16); color: var(--accent); }
+  .b-completed, .b-sent,
+  .b-booked                  { background: rgba(62,207,142,.16); color: var(--green); }
+  .b-paused,    .b-no_email  { background: rgba(240,180,41,.16); color: var(--amber); }
+  .b-bounced,   .b-not_interested { background: rgba(244,103,91,.16); color: var(--red); }
+
+  /* ── detail view ────────────────────────────────────── */
+  .detail-head { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .detail-head h2 { margin: 0; }
+  .back { background: none; border: none; color: var(--accent); cursor: pointer; font-size: .9rem; padding: 0; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px;
+  }
+  .stat .num { font-size: 1.9rem; font-weight: 700; }
+  .stat .lbl { color: var(--text-dim); font-size: .82rem; margin-top: 4px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2,1fr); } }
+
+  .section-title { display: flex; align-items: center; justify-content: space-between; margin: 0 0 12px; }
+  .section-title h3 { margin: 0; font-size: 1rem; }
+
+  .log-feed { max-height: 460px; overflow-y: auto; padding: 6px 0; }
+  .log-row { display: flex; gap: 10px; padding: 8px 16px; font-size: .85rem; border-bottom: 1px solid var(--border); }
+  .log-row:last-child { border-bottom: none; }
+  .log-time { color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .log-event { font-weight: 700; color: var(--accent); white-space: nowrap; }
+  .log-detail { color: var(--text); overflow-wrap: anywhere; }
+  .log-event.ev-error { color: var(--red); }
+  .log-event.ev-email_sent, .log-event.ev-response_received { color: var(--green); }
+
+  .filters { display: flex; gap: 8px; align-items: center; }
+  .filters select { min-width: 150px; padding: 6px 10px; }
+
+  .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; box-shadow: 0 0 0 rgba(62,207,142,.6); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(62,207,142,.5);} 70%{box-shadow:0 0 0 8px rgba(62,207,142,0);} 100%{box-shadow:0 0 0 0 rgba(62,207,142,0);} }
+
+  /* ── modal ──────────────────────────────────────────── */
+  .modal-bg {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    align-items: center; justify-content: center; z-index: 50;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px; width: 420px; max-width: 92vw;
+    box-shadow: var(--shadow);
+  }
+  .modal h3 { margin: 0 0 4px; }
+  .modal .sub { color: var(--text-dim); font-size: .85rem; margin-bottom: 16px; }
+  .modal .field { margin-bottom: 14px; }
+  .modal textarea {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 10px 12px; width: 100%; resize: vertical; min-height: 70px; font-family: inherit;
+  }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+    padding: 12px 20px; border-radius: 10px; box-shadow: var(--shadow);
+    opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { border-color: var(--red); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Apollon<span>IA</span> · Lead Gen</div>
+  <nav>
+    <button class="tab active" id="tab-campaigns" onclick="showView('campaigns')">Campagne</button>
+    <button class="tab" id="tab-detail" onclick="showView('detail')" style="display:none">Dettaglio</button>
+  </nav>
+  <div class="spacer"></div>
+  <div class="api-hint" id="apiHint"></div>
+</header>
+
+<main>
+  <!-- ── VIEW 1: CAMPAIGNS ─────────────────────────────── -->
+  <section class="view active" id="view-campaigns">
+    <h2>Nuova campagna</h2>
+    <div class="bar">
+      <div class="field">
+        <label for="city">Città</label>
+        <input id="city" type="text" placeholder="es. Milano" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="maxResults">Max lead</label>
+        <input id="maxResults" type="number" value="60" min="1" max="60" />
+      </div>
+      <button class="btn" id="startBtn" onclick="createCampaign()">Avvia Campagna</button>
+    </div>
+
+    <h2>Campagne</h2>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Città</th><th>Stato</th><th>Creata</th>
+            <th>Trovati</th><th>Email</th><th>Risposte</th><th>Demo</th>
+          </tr>
+        </thead>
+        <tbody id="campaignsBody">
+          <tr><td class="empty" colspan="7">Caricamento…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── VIEW 2: DETAIL ────────────────────────────────── -->
+  <section class="view" id="view-detail">
+    <button class="back" onclick="showView('campaigns')">← Tutte le campagne</button>
+    <div class="detail-head">
+      <h2 id="d-city">—</h2>
+      <span id="d-status" class="badge b-pending">—</span>
+      <span id="d-live"></span>
+      <div class="spacer"></div>
+      <button class="btn ghost sm" id="d-toggle" onclick="toggleCampaign()">Avvia</button>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="num" id="s-found">0</div><div class="lbl">Trovati</div></div>
+      <div class="stat"><div class="num" id="s-emailed">0</div><div class="lbl">Email inviate</div></div>
+      <div class="stat"><div class="num" id="s-responded">0</div><div class="lbl">Risposte</div></div>
+      <div class="stat"><div class="num" id="s-booked">0</div><div class="lbl">Demo prenotate</div></div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <div class="section-title">
+          <h3>Lead</h3>
+          <div class="filters">
+            <select id="leadFilter" onchange="loadLeads()">
+              <option value="">Tutti</option>
+              <option value="pending">Email: in attesa</option>
+              <option value="sent">Email: inviata</option>
+              <option value="no_email">Email: assente</option>
+              <option value="bounced">Email: bounced</option>
+              <option value="interested">Risposta: interessato</option>
+              <option value="not_interested">Risposta: non interessato</option>
+              <option value="booked">Risposta: demo prenotata</option>
+            </select>
+          </div>
+        </div>
+        <div class="card">
+          <table>
+            <thead>
+              <tr><th>Agenzia</th><th>Email</th><th>Stato</th><th>Risposta</th><th></th></tr>
+            </thead>
+            <tbody id="leadsBody">
+              <tr><td class="empty" colspan="5">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title"><h3>Log attività</h3><span class="muted" id="logHint"></span></div>
+        <div class="card"><div class="log-feed" id="logFeed"><div class="empty">—</div></div></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ── response modal ──────────────────────────────────── -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3>Segna risposta</h3>
+    <div class="sub" id="modalLead">—</div>
+    <div class="field">
+      <label for="respType">Tipo di risposta</label>
+      <select id="respType">
+        <option value="interested">Interessato</option>
+        <option value="not_interested">Non interessato</option>
+        <option value="booked">Demo prenotata</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="respNotes">Note (opzionale)</label>
+      <textarea id="respNotes" placeholder="…"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal()">Annulla</button>
+      <button class="btn" onclick="submitResponse()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+const CONFIG = {
+  API_BASE: "https://your-render-app.onrender.com" // easy to change
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
+let state = {
+  view: "campaigns",
+  campaignId: null,
+  campaign: null,
+  logTimer: null,
+  modalLeadId: null,
+};
+
+document.getElementById("apiHint").textContent = CONFIG.API_BASE.replace(/^https?:\/\//, "");
+
+// ── tiny helpers ─────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(CONFIG.API_BASE + path, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  if (!res.ok) {
+    let msg = res.status + " " + res.statusText;
+    try { const j = await res.json(); if (j.detail) msg = j.detail; } catch (e) {}
+    throw new Error(msg);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+function toast(msg, isErr = false) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (isErr ? " err" : "");
+  setTimeout(() => { t.className = "toast"; }, 3000);
+}
+
+function fmtDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
+  if (isNaN(d)) return iso;
+  return d.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+function fmtTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
+  if (isNaN(d)) return iso;
+  return d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+const BADGE_LABELS = {
+  pending: "in attesa", running: "in corso", paused: "in pausa", completed: "completata",
+  no_email: "no email", sent: "inviata", bounced: "bounced",
+  none: "nessuna", interested: "interessato", not_interested: "non interessato", booked: "prenotata",
+};
+function badgeLabel(value) { return BADGE_LABELS[value] || value || "—"; }
+function badge(value) { return `<span class="badge b-${value}">${badgeLabel(value)}</span>`; }
+function esc(s) {
+  return (s == null ? "" : String(s)).replace(/[&<>"]/g, c => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+// ── view switching ───────────────────────────────────────
+function showView(view) {
+  state.view = view;
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  document.getElementById("view-" + view).classList.add("active");
+  document.getElementById("tab-campaigns").classList.toggle("active", view === "campaigns");
+  document.getElementById("tab-detail").classList.toggle("active", view === "detail");
+  if (view === "campaigns") {
+    stopLogPolling();
+    document.getElementById("tab-detail").style.display = "none";
+    loadCampaigns();
+  }
+}
+
+// ── campaigns list ───────────────────────────────────────
+async function loadCampaigns() {
+  const body = document.getElementById("campaignsBody");
+  try {
+    const rows = await api("/campaigns");
+    if (!rows.length) {
+      body.innerHTML = `<tr><td class="empty" colspan="7">Nessuna campagna. Avviane una qui sopra.</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows.map(c => `
+      <tr class="clickable" onclick="openCampaign(${c.id})">
+        <td><strong>${esc(c.city)}</strong></td>
+        <td>${badge(c.status)}</td>
+        <td class="muted">${fmtDate(c.created_at)}</td>
+        <td>${c.total_found}</td>
+        <td>${c.total_emailed}</td>
+        <td>${c.total_responded}</td>
+        <td>${c.total_booked}</td>
+      </tr>`).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td class="empty" colspan="7">Errore: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function createCampaign() {
+  const city = document.getElementById("city").value.trim();
+  const maxResults = parseInt(document.getElementById("maxResults").value, 10) || 60;
+  if (!city) { toast("Inserisci una città", true); return; }
+  const btn = document.getElementById("startBtn");
+  btn.disabled = true; btn.textContent = "Avvio…";
+  try {
+    const campaign = await api("/campaigns", {
+      method: "POST",
+      body: JSON.stringify({ city, max_results: maxResults }),
+    });
+    await api(`/campaigns/${campaign.id}/start`, { method: "POST" });
+    toast(`Campagna avviata per ${city}`);
+    document.getElementById("city").value = "";
+    openCampaign(campaign.id);
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Avvia Campagna";
+  }
+}
+
+// ── campaign detail ──────────────────────────────────────
+async function openCampaign(id) {
+  state.campaignId = id;
+  document.getElementById("tab-detail").style.display = "";
+  showViewDetail();
+  await refreshCampaign();
+  await loadLeads();
+  await loadLogs();
+  startLogPolling();
+}
+function showViewDetail() {
+  state.view = "detail";
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  document.getElementById("view-detail").classList.add("active");
+  document.getElementById("tab-campaigns").classList.remove("active");
+  document.getElementById("tab-detail").classList.add("active");
+}
+
+async function refreshCampaign() {
+  try {
+    const c = await api(`/campaigns/${state.campaignId}`);
+    state.campaign = c;
+    document.getElementById("d-city").textContent = c.city;
+    const st = document.getElementById("d-status");
+    st.className = "badge b-" + c.status;
+    st.textContent = badgeLabel(c.status);
+    document.getElementById("s-found").textContent = c.total_found;
+    document.getElementById("s-emailed").textContent = c.total_emailed;
+    document.getElementById("s-responded").textContent = c.total_responded;
+    document.getElementById("s-booked").textContent = c.total_booked;
+
+    const running = c.status === "running";
+    document.getElementById("d-live").innerHTML = running ? '<span class="pulse"></span>' : "";
+    const toggle = document.getElementById("d-toggle");
+    toggle.textContent = running ? "Pausa" : (c.status === "completed" ? "Riavvia" : "Avvia");
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  }
+}
+
+async function toggleCampaign() {
+  const c = state.campaign;
+  if (!c) return;
+  try {
+    if (c.status === "running") {
+      await api(`/campaigns/${c.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "paused" }) });
+      toast("Campagna in pausa");
+    } else if (c.status === "completed") {
+      await api(`/campaigns/${c.id}/start`, { method: "POST" });
+      toast("Campagna riavviata");
+    } else {
+      // pending or paused → resume via status=running
+      await api(`/campaigns/${c.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "running" }) });
+      toast("Campagna ripresa");
+    }
+    await refreshCampaign();
+    startLogPolling();
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  }
+}
+
+async function loadLeads() {
+  const body = document.getElementById("leadsBody");
+  const status = document.getElementById("leadFilter").value;
+  try {
+    const q = status ? `?status=${encodeURIComponent(status)}&limit=200` : "?limit=200";
+    const data = await api(`/campaigns/${state.campaignId}/leads${q}`);
+    const leads = data.leads || [];
+    if (!leads.length) {
+      body.innerHTML = `<tr><td class="empty" colspan="5">Nessun lead${status ? " con questo filtro" : " ancora"}.</td></tr>`;
+      return;
+    }
+    body.innerHTML = leads.map(l => `
+      <tr>
+        <td><strong>${esc(l.agency_name) || "—"}</strong>${l.notes ? `<br><span class="muted" style="font-size:.8rem">${esc(l.notes)}</span>` : ""}</td>
+        <td>${l.email ? esc(l.email) : '<span class="muted">—</span>'}</td>
+        <td>${badge(l.email_status)}</td>
+        <td>${badge(l.response_status)}</td>
+        <td><button class="btn ghost sm" onclick="openModal(${l.id}, '${esc(l.agency_name).replace(/'/g, "\\'")}')">Segna risposta</button></td>
+      </tr>`).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td class="empty" colspan="5">Errore: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function loadLogs() {
+  const feed = document.getElementById("logFeed");
+  try {
+    const logs = await api(`/campaigns/${state.campaignId}/logs?limit=100`);
+    if (!logs.length) { feed.innerHTML = `<div class="empty">Nessun evento ancora.</div>`; return; }
+    feed.innerHTML = logs.map(l => `
+      <div class="log-row">
+        <span class="log-time">${fmtTime(l.created_at)}</span>
+        <span class="log-event ev-${esc(l.event)}">${esc(l.event)}</span>
+        <span class="log-detail">${esc(l.detail) || ""}</span>
+      </div>`).join("");
+  } catch (e) {
+    feed.innerHTML = `<div class="empty">Errore: ${esc(e.message)}</div>`;
+  }
+}
+
+// ── polling: every 5s while running ──────────────────────
+function startLogPolling() {
+  stopLogPolling();
+  state.logTimer = setInterval(async () => {
+    if (state.view !== "detail" || !state.campaignId) { stopLogPolling(); return; }
+    await refreshCampaign();
+    await loadLogs();
+    await loadLeads();
+    document.getElementById("logHint").textContent =
+      state.campaign && state.campaign.status === "running" ? "aggiornamento ogni 5s" : "";
+    if (state.campaign && state.campaign.status !== "running") stopLogPolling();
+  }, 5000);
+  document.getElementById("logHint").textContent =
+    state.campaign && state.campaign.status === "running" ? "aggiornamento ogni 5s" : "";
+}
+function stopLogPolling() {
+  if (state.logTimer) { clearInterval(state.logTimer); state.logTimer = null; }
+  document.getElementById("logHint").textContent = "";
+}
+
+// ── response modal ───────────────────────────────────────
+function openModal(leadId, name) {
+  state.modalLeadId = leadId;
+  document.getElementById("modalLead").textContent = name || ("Lead #" + leadId);
+  document.getElementById("respType").value = "interested";
+  document.getElementById("respNotes").value = "";
+  document.getElementById("modalBg").classList.add("open");
+}
+function closeModal() {
+  document.getElementById("modalBg").classList.remove("open");
+  state.modalLeadId = null;
+}
+async function submitResponse() {
+  const lead_id = state.modalLeadId;
+  if (!lead_id) return;
+  const response_type = document.getElementById("respType").value;
+  const notes = document.getElementById("respNotes").value.trim() || null;
+  try {
+    await api("/leads/response", {
+      method: "POST",
+      body: JSON.stringify({ lead_id, response_type, notes }),
+    });
+    toast("Risposta salvata");
+    closeModal();
+    await refreshCampaign();
+    await loadLeads();
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  }
+}
+document.getElementById("modalBg").addEventListener("click", e => {
+  if (e.target.id === "modalBg") closeModal();
+});
+document.getElementById("city").addEventListener("keydown", e => {
+  if (e.key === "Enter") createCampaign();
+});
+
+// ── boot ─────────────────────────────────────────────────
+loadCampaigns();
+</script>
+</body>
+</html>

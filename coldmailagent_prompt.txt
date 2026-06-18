@@ -1,0 +1,227 @@
+Read the entire codebase first and report back:
+- The main FastAPI app file and how routes are organized
+- Whether there is an existing SQLite setup and where the DB file lives
+- Any existing environment variables (list the names, not values)
+- The Resend integration (how emails are currently sent)
+- The folder structure at the root level
+
+Report any mismatches with what you find before implementing anything. Then implement the following:
+
+---
+
+## FEATURE: AI Lead Generation System for ApollonIA
+
+### Overview
+Build a lead generation pipeline that:
+1. Takes an Italian city as input
+2. Scrapes real estate agencies via Google Places API
+3. Enriches leads with emails (from Place Details or website scraping)
+4. Sends personalized cold outreach emails via Resend
+5. Tracks all activity in SQLite
+6. Exposes REST endpoints consumed by a static dashboard
+
+---
+
+### 1. DATABASE SCHEMA
+
+Add these tables to the existing SQLite setup (do not touch existing tables):
+
+```sql
+CREATE TABLE IF NOT EXISTS campaigns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  city TEXT NOT NULL,
+  status TEXT DEFAULT 'pending', -- pending | running | paused | completed
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  started_at TIMESTAMP,
+  completed_at TIMESTAMP,
+  total_found INTEGER DEFAULT 0,
+  total_emailed INTEGER DEFAULT 0,
+  total_responded INTEGER DEFAULT 0,
+  total_booked INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS leads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id INTEGER REFERENCES campaigns(id),
+  agency_name TEXT,
+  address TEXT,
+  phone TEXT,
+  website TEXT,
+  email TEXT,
+  google_place_id TEXT UNIQUE,
+  email_status TEXT DEFAULT 'pending', -- pending | no_email | sent | bounced
+  response_status TEXT DEFAULT 'none', -- none | interested | not_interested | booked
+  email_sent_at TIMESTAMP,
+  responded_at TIMESTAMP,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS agent_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id INTEGER REFERENCES campaigns(id),
+  lead_id INTEGER REFERENCES leads(id),
+  event TEXT NOT NULL, -- e.g. "place_found", "email_found", "email_sent", "response_received"
+  detail TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+### 2. ENVIRONMENT VARIABLES
+
+Add support for these new env vars (add to .env.example if it exists):
+- GOOGLE_PLACES_API_KEY
+- RESEND_API_KEY (may already exist — check first)
+- OUTREACH_FROM_EMAIL (the sender address, e.g. adam@apollon-ia.com)
+- CALENDLY_LINK (e.g. https://calendly.com/adam/demo)
+
+---
+
+### 3. GOOGLE PLACES SCRAPER
+
+Create `services/places_scraper.py`:
+
+- Function `scrape_city(city: str, campaign_id: int, max_results: int = 60)`
+- Uses Google Places Text Search API: query = `"agenzia immobiliare {city}"`
+- Endpoint: `https://maps.googleapis.com/maps/api/place/textsearch/json`
+- Paginate using `next_page_token` (sleep 2s between pages — Google requires this)
+- For each place, fetch Place Details to get: name, formatted_address, formatted_phone_number, website, plus check if email exists in the result
+- Stay under 3 pages per city (60 results max) to protect free tier
+- Skip places already in the leads table (check google_place_id)
+- If a website is found but no email, attempt to scrape the website's contact page:
+  - Try fetching `{website}/contatti`, `{website}/contact`, `{website}` 
+  - Use regex to extract email addresses from HTML
+  - Take the first match that is not a generic domain (e.g. skip @gmail, @yahoo, @libero unless nothing else found)
+- Write each lead to the DB as it is found
+- Log every event to agent_logs
+- Update campaigns.total_found as leads are added
+
+---
+
+### 4. EMAIL OUTREACH
+
+Create `services/outreach.py`:
+
+- Function `send_outreach_emails(campaign_id: int)`
+- Fetches all leads for the campaign where email IS NOT NULL and email_status = 'pending'
+- For each lead, generate a personalized email using this template (in Italian):
+
+Subject: `{agency_name} – un'idea per qualificare i lead in entrata`
+
+Body:
+Buongiorno,
+
+mi chiamo Adam e volevo presentarvi ApollonIA, un assistente vocale AI per agenzie immobiliari.
+
+Apollonia gestisce le chiamate in arrivo, risponde alle domande sugli immobili e qualifica i contatti, segnalandovi solo chi è davvero interessato a comprare o vendere.
+
+Il modo più semplice per capirla è provarla: potete parlare con lei gratuitamente sul sito 👉 https://apollon-ia.com
+
+Bastano un paio di minuti. Se poi vi interessa, vi spiego volentieri come potrebbe funzionare per la vostra agenzia.
+
+Un saluto,
+Adam
+
+- Send via Resend using the existing Resend setup in the codebase
+- After sending, update lead: email_status = 'sent', email_sent_at = now()
+- Log to agent_logs
+- Add a 1 second delay between sends to avoid rate limits
+- Update campaigns.total_emailed
+
+---
+
+### 5. INBOUND RESPONSE WEBHOOK
+
+Create endpoint `POST /leads/response`:
+
+Request body:
+```json
+{
+  "lead_id": 123,
+  "response_type": "interested" | "not_interested" | "booked",
+  "notes": "optional"
+}
+```
+
+- Updates lead.response_status and responded_at
+- Updates campaigns.total_responded or total_booked
+- Logs to agent_logs
+- Returns 200 OK
+
+Also create endpoint `POST /leads/inbound-email` for future Resend inbound webhook integration (just log it for now, return 200).
+
+---
+
+### 6. FASTAPI ROUTES
+
+Create `routers/leads.py` with these endpoints:
+POST   /campaigns                    - create campaign (body: {city, max_results})
+
+POST   /campaigns/{id}/start         - trigger scrape + email in background task
+
+GET    /campaigns                    - list all campaigns with stats
+
+GET    /campaigns/{id}               - campaign detail + stats
+
+GET    /campaigns/{id}/leads         - paginated leads for a campaign (query: page, limit, status filter)
+
+GET    /campaigns/{id}/logs          - recent agent_logs for a campaign (limit 100)
+
+PATCH  /campaigns/{id}/status        - pause or resume (body: {status})
+
+POST   /leads/response               - mark a lead response (manual for now)
+
+For `POST /campaigns/{id}/start`: use FastAPI BackgroundTasks to run the scrape and then email sending without blocking the HTTP response.
+
+Add CORS middleware to allow requests from any origin (the static dashboard will call these).
+
+---
+
+### 7. STATIC DASHBOARD
+
+Create a file `dashboard/index.html` — a single self-contained HTML file with inline CSS and JS (no build step, no frameworks).
+
+The dashboard should have two views, toggled by a tab bar:
+
+**View 1: Campaigns**
+- Top bar: text input for city name + max leads number (default 60) + "Avvia Campagna" button
+  - On click: POST /campaigns then POST /campaigns/{id}/start
+- Table of all campaigns showing: city, status, created date, found / emailed / responded / booked counts
+- Clicking a row opens View 2 for that campaign
+
+**View 2: Campaign Detail** (shown below or as drill-down)
+- Header: city name, status badge, start/pause button
+- Stats row: 4 cards — Trovati / Email inviate / Risposte / Demo prenotate
+- Live log feed: polls GET /campaigns/{id}/logs every 5 seconds when campaign is running, shows events in a scrollable feed with timestamps
+- Leads table: agency name, email, email status, response status, notes — filterable by status
+- "Segna risposta" button per lead row (opens a small modal to set response_type)
+
+Style: clean, minimal, dark sidebar or top nav. Use a CSS variable palette so it is easy to retheme. No external CSS frameworks — just clean hand-written CSS.
+
+The dashboard file should use a CONFIG object at the top of the JS:
+```javascript
+const CONFIG = {
+  API_BASE: "https://your-render-app.onrender.com" // easy to change
+};
+```
+
+---
+
+### 8. IMPLEMENTATION NOTES
+
+- Dont build it in backend/ because it already contains the landing page. Build it in the project root creating a new directory so i can deploy the frontend on render.com as a separate static site.
+- The background task should handle errors gracefully — if scraping fails for a lead, log it and continue
+- Never crash the whole campaign if one lead fails
+- All DB operations should use the existing DB connection pattern in the codebase
+- Do not use any new heavy dependencies if possible — use httpx or requests (whichever is already in the project) for HTTP calls
+- The Places scraper should log its credit usage estimate to agent_logs (each textsearch page = 1 call, each place details = 1 call)
+
+---
+
+After implementing, provide:
+1. A list of all files created or modified
+2. The new environment variables needed
+3. How to serve the dashboard/index.html locally for testing
+4. Any gotchas found in the existing codebase
