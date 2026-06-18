@@ -573,6 +573,25 @@ def _start_call_recording(call_sid: str) -> None:
         logger.error("Failed to start call recording for %s: %s", call_sid, exc)
 
 
+def _hangup_call(call_sid: str) -> None:
+    """Hang up the call via the Twilio REST API.
+
+    Closing the media-stream WebSocket on its own does not reliably end the
+    call — it can leave the caller listening to dead air — so the call is
+    terminated explicitly here.
+    """
+    if not call_sid or not settings.TWILIO_ACCOUNT_SID:
+        return
+    try:
+        from twilio.rest import Client as TwilioClient
+
+        client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+        client.calls(call_sid).update(status="completed")
+        logger.info("Hung up call_sid=%s", call_sid)
+    except Exception as exc:
+        logger.error("Failed to hang up call %s: %s", call_sid, exc)
+
+
 @router.post("/inbound")
 async def inbound_call(request: Request) -> Response:
     """
@@ -733,6 +752,7 @@ async def stream_ws(websocket: WebSocket) -> None:
         "left_message": None,
         "suppress_input_until": 0.0,
         "last_speech_at": 0.0,
+        "goodbye_played": asyncio.Event(),
     }
 
     # Twilio sends "connected" then "start" as the first frames. Read them
@@ -872,6 +892,13 @@ async def stream_ws(websocket: WebSocket) -> None:
                                 }
                             )
                         )
+
+                    elif event == "mark":
+                        # Twilio echoes our "goodbye" mark once that audio has
+                        # finished playing out to the caller — that's our cue to
+                        # hang up immediately.
+                        if msg.get("mark", {}).get("name") == "goodbye":
+                            session["goodbye_played"].set()
 
                     elif event == "stop":
                         logger.info(
@@ -1044,9 +1071,26 @@ async def stream_ws(websocket: WebSocket) -> None:
                                         "payload": _GOODBYE_AUDIO,
                                     },
                                 }))
-                                await asyncio.sleep(_GOODBYE_DURATION + 0.5)
+                                # Mark the end of the goodbye so Twilio tells us
+                                # the instant it finishes playing; hang up then
+                                # instead of guessing with a fixed delay.
+                                await websocket.send_text(json.dumps({
+                                    "event": "mark",
+                                    "streamSid": session["stream_sid"],
+                                    "mark": {"name": "goodbye"},
+                                }))
+                                try:
+                                    await asyncio.wait_for(
+                                        session["goodbye_played"].wait(),
+                                        timeout=_GOODBYE_DURATION + 2.0,
+                                    )
+                                except asyncio.TimeoutError:
+                                    logger.warning(
+                                        "Goodbye mark not received — hanging up anyway"
+                                    )
                             else:
                                 await asyncio.sleep(1.5)
+                            await asyncio.to_thread(_hangup_call, session["call_sid"])
                             await websocket.close()
                             return
 
@@ -1064,6 +1108,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                     await asyncio.sleep(1)
                     if asyncio.get_event_loop().time() - session["last_speech_at"] > 100:
                         logger.info("100s silence — hanging up sid=%s", session["stream_sid"])
+                        await asyncio.to_thread(_hangup_call, session["call_sid"])
                         await websocket.close()
                         break
 
