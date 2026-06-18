@@ -27,3 +27,4 @@ requests (number of rooms, price, ...) When the scraping finds a new listing
 
 add more text to knowledge base for the demo
 finish the lead generation - insructions in the claude code chat: implement AI lead generation....
+filter the leads -send oly the ones that are usefull 

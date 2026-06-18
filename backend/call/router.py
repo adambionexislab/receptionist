@@ -581,6 +581,11 @@ def _hangup_call(call_sid: str) -> None:
     terminated explicitly here.
     """
     if not call_sid or not settings.TWILIO_ACCOUNT_SID:
+        logger.warning(
+            "Cannot hang up via REST: call_sid=%r account_sid_set=%s",
+            call_sid,
+            bool(settings.TWILIO_ACCOUNT_SID),
+        )
         return
     try:
         from twilio.rest import Client as TwilioClient
@@ -624,6 +629,10 @@ async def inbound_call(request: Request) -> Response:
     connect = Connect()
     stream = Stream(url=f"{wss_base}/call/stream", track="inbound_track")
     stream.parameter(name="caller", value=caller)
+    # Pass the call SID explicitly — the stream "start" event's callSid is not
+    # always reliable, and we need it to hang up the call via the REST API.
+    if call_sid:
+        stream.parameter(name="call_sid", value=call_sid)
     if tenant is not None:
         stream.parameter(name="tenant_id", value=tenant["id"])
     connect.append(stream)
@@ -644,6 +653,93 @@ async def recording_status(request: Request) -> Response:
         form.get("RecordingUrl"),
     )
     return Response(status_code=204)
+
+
+# Cheap text model used for the post-call one-sentence lead summary. The
+# realtime model handles the live conversation; this is a separate, non-audio
+# call made once the call has ended, so latency is not a concern.
+_SUMMARY_MODEL = "gpt-5.4-nano"
+
+
+def _fallback_lead_summary(session: dict[str, Any]) -> str:
+    """Deterministic one-sentence summary, used when the text model is
+    unavailable (no API key) or the request fails."""
+    caller = session.get("caller_number", "sconosciuto")
+    caller_name = (
+        (session.get("caller_info") or {}).get("name")
+        or (session.get("left_message") or {}).get("caller_name")
+    )
+    who = caller_name or caller
+    n_interested = len(session.get("interested_listings") or [])
+    if n_interested:
+        return (
+            f"{who} ha chiamato ed è interessato a "
+            f"{n_interested} immobil{'e' if n_interested == 1 else 'i'}."
+        )
+    if session.get("left_message") is not None:
+        return f"{who} ha lasciato un messaggio in segreteria."
+    if session.get("listings_shown"):
+        return (
+            f"{who} ha chiamato e ha visto alcuni immobili, "
+            "senza indicarne uno di interesse."
+        )
+    return f"{who} ha chiamato."
+
+
+def _extract_response_text(data: dict[str, Any]) -> str:
+    """Pull the assistant text out of a Responses API payload. Prefers the
+    top-level `output_text` convenience field, falling back to walking the
+    `output` array (which also contains non-text items like reasoning)."""
+    top = data.get("output_text")
+    if isinstance(top, str) and top:
+        return top
+    parts: list[str] = []
+    for item in data.get("output", []):
+        if item.get("type") == "message":
+            for part in item.get("content", []):
+                if part.get("type") == "output_text":
+                    parts.append(part.get("text", ""))
+    return "".join(parts)
+
+
+async def _generate_lead_summary(detail_body: str, session: dict[str, Any]) -> str:
+    """Ask a text model to write a one-sentence Italian summary of the call so
+    the agent immediately understands what the email is about. Falls back to a
+    deterministic template if the API key is missing or the request fails."""
+    if not settings.OPENAI_API_KEY:
+        return _fallback_lead_summary(session)
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.post(
+                "https://api.openai.com/v1/responses",
+                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+                json={
+                    "model": _SUMMARY_MODEL,
+                    "instructions": (
+                        "Sei l'assistente di un'agenzia immobiliare. "
+                        "Riassumi in UNA sola frase, in italiano, l'esito "
+                        "della telefonata descritta dall'utente, in modo "
+                        "che l'agente capisca subito di cosa si tratta "
+                        "(chi ha chiamato e cosa vuole). Scrivi solo la "
+                        "frase, senza preamboli, virgolette o elenchi."
+                    ),
+                    "input": detail_body,
+                    # nano on a simple summarisation task: minimal reasoning,
+                    # terse, low-temperature output for consistent one-liners.
+                    # max_output_tokens covers reasoning + text.
+                    "reasoning": {"effort": "minimal"},
+                    "text": {"verbosity": "low"},
+                    "temperature": 0.2,
+                    "max_output_tokens": 200,
+                },
+            )
+            response.raise_for_status()
+            summary = _extract_response_text(response.json()).strip()
+            if summary:
+                return summary
+    except Exception as exc:
+        logger.error("Failed to generate lead summary via LLM: %s", exc)
+    return _fallback_lead_summary(session)
 
 
 async def _send_lead_email(session: dict[str, Any]) -> None:
@@ -696,13 +792,18 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
             lines.append(f"Urgenza: {msg_data.get('urgency', 'normale')}")
             lines.append(f"Messaggio: {msg_data.get('message', '')}")
 
-        body = "\n".join(lines)
+        detail_body = "\n".join(lines)
     except Exception as exc:
         logger.error("Failed to format lead email body: %s", exc)
-        body = (
+        detail_body = (
             f"Chiamante: {caller}\n"
             f"(errore nella formattazione del corpo della mail — controlla i log)"
         )
+
+    # Let a text model write a one-sentence summary of the call so the agent
+    # grasps the lead at a glance, then prepend it to the detailed body.
+    summary = await _generate_lead_summary(detail_body, session)
+    body = f"{summary}\n\n{detail_body}"
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -765,14 +866,15 @@ async def stream_ws(websocket: WebSocket) -> None:
             event = msg.get("event")
             if event == "start":
                 start = msg.get("start", {})
-                session["stream_sid"] = msg.get("streamSid") or start.get("streamSid")
-                session["call_sid"] = start.get("callSid")
                 params = start.get("customParameters", {})
+                session["stream_sid"] = msg.get("streamSid") or start.get("streamSid")
+                session["call_sid"] = params.get("call_sid") or start.get("callSid")
                 session["caller_number"] = params.get("caller", session["caller_number"])
                 tenant_id = params.get("tenant_id", "")
                 logger.info(
-                    "Stream started sid=%s caller=%s tenant=%s",
+                    "Stream started sid=%s call_sid=%s caller=%s tenant=%s",
                     session["stream_sid"],
+                    session["call_sid"],
                     session["caller_number"],
                     tenant_id or "(env fallback)",
                 )
