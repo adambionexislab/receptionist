@@ -192,9 +192,10 @@ def _details(client: httpx.Client, place_id: str) -> dict:
         _DETAILS_URL,
         params={
             "place_id": place_id,
-            # Google never returns an `email` field; we request it anyway so the
-            # day they ever do, the code below picks it up for free.
-            "fields": "name,formatted_address,formatted_phone_number,website,email",
+            # Only valid legacy Place Details field names here: an unsupported
+            # name (e.g. "email") makes Google reject the WHOLE request with
+            # INVALID_REQUEST, so website/phone come back empty for every lead.
+            "fields": "name,formatted_address,formatted_phone_number,website",
             "language": "it",
             "key": settings.GOOGLE_PLACES_API_KEY,
         },
