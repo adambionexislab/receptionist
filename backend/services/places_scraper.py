@@ -242,28 +242,49 @@ def scrape_city(city: str, campaign_id: int, max_results: int = 60) -> int:
                 db.log_event(campaign_id, "scrape_paused", f"stopped at page {page + 1}")
                 break
 
-            params = {"query": query, "language": "it", "region": "it",
-                      "key": settings.GOOGLE_PLACES_API_KEY}
-            if next_page_token:
+            using_token = bool(next_page_token)
+            if using_token:
                 params = {"pagetoken": next_page_token,
                           "key": settings.GOOGLE_PLACES_API_KEY}
-                # next_page_token needs a moment to become valid (Google quirk).
-                time.sleep(_PAGE_SLEEP)
+            else:
+                params = {"query": query, "language": "it", "region": "it",
+                          "key": settings.GOOGLE_PLACES_API_KEY}
 
-            try:
-                resp = client.get(_TEXTSEARCH_URL, params=params, timeout=15.0)
-                resp.raise_for_status()
-                payload = resp.json()
-                api_calls += 1
-            except Exception as exc:
-                db.log_event(campaign_id, "error", f"text search page {page + 1} failed: {exc}")
-                logger.exception("Text Search failed for campaign %s", campaign_id)
+            # A next_page_token isn't valid the instant it's issued — Google
+            # returns INVALID_REQUEST until it propagates. Sleep before each
+            # token request and retry that specific case a couple of times.
+            payload = None
+            for attempt in range(3):
+                if using_token:
+                    time.sleep(_PAGE_SLEEP)
+                try:
+                    resp = client.get(_TEXTSEARCH_URL, params=params, timeout=15.0)
+                    resp.raise_for_status()
+                    payload = resp.json()
+                    api_calls += 1
+                except Exception as exc:
+                    db.log_event(campaign_id, "error", f"text search page {page + 1} failed: {exc}")
+                    logger.exception("Text Search failed for campaign %s", campaign_id)
+                    payload = None
+                    break
+                if payload.get("status") == "INVALID_REQUEST" and using_token and attempt < 2:
+                    continue  # token still propagating — wait and try again
+                break
+
+            if payload is None:
                 break
 
             status = payload.get("status")
             if status not in ("OK", "ZERO_RESULTS"):
-                db.log_event(campaign_id, "error", f"text search status={status}")
-                logger.error("Text Search status=%s for campaign %s", status, campaign_id)
+                err = payload.get("error_message", "")
+                db.log_event(
+                    campaign_id, "error",
+                    f"text search status={status}" + (f": {err}" if err else ""),
+                )
+                logger.error(
+                    "Text Search status=%s for campaign %s — %s",
+                    status, campaign_id, err or "(no error_message)",
+                )
                 break
 
             results = payload.get("results", [])
