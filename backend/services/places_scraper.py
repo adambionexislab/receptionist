@@ -1,14 +1,15 @@
 """Google Places scraper for ApollonIA lead generation.
 
-Given an Italian city, runs a Google Places Text Search for real-estate
-agencies ("agenzia immobiliare {city}"), fetches Place Details for each hit,
-and — when Places returns no email (it never does) — falls back to scraping the
-agency website's contact page for an address.
+Given an Italian city, runs a Places API (New) Text Search for real-estate
+agencies ("agenzia immobiliare {city}"). searchText returns name, address,
+website and phone inline (one POST per page of 20) via a field mask, so no
+per-place Place Details call is needed. When Places has no email (it never
+does), we fall back to scraping the agency website's contact page.
 
-This module is SYNCHRONOUS on purpose: it is meant to run inside a FastAPI
-BackgroundTask (Starlette runs sync callables in a worker thread), so the 2s
-inter-page sleeps Google requires won't block the event loop. It shares the
-single SQLite connection via leadgen.db, which is opened check_same_thread=False.
+This module is SYNCHRONOUS on purpose: it runs inside a FastAPI BackgroundTask
+(Starlette runs sync callables in a worker thread), so network waits don't block
+the event loop. It shares the single SQLite connection via leadgen.db, which is
+opened check_same_thread=False.
 
 Every step is logged to agent_logs and failures never abort the whole run.
 """
@@ -26,12 +27,21 @@ from leadgen import db
 
 logger = logging.getLogger(__name__)
 
-_TEXTSEARCH_URL = "https://maps.googleapis.com/maps/api/place/textsearch/json"
-_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
+# Places API (New) — searchText returns Place Details fields inline via a field
+# mask, so one POST per page replaces the old textsearch + per-place details fan-out.
+_TEXTSEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 
-_MAX_PAGES = 3            # Google returns up to 20 results/page → 60 max
-_PAGE_SLEEP = 2.0         # Google needs ~2s before a next_page_token is valid
+# Fields Google should return. Unknown names are rejected predictably at the mask
+# level (no risk of one bad field nuking the whole request, as on the legacy API).
+_FIELD_MASK = (
+    "places.id,places.displayName,places.formattedAddress,"
+    "places.websiteUri,places.nationalPhoneNumber,"
+    "places.internationalPhoneNumber,nextPageToken"
+)
+
+_MAX_PAGES = 3            # 20 results/page → 60 max
 _RESULTS_PER_PAGE = 20
+_PAGE_RETRY_SLEEP = 1.5   # brief backoff if a fresh pageToken isn't ready yet
 
 # Many agency sites block non-browser user agents (403/empty); present a real one.
 _BROWSER_UA = (
@@ -63,9 +73,9 @@ _CONTACT_PATHS = ("contatti", "contatti/", "contact", "contattaci", "chi-siamo")
 
 # ── agency-name blocklist (dashboard-editable) ───────────────────────────────
 # A comma-separated, case-insensitive substring list stored in app_settings. Any
-# place whose name contains one of these is skipped BEFORE its Place Details
-# lookup, so excluded franchises (e.g. Tecnocasa) never cost a credit or become
-# a lead. Defaults to empty (no exclusions) — set the blocklist from the dashboard.
+# place whose name contains one of these is skipped, so excluded franchises
+# (e.g. Tecnocasa) never become a lead. Defaults to empty (no exclusions) — set
+# the blocklist from the dashboard.
 _EXCLUSIONS_KEY = "exclude_keywords"
 DEFAULT_EXCLUSIONS = ""
 
@@ -187,25 +197,13 @@ def _scrape_website_email(client: httpx.Client, website: str) -> Optional[str]:
     return candidates[0]  # only generic ones available — better than nothing
 
 
-def _details(client: httpx.Client, place_id: str) -> dict:
-    resp = client.get(
-        _DETAILS_URL,
-        params={
-            "place_id": place_id,
-            # Only valid legacy Place Details field names here: an unsupported
-            # name (e.g. "email") makes Google reject the WHOLE request with
-            # INVALID_REQUEST, so website/phone come back empty for every lead.
-            "fields": "name,formatted_address,formatted_phone_number,website",
-            "language": "it",
-            "key": settings.GOOGLE_PLACES_API_KEY,
-        },
-        timeout=15.0,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    if data.get("status") not in ("OK", "ZERO_RESULTS"):
-        logger.warning("Place Details status=%s for %s", data.get("status"), place_id)
-    return data.get("result", {}) or {}
+def _error_message(resp: httpx.Response) -> str:
+    """Best-effort human-readable reason from a Places API (New) error response.
+    The New API reports failures via HTTP status + an {"error": {...}} body."""
+    try:
+        return resp.json().get("error", {}).get("message") or f"HTTP {resp.status_code}"
+    except Exception:
+        return (resp.text or f"HTTP {resp.status_code}")[:200]
 
 
 def scrape_city(city: str, campaign_id: int, max_results: int = 60) -> int:
@@ -228,8 +226,15 @@ def scrape_city(city: str, campaign_id: int, max_results: int = 60) -> int:
 
     new_leads = 0
     excluded = 0
-    api_calls = 0  # credit-usage estimate: 1 per text-search page + 1 per details
-    next_page_token: Optional[str] = None
+    duplicates = 0  # places already in the DB from earlier campaigns (skipped)
+    api_calls = 0   # credit-usage estimate: 1 searchText request per page
+    page_token: Optional[str] = None
+
+    api_headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": settings.GOOGLE_PLACES_API_KEY,
+        "X-Goog-FieldMask": _FIELD_MASK,
+    }
 
     with httpx.Client(headers={"User-Agent": _BROWSER_UA}) as client:
         for page in range(_MAX_PAGES):
@@ -242,92 +247,106 @@ def scrape_city(city: str, campaign_id: int, max_results: int = 60) -> int:
                 db.log_event(campaign_id, "scrape_paused", f"stopped at page {page + 1}")
                 break
 
-            using_token = bool(next_page_token)
-            if using_token:
-                params = {"pagetoken": next_page_token,
-                          "key": settings.GOOGLE_PLACES_API_KEY}
-            else:
-                params = {"query": query, "language": "it", "region": "it",
-                          "key": settings.GOOGLE_PLACES_API_KEY}
+            body = {
+                "textQuery": query,
+                "languageCode": "it",
+                "regionCode": "IT",
+                "pageSize": _RESULTS_PER_PAGE,
+            }
+            if page_token:
+                body["pageToken"] = page_token
 
-            # A next_page_token isn't valid the instant it's issued — Google
-            # returns INVALID_REQUEST until it propagates. Sleep before each
-            # token request and retry that specific case a couple of times.
+            # A freshly-issued pageToken can briefly return 400 INVALID_ARGUMENT;
+            # retry that specific case before giving up.
             payload = None
             for attempt in range(3):
-                if using_token:
-                    time.sleep(_PAGE_SLEEP)
                 try:
-                    resp = client.get(_TEXTSEARCH_URL, params=params, timeout=15.0)
-                    resp.raise_for_status()
-                    payload = resp.json()
+                    resp = client.post(
+                        _TEXTSEARCH_URL, headers=api_headers, json=body, timeout=15.0
+                    )
                     api_calls += 1
                 except Exception as exc:
-                    db.log_event(campaign_id, "error", f"text search page {page + 1} failed: {exc}")
-                    logger.exception("Text Search failed for campaign %s", campaign_id)
-                    payload = None
+                    db.log_event(campaign_id, "error", f"search page {page + 1} failed: {exc}")
+                    logger.exception("searchText request failed for campaign %s", campaign_id)
                     break
-                if payload.get("status") == "INVALID_REQUEST" and using_token and attempt < 2:
-                    continue  # token still propagating — wait and try again
+
+                if resp.status_code == 200:
+                    payload = resp.json()
+                    break
+
+                err = _error_message(resp)
+                if page_token and resp.status_code == 400 and attempt < 2:
+                    time.sleep(_PAGE_RETRY_SLEEP)  # token not ready yet — retry
+                    continue
+                if page_token and resp.status_code == 400:
+                    # Page-1 results are already saved; Google just wouldn't serve
+                    # the next page. Not fatal — stop paginating.
+                    db.log_event(
+                        campaign_id, "pagination_stopped",
+                        f"page {page + 1}: pageToken rejected ({err}) — page 1 results kept",
+                    )
+                    logger.warning(
+                        "Campaign %s pagination stopped at page %d — %s",
+                        campaign_id, page + 1, err,
+                    )
+                else:
+                    db.log_event(
+                        campaign_id, "error",
+                        f"searchText HTTP {resp.status_code}: {err}",
+                    )
+                    logger.error(
+                        "searchText HTTP %s for campaign %s — %s",
+                        resp.status_code, campaign_id, err,
+                    )
                 break
 
             if payload is None:
                 break
 
-            status = payload.get("status")
-            if status not in ("OK", "ZERO_RESULTS"):
-                err = payload.get("error_message", "")
-                db.log_event(
-                    campaign_id, "error",
-                    f"text search status={status}" + (f": {err}" if err else ""),
-                )
-                logger.error(
-                    "Text Search status=%s for campaign %s — %s",
-                    status, campaign_id, err or "(no error_message)",
-                )
-                break
+            places = payload.get("places", [])
+            page_new0, page_dupe0, page_excl0 = new_leads, duplicates, excluded
 
-            results = payload.get("results", [])
-            db.log_event(
-                campaign_id, "page_fetched",
-                f"page {page + 1}: {len(results)} results (~1 search credit)",
-            )
-
-            for place in results:
+            for place in places:
                 if new_leads >= max_results:
                     break
-                place_id = place.get("place_id")
-                if not place_id or db.lead_exists(place_id):
+                place_id = place.get("id")
+                if not place_id:
+                    continue
+                if db.lead_exists(place_id):
+                    duplicates += 1
                     continue
 
-                # Skip blocklisted franchises before spending a Place Details call.
-                if exclusions and _is_excluded(place.get("name", ""), exclusions):
+                name = (place.get("displayName") or {}).get("text", "")
+                # Skip blocklisted franchises before doing any work for them.
+                if exclusions and _is_excluded(name, exclusions):
                     excluded += 1
-                    db.log_event(
-                        campaign_id, "skipped_excluded",
-                        place.get("name") or place_id,
-                    )
+                    db.log_event(campaign_id, "skipped_excluded", name or place_id)
                     continue
 
                 try:
-                    new_leads += _process_place(client, campaign_id, place, place_id)
-                    api_calls += 1  # the Place Details lookup
+                    new_leads += _process_place(client, campaign_id, place)
                 except Exception as exc:
                     db.log_event(
-                        campaign_id, "error",
-                        f"place {place.get('name', place_id)} failed: {exc}",
-                        lead_id=None,
+                        campaign_id, "error", f"place {name or place_id} failed: {exc}"
                     )
                     logger.exception("Lead processing failed for place %s", place_id)
                     continue
 
-            next_page_token = payload.get("next_page_token")
-            if not next_page_token:
+            db.log_event(
+                campaign_id, "page_fetched",
+                f"page {page + 1}: {len(places)} results · "
+                f"{new_leads - page_new0} new · "
+                f"{duplicates - page_dupe0} già presenti · "
+                f"{excluded - page_excl0} esclusi",
+            )
+
+            page_token = payload.get("nextPageToken")
+            if not page_token:
                 break
 
     db.log_event(
         campaign_id, "scrape_finished",
-        f"{new_leads} new leads · {excluded} excluded · "
+        f"{new_leads} new leads · {duplicates} già presenti · {excluded} esclusi · "
         f"~{api_calls} Google API calls (credit estimate)",
     )
     logger.info(
@@ -337,18 +356,17 @@ def scrape_city(city: str, campaign_id: int, max_results: int = 60) -> int:
     return new_leads
 
 
-def _process_place(client: httpx.Client, campaign_id: int, place: dict, place_id: str) -> int:
-    """Fetch details + enrich one place, persist as a lead. Returns 1 if added."""
-    details = _details(client, place_id)
+def _process_place(client: httpx.Client, campaign_id: int, place: dict) -> int:
+    """Persist one searchText place as a lead, enriching email from its website.
+    Returns 1 if a new lead was added, 0 on a duplicate place_id."""
+    place_id = place.get("id")
+    name = (place.get("displayName") or {}).get("text") or None
+    address = place.get("formattedAddress")
+    phone = place.get("nationalPhoneNumber") or place.get("internationalPhoneNumber")
+    website = place.get("websiteUri")
 
-    name = details.get("name") or place.get("name")
-    address = details.get("formatted_address") or place.get("formatted_address")
-    phone = details.get("formatted_phone_number")
-    website = details.get("website")
-    email = details.get("email")  # essentially always absent from Google
-
-    if not email and website:
-        email = _scrape_website_email(client, website)
+    # Google never returns an email; derive it from the agency website if any.
+    email = _scrape_website_email(client, website) if website else None
 
     email_status = "pending" if email else "no_email"
     lead_id = db.add_lead(
