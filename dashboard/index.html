@@ -120,7 +120,8 @@
   .b-running,   .b-interested{ background: rgba(91,140,255,.16); color: var(--accent); }
   .b-completed, .b-sent,
   .b-booked                  { background: rgba(62,207,142,.16); color: var(--green); }
-  .b-paused,    .b-no_email  { background: rgba(240,180,41,.16); color: var(--amber); }
+  .b-paused,    .b-no_email,
+  .b-replied                 { background: rgba(240,180,41,.16); color: var(--amber); }
   .b-bounced,   .b-not_interested { background: rgba(244,103,91,.16); color: var(--red); }
 
   /* ── detail view ────────────────────────────────────── */
@@ -260,6 +261,7 @@
               <option value="sent">Email: inviata</option>
               <option value="no_email">Email: assente</option>
               <option value="bounced">Email: bounced</option>
+              <option value="replied">Risposta: ha risposto</option>
               <option value="interested">Risposta: interessato</option>
               <option value="not_interested">Risposta: non interessato</option>
               <option value="booked">Risposta: demo prenotata</option>
@@ -432,7 +434,7 @@ function fmtTime(iso) {
 const BADGE_LABELS = {
   pending: "in attesa", running: "in corso", paused: "in pausa", completed: "completata",
   no_email: "no email", sent: "inviata", bounced: "bounced",
-  none: "nessuna", interested: "interessato", not_interested: "non interessato", booked: "prenotata",
+  none: "nessuna", replied: "ha risposto", interested: "interessato", not_interested: "non interessato", booked: "prenotata",
 };
 function badgeLabel(value) { return BADGE_LABELS[value] || value || "—"; }
 function badge(value) { return `<span class="badge b-${value}">${badgeLabel(value)}</span>`; }

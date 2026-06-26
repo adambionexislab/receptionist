@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     LEAD_EMAIL: Optional[str] = None
     RESEND_API_KEY: Optional[str] = None
     RESEND_FROM: str = "onboarding@resend.dev"
+    # Signing secret (whsec_…) of the Resend "email.received" webhook. When set,
+    # POST /leads/inbound-email verifies the Svix signature and rejects forgeries.
+    RESEND_WEBHOOK_SECRET: Optional[str] = None
 
     # Lead-generation / cold outreach (ApollonIA agency prospecting)
     GOOGLE_PLACES_API_KEY: Optional[str] = None

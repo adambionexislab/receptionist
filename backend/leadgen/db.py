@@ -211,6 +211,18 @@ def get_lead(lead_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def get_lead_by_email(email: str) -> Optional[dict]:
+    """Find the most recent lead whose email matches (case-insensitive). Used to
+    attach an inbound reply to the agency we cold-emailed."""
+    if not email:
+        return None
+    row = _conn().execute(
+        "SELECT * FROM leads WHERE LOWER(email) = LOWER(?) ORDER BY id DESC LIMIT 1",
+        (email.strip(),),
+    ).fetchone()
+    return dict(row) if row else None
+
+
 def get_pending_email_leads(campaign_id: int) -> list[dict]:
     rows = _conn().execute(
         "SELECT * FROM leads WHERE campaign_id = ? "

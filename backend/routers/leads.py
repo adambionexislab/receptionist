@@ -9,12 +9,19 @@ SYNCHRONOUS functions, so Starlette executes them in a worker thread and the
 HTTP response returns immediately.
 """
 
+import base64
+import hashlib
+import hmac
+import json
 import logging
+import time
 from typing import Literal, Optional
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from config import settings
 from leadgen import db
 from services.outreach import (
     DEFAULT_BODY,
@@ -260,16 +267,128 @@ def update_outreach_exclusions(data: ExclusionsUpdate):
     return {"status": "ok", "keywords": data.keywords}
 
 
+# ── inbound email (Resend "email.received" webhook) ──────────────────────────
+def _extract_address(raw_from: str) -> str:
+    """Pull a bare address out of a From value that may be 'Studio Rossi
+    <info@rossi.it>' or just 'info@rossi.it'. Lower-cased for matching."""
+    value = (raw_from or "").strip()
+    if "<" in value and ">" in value:
+        value = value[value.index("<") + 1 : value.index(">")]
+    return value.strip().strip('"').lower()
+
+
+def _svix_header(headers, name: str) -> str:
+    """Resend signs with Svix; accept both the svix-* and newer webhook-* names."""
+    return headers.get(f"svix-{name}") or headers.get(f"webhook-{name}") or ""
+
+
+def _verify_resend_signature(secret: str, headers, raw_body: bytes) -> bool:
+    """Svix manual verification: HMAC-SHA256 over '{id}.{timestamp}.{body}',
+    base64-compared (constant-time) against the signature header's v1 entries."""
+    msg_id = _svix_header(headers, "id")
+    timestamp = _svix_header(headers, "timestamp")
+    signatures = _svix_header(headers, "signature")
+    if not (msg_id and timestamp and signatures):
+        return False
+    # Drop stale deliveries (>5 min) to blunt replay attacks.
+    try:
+        if abs(time.time() - int(timestamp)) > 300:
+            return False
+    except ValueError:
+        return False
+    key = secret.split("_", 1)[1] if secret.startswith("whsec_") else secret
+    try:
+        key_bytes = base64.b64decode(key)
+    except Exception:
+        return False
+    signed = msg_id.encode() + b"." + timestamp.encode() + b"." + raw_body
+    expected = base64.b64encode(
+        hmac.new(key_bytes, signed, hashlib.sha256).digest()
+    ).decode()
+    for entry in signatures.split():
+        _, _, sig = entry.partition(",")
+        if sig and hmac.compare_digest(sig, expected):
+            return True
+    return False
+
+
+async def _fetch_received_email(email_id: str) -> dict:
+    """The webhook carries only metadata — pull the actual body via the Resend
+    Received-emails API. Best-effort: returns {} on any failure."""
+    if not (email_id and settings.RESEND_API_KEY):
+        return {}
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"https://api.resend.com/emails/receiving/{email_id}",
+                headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+            )
+            resp.raise_for_status()
+            return resp.json()
+    except Exception as exc:
+        logger.warning("Could not fetch received email %s: %s", email_id, exc)
+        return {}
+
+
 @router.post("/leads/inbound-email")
 async def inbound_email(request: Request):
-    """Stub for a future Resend inbound webhook. Logs the payload and 200s so
-    Resend treats the delivery as accepted; no parsing/matching yet."""
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {"raw": (await request.body()).decode("utf-8", "replace")[:2000]}
+    """Resend inbound webhook. On an 'email.received' event we verify the
+    signature, match the sender to a cold-outreach lead, fetch the reply body,
+    and record it (response_status='replied' + body in notes + a log event) so
+    it surfaces in the dashboard. Returns 200 on every accepted delivery so
+    Resend doesn't retry; only a bad signature is rejected."""
+    raw = await request.body()
 
-    detail = str(payload)[:1000]
-    db.log_event(None, "inbound_email", detail)
-    logger.info("Inbound email webhook received: %s", detail)
-    return {"status": "ok"}
+    secret = settings.RESEND_WEBHOOK_SECRET
+    if secret:
+        if not _verify_resend_signature(secret, request.headers, raw):
+            logger.warning("Inbound email webhook: signature verification failed")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+    else:
+        logger.warning(
+            "RESEND_WEBHOOK_SECRET not set — accepting inbound webhook UNVERIFIED"
+        )
+
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        logger.warning("Inbound email webhook: body was not JSON")
+        return {"status": "ignored"}
+
+    if payload.get("type") != "email.received":
+        logger.info("Inbound webhook ignored (type=%s)", payload.get("type"))
+        return {"status": "ignored"}
+
+    data = payload.get("data") or {}
+    email_id = data.get("email_id") or data.get("id")
+    sender = _extract_address(data.get("from", ""))
+    subject = data.get("subject", "")
+
+    received = await _fetch_received_email(email_id)
+    body_text = (received.get("text") or "").strip()
+    if not body_text and received.get("html"):
+        body_text = "(corpo solo HTML — vedi Resend)"
+    preview = body_text[:500] if body_text else f"(oggetto: {subject})"
+
+    lead = db.get_lead_by_email(sender) if sender else None
+    if lead is None:
+        db.log_event(
+            None, "inbound_email_unmatched",
+            f"da {sender or '?'} · oggetto: {subject}",
+        )
+        logger.info("Inbound email from %s matched no lead", sender)
+        return {"status": "ok", "matched": False}
+
+    # Count the response once, on the first transition out of 'none'. A human can
+    # later re-classify 'replied' → interested/not_interested/booked in the UI.
+    already_responded = lead["response_status"] not in ("none", None)
+    db.set_lead_response(lead["id"], "replied", preview)
+    if lead["campaign_id"] and not already_responded:
+        db.increment_campaign(lead["campaign_id"], "total_responded")
+    db.log_event(
+        lead["campaign_id"], "response_received",
+        f"Risposta da {sender}: {preview[:200]}",
+        lead_id=lead["id"],
+    )
+    logger.info("Inbound reply matched lead %s (%s)", lead["id"], sender)
+    return {"status": "ok", "matched": True, "lead_id": lead["id"]}
