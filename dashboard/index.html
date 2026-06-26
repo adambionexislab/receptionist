@@ -318,6 +318,22 @@
       <div id="prevBody" style="white-space:pre-wrap; margin-top:4px;">—</div>
     </div>
 
+    <h2>Invia email di prova</h2>
+    <p class="muted">
+      Invia il testo qui sopra (anche non salvato) a un indirizzo a tua scelta — così vedi
+      com'è in arrivo e puoi provare a rispondere. Le risposte arrivano alla casella del mittente.
+    </p>
+    <div class="card" style="padding:18px; margin-bottom:24px;">
+      <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+        <div class="field" style="flex:1; min-width:240px;">
+          <label for="testTo">Invia a</label>
+          <input id="testTo" class="full" type="email" placeholder="tua@email.com" />
+        </div>
+        <button class="btn" id="testBtn" onclick="sendTestEmail()">Invia prova</button>
+      </div>
+      <div class="muted" id="testHint" style="margin-top:10px;"></div>
+    </div>
+
     <h2>Agenzie da escludere</h2>
     <p class="muted">
       Le agenzie il cui <strong>nome</strong> contiene una di queste parole non verranno
@@ -696,6 +712,29 @@ function updatePreview() {
 }
 document.getElementById("tplSubject").addEventListener("input", updatePreview);
 document.getElementById("tplBody").addEventListener("input", updatePreview);
+
+async function sendTestEmail() {
+  const to = document.getElementById("testTo").value.trim();
+  if (!to) { toast("Inserisci un indirizzo email", true); return; }
+  const subject = document.getElementById("tplSubject").value;
+  const body = document.getElementById("tplBody").value;
+  const btn = document.getElementById("testBtn");
+  btn.disabled = true; btn.textContent = "Invio…";
+  try {
+    const r = await api("/outreach/test", {
+      method: "POST",
+      body: JSON.stringify({ to, subject, body }),
+    });
+    toast("Email di prova inviata a " + r.to);
+    document.getElementById("testHint").textContent =
+      "Inviata da " + r.from + " — rispondi a quell'email per testare le risposte "
+      + "(arrivano nella casella di " + r.from + ").";
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Invia prova";
+  }
+}
 
 // ── agency-name blocklist ────────────────────────────────
 async function loadExclusions() {

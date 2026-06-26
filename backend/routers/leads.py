@@ -23,6 +23,7 @@ from services.outreach import (
     get_template,
     save_template,
     send_outreach_emails,
+    send_test_email,
 )
 from services.places_scraper import (
     DEFAULT_EXCLUSIONS,
@@ -55,6 +56,15 @@ class LeadResponse(BaseModel):
 class TemplateUpdate(BaseModel):
     subject: str = Field(..., min_length=1)
     body: str = Field(..., min_length=1)
+
+
+class TestEmail(BaseModel):
+    to: str = Field(..., min_length=3)
+    # Optional overrides so the dashboard can test the on-screen (unsaved) draft;
+    # falls back to the saved template when omitted.
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    agency_name: Optional[str] = None
 
 
 class ExclusionsUpdate(BaseModel):
@@ -221,6 +231,20 @@ def update_outreach_template(data: TemplateUpdate):
     save_template(data.subject, data.body)
     db.log_event(None, "template_updated", "outreach email template saved")
     return {"status": "ok", "subject": data.subject, "body": data.body}
+
+
+@router.post("/outreach/test")
+def send_outreach_test(data: TestEmail):
+    to = data.to.strip()
+    if "@" not in to or "." not in to.split("@")[-1]:
+        raise HTTPException(status_code=422, detail="Indirizzo email non valido")
+    try:
+        result = send_test_email(to, data.subject, data.body, data.agency_name)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Invio fallito: {exc}")
+    return {"status": "ok", **result}
 
 
 # ── agency-name blocklist ─────────────────────────────────────────────────────

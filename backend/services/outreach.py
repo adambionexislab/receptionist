@@ -10,6 +10,7 @@ blocking the event loop during the 1s inter-send throttle.
 
 import logging
 import time
+from typing import Optional
 
 import httpx
 
@@ -82,6 +83,35 @@ def _send_one(client: httpx.Client, to: str, subject: str, body: str) -> None:
         timeout=15.0,
     )
     resp.raise_for_status()
+
+
+def send_test_email(
+    to: str,
+    subject: Optional[str] = None,
+    body: Optional[str] = None,
+    agency_name: Optional[str] = None,
+) -> dict:
+    """Send ONE outreach email to an arbitrary address for testing — independent
+    of campaigns and leads. Uses the supplied subject/body (so the dashboard can
+    test unsaved edits) or the saved template, rendered with a sample agency.
+
+    Returns the rendered subject + the From address so the caller can tell the
+    user where a reply will land. Raises on misconfiguration / send failure.
+    """
+    if not settings.RESEND_API_KEY:
+        raise RuntimeError("RESEND_API_KEY non configurata")
+
+    tmpl_subject, tmpl_body = get_template()
+    name = agency_name or "La Tua Agenzia"
+    rendered_subject = _render(subject or tmpl_subject, name, "Milano")
+    rendered_body = _render(body or tmpl_body, name, "Milano")
+
+    with httpx.Client() as client:
+        _send_one(client, to, f"[TEST] {rendered_subject}", rendered_body)
+
+    db.log_event(None, "test_email_sent", f"to {to} · from {_from_address()}")
+    logger.info("Test outreach email sent to %s (from %s)", to, _from_address())
+    return {"to": to, "from": _from_address(), "subject": rendered_subject}
 
 
 def send_outreach_emails(campaign_id: int) -> int:
