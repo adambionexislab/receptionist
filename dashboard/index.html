@@ -123,6 +123,7 @@
   .b-paused,    .b-no_email,
   .b-replied                 { background: rgba(240,180,41,.16); color: var(--amber); }
   .b-bounced,   .b-not_interested { background: rgba(244,103,91,.16); color: var(--red); }
+  .b-duplicate               { background: #2a313c; color: var(--text-dim); }
 
   /* ── detail view ────────────────────────────────────── */
   .detail-head { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
@@ -261,6 +262,7 @@
               <option value="sent">Email: inviata</option>
               <option value="no_email">Email: assente</option>
               <option value="bounced">Email: bounced</option>
+              <option value="duplicate">Email: duplicata</option>
               <option value="replied">Risposta: ha risposto</option>
               <option value="interested">Risposta: interessato</option>
               <option value="not_interested">Risposta: non interessato</option>
@@ -433,7 +435,7 @@ function fmtTime(iso) {
 }
 const BADGE_LABELS = {
   pending: "in attesa", running: "in corso", paused: "in pausa", completed: "completata",
-  no_email: "no email", sent: "inviata", bounced: "bounced",
+  no_email: "no email", sent: "inviata", bounced: "bounced", duplicate: "duplicato",
   none: "nessuna", replied: "ha risposto", interested: "interessato", not_interested: "non interessato", booked: "prenotata",
 };
 function badgeLabel(value) { return BADGE_LABELS[value] || value || "—"; }

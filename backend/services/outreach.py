@@ -135,6 +135,12 @@ def send_outreach_emails(campaign_id: int) -> int:
     city = start_camp["city"] if start_camp else ""
     sent = 0
 
+    # Never email the same address twice — across all campaigns (already-sent) and
+    # within this run (same email on two leads). Belt-and-suspenders on top of the
+    # scrape-time dedup, so pre-existing duplicate rows can't be re-contacted.
+    already_sent = db.sent_emails()
+    seen_this_run: set = set()
+
     # Log exactly what goes out — rendered for the first lead — once per run, so
     # it's auditable in the dashboard feed and Render logs without flooding them
     # with one full body per recipient.
@@ -159,6 +165,15 @@ def send_outreach_emails(campaign_id: int) -> int:
                 break
 
             to = lead["email"]
+            norm = (to or "").strip().lower()
+            if norm in already_sent or norm in seen_this_run:
+                db.set_email_status(lead["id"], "duplicate")
+                db.log_event(
+                    campaign_id, "skipped_duplicate_email",
+                    f"{to} già contattata — non reinviata", lead_id=lead["id"],
+                )
+                continue
+
             subject = _render(subject_tmpl, lead["agency_name"], city)
             body = _render(body_tmpl, lead["agency_name"], city)
             try:
@@ -173,6 +188,7 @@ def send_outreach_emails(campaign_id: int) -> int:
                 continue
 
             db.mark_email_sent(lead["id"])
+            seen_this_run.add(norm)
             db.increment_campaign(campaign_id, "total_emailed")
             db.log_event(campaign_id, "email_sent", f'{to} · "{subject}"', lead_id=lead["id"])
             sent += 1

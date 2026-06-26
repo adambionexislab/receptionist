@@ -223,6 +223,29 @@ def get_lead_by_email(email: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def email_exists(email: str) -> bool:
+    """True if any lead already has this email (case-insensitive). Used to avoid
+    creating a second lead for an agency we've already captured under a different
+    google_place_id — Google often lists the same agency more than once."""
+    if not email:
+        return False
+    row = _conn().execute(
+        "SELECT 1 FROM leads WHERE LOWER(email) = LOWER(?) LIMIT 1",
+        (email.strip(),),
+    ).fetchone()
+    return row is not None
+
+
+def sent_emails() -> set:
+    """Lowercased set of every email already sent an outreach message — used to
+    guarantee an address is never emailed twice, even across campaigns."""
+    rows = _conn().execute(
+        "SELECT DISTINCT LOWER(email) AS e FROM leads "
+        "WHERE email IS NOT NULL AND email != '' AND email_status = 'sent'"
+    ).fetchall()
+    return {r["e"] for r in rows}
+
+
 def get_pending_email_leads(campaign_id: int) -> list[dict]:
     rows = _conn().execute(
         "SELECT * FROM leads WHERE campaign_id = ? "
@@ -245,7 +268,7 @@ def get_leads(
     where = ["campaign_id = ?"]
     params: list[Any] = [campaign_id]
     if status:
-        if status in ("pending", "no_email", "sent", "bounced"):
+        if status in ("pending", "no_email", "sent", "bounced", "duplicate"):
             where.append("email_status = ?")
         else:
             where.append("response_status = ?")

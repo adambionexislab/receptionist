@@ -368,7 +368,15 @@ def _process_place(client: httpx.Client, campaign_id: int, place: dict) -> int:
     # Google never returns an email; derive it from the agency website if any.
     email = _scrape_website_email(client, website) if website else None
 
-    email_status = "pending" if email else "no_email"
+    # An agency we've already captured under a DIFFERENT google_place_id (Google
+    # frequently double-lists the same business) — record it but mark it so it's
+    # never emailed a second time.
+    is_dupe_email = bool(email) and db.email_exists(email)
+    if email:
+        email_status = "duplicate" if is_dupe_email else "pending"
+    else:
+        email_status = "no_email"
+
     lead_id = db.add_lead(
         campaign_id=campaign_id,
         agency_name=name,
@@ -384,7 +392,12 @@ def _process_place(client: httpx.Client, campaign_id: int, place: dict) -> int:
 
     site_note = website if website else "nessun sito su Google"
     db.log_event(campaign_id, "place_found", f"{name or place_id} · {site_note}", lead_id=lead_id)
-    if email:
+    if is_dupe_email:
+        db.log_event(
+            campaign_id, "duplicate_email",
+            f"{name}: {email} (già presente — non verrà ricontattata)", lead_id=lead_id,
+        )
+    elif email:
         db.log_event(campaign_id, "email_found", f"{name}: {email}", lead_id=lead_id)
     elif website:
         db.log_event(
