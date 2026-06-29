@@ -732,7 +732,7 @@ async function sendTestEmail() {
     toast("Email di prova inviata a " + r.to);
     document.getElementById("testHint").textContent =
       "Inviata da " + r.from + " — rispondi a quell'email per testare le risposte "
-      + "(arrivano nella casella di " + r.from + ").";
+      + "(le risposte arrivano a " + (r.reply_to || r.from) + ").";
   } catch (e) {
     toast("Errore: " + e.message, true);
   } finally {

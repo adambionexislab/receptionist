@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: Optional[str] = None
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_PHONE_NUMBER: Optional[str] = None
+    # ISO country code to provision tenant numbers from. "AT" (Austria) is the
+    # default: cheap to host, and on the intra-EU forwarding leg from an Italian
+    # carrier it's price-capped/usually plan-included. "US" is cheapest to host
+    # but bills tenants uncapped international on every forwarded call; "IT" is
+    # free-forwarding for tenants but ~40x the hosting cost.
+    TWILIO_NUMBER_COUNTRY: str = "AT"
 
     # Deployment
     PUBLIC_BASE_URL: str = "http://localhost:8000"
@@ -45,6 +51,9 @@ class Settings(BaseSettings):
     GOOGLE_PLACES_API_KEY: Optional[str] = None
     # Sender for outreach emails; falls back to RESEND_FROM when unset.
     OUTREACH_FROM_EMAIL: Optional[str] = None
+    # Reply-To for outreach emails. When set, lead replies go here (e.g. your real
+    # info@apollon-ia.com inbox) instead of the From address.
+    OUTREACH_REPLY_TO: Optional[str] = None
     CALENDLY_LINK: Optional[str] = None
 
     # Stripe billing (Checkout)

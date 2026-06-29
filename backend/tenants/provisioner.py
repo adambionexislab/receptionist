@@ -13,8 +13,9 @@ class ProvisioningError(Exception):
 
 
 def provision_twilio_number(tenant_id: str) -> str:
-    """Buy one available US local number, wire its voice webhook to
-    /call/inbound, save it on the tenant, and return it in E.164 format.
+    """Buy one available local number in settings.TWILIO_NUMBER_COUNTRY, wire
+    its voice webhook to /call/inbound, save it on the tenant, and return it in
+    E.164 format.
 
     Raises ProvisioningError on any failure so the signup endpoint can
     report it instead of silently activating a tenant with no number.
@@ -24,16 +25,22 @@ def provision_twilio_number(tenant_id: str) -> str:
     if not settings.PUBLIC_BASE_URL:
         raise ProvisioningError("PUBLIC_BASE_URL not configured")
 
+    country = settings.TWILIO_NUMBER_COUNTRY
+
     from twilio.rest import Client as TwilioClient
 
     client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
 
     try:
-        available = client.available_phone_numbers("US").local.list(limit=1)
+        available = client.available_phone_numbers(country).local.list(limit=1)
     except Exception as exc:
-        raise ProvisioningError(f"Twilio number search failed: {exc}") from exc
+        # Many non-US countries require a pre-approved regulatory bundle/address
+        # before numbers can be searched or bought; Twilio surfaces that here.
+        raise ProvisioningError(
+            f"Twilio number search failed for {country}: {exc}"
+        ) from exc
     if not available:
-        raise ProvisioningError("No US local numbers available on Twilio")
+        raise ProvisioningError(f"No {country} local numbers available on Twilio")
 
     candidate = available[0].phone_number
     try:

@@ -76,10 +76,15 @@ def _from_address() -> str:
 
 
 def _send_one(client: httpx.Client, to: str, subject: str, body: str) -> None:
+    payload = {"from": _from_address(), "to": [to], "subject": subject, "text": body}
+    # Route replies to a real inbox (e.g. info@apollon-ia.com) when configured,
+    # so prospects can answer and reach a human directly.
+    if settings.OUTREACH_REPLY_TO:
+        payload["reply_to"] = settings.OUTREACH_REPLY_TO
     resp = client.post(
         _RESEND_URL,
         headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
-        json={"from": _from_address(), "to": [to], "subject": subject, "text": body},
+        json=payload,
         timeout=15.0,
     )
     resp.raise_for_status()
@@ -95,8 +100,9 @@ def send_test_email(
     of campaigns and leads. Uses the supplied subject/body (so the dashboard can
     test unsaved edits) or the saved template, rendered with a sample agency.
 
-    Returns the rendered subject + the From address so the caller can tell the
-    user where a reply will land. Raises on misconfiguration / send failure.
+    Returns the rendered subject, the From address, and the Reply-To (where a
+    reply will land) so the caller can tell the user. Raises on misconfiguration
+    / send failure.
     """
     if not settings.RESEND_API_KEY:
         raise RuntimeError("RESEND_API_KEY non configurata")
@@ -111,7 +117,12 @@ def send_test_email(
 
     db.log_event(None, "test_email_sent", f"to {to} · from {_from_address()}")
     logger.info("Test outreach email sent to %s (from %s)", to, _from_address())
-    return {"to": to, "from": _from_address(), "subject": rendered_subject}
+    return {
+        "to": to,
+        "from": _from_address(),
+        "reply_to": settings.OUTREACH_REPLY_TO,
+        "subject": rendered_subject,
+    }
 
 
 def send_outreach_emails(campaign_id: int) -> int:

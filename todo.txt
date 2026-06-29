@@ -30,3 +30,4 @@ finish the lead generation - insructions in the claude code chat: implement AI l
 filter the leads -send oly the ones that are usefull 
 you need to add this env to render: CALENDLY_LINK  ---more in: implement AI lead generation....
 
+add to terms and conditions that tennant is responsible for carrier forwarding charges

@@ -32,6 +32,18 @@ def _format_listing_brief(listing: dict[str, Any]) -> str:
     )
 
 
+def _same_number(a: str | None, b: str | None) -> bool:
+    """True if two phone numbers look like the same line, comparing the last 9
+    significant digits so +39 / leading-0 prefixes and spacing don't matter."""
+    if not a or not b:
+        return False
+    da = "".join(ch for ch in a if ch.isdigit())
+    db = "".join(ch for ch in b if ch.isdigit())
+    if len(da) < 9 or len(db) < 9:
+        return bool(da) and da == db
+    return da[-9:] == db[-9:]
+
+
 _CALLER_INFO_LABELS: dict[str, str] = {
     "name": "Nome",
     "employment_status": "Situazione lavorativa",
@@ -298,6 +310,22 @@ _SYSTEM_PROMPT_BODY = (
 
 _SYSTEM_PROMPT = _DEFAULT_FIRST_LINE + _SYSTEM_PROMPT_BODY
 
+# Appended to the instructions only when we did NOT receive a usable caller
+# number (e.g. a carrier forwarded the call and clobbered the caller ID with
+# the tenant's own number, or the number was withheld). Tells Apollonia to ask
+# the caller for a callback number and store it via the tool 'phone' field.
+_ASK_FOR_NUMBER_INSTRUCTION = (
+    "\n\n# Numero di telefono del chiamante — IMPORTANTE\n"
+    "Non disponi del numero di telefono del chiamante: la chiamata è arrivata\n"
+    "senza un numero richiamabile. Senza un numero, l'agente non può\n"
+    "ricontattare il chiamante. Perciò, prima di chiudere la chiamata e prima\n"
+    "di chiamare record_caller_info (oppure leave_message per il TIPO C),\n"
+    "chiedi al chiamante il suo numero di telefono e ripetiglielo per\n"
+    "conferma. Passa poi il numero nel campo 'phone' dello stesso strumento.\n"
+    "Chiedi il numero una sola volta, in modo naturale; se il chiamante non\n"
+    "vuole lasciarlo, prosegui comunque senza insistere.\n"
+)
+
 
 def _build_system_prompt(agency_name: str | None, agent_name: str | None) -> str:
     """Inject the tenant's agency/agent name into the first line of the
@@ -399,6 +427,14 @@ _RECORD_CALLER_INFO_TOOL: dict[str, Any] = {
         "type": "object",
         "properties": {
             "name": {"type": "string", "description": "Caller's name"},
+            "phone": {
+                "type": "string",
+                "description": (
+                    "Caller's callback phone number, exactly as the caller "
+                    "spoke it. Only set this when you had to ask the caller for "
+                    "their number because it wasn't available automatically."
+                ),
+            },
             "employment_status": {
                 "type": "string",
                 "description": "Employment situation (e.g. dipendente, autonomo, studente) — rentals",
@@ -473,6 +509,14 @@ _LEAVE_MESSAGE_TOOL: dict[str, Any] = {
             "caller_name": {
                 "type": "string",
                 "description": "Full name of the caller",
+            },
+            "phone": {
+                "type": "string",
+                "description": (
+                    "Caller's callback phone number, exactly as the caller "
+                    "spoke it. Only set this when you had to ask the caller for "
+                    "their number because it wasn't available automatically."
+                ),
             },
             "message": {
                 "type": "string",
@@ -607,7 +651,18 @@ async def inbound_call(request: Request) -> Response:
     caller = str(form.get("From", "sconosciuto"))
     called = str(form.get("To", ""))
     call_sid = str(form.get("CallSid", ""))
-    logger.info("Inbound call webhook hit — caller=%s called=%s", caller, called)
+    # When a tenant's carrier forwards their real number to our Twilio number,
+    # ForwardedFrom should carry the tenant's number while From stays the
+    # original caller. If a carrier instead overwrites From with the tenant's
+    # number, every lead would be logged with the tenant's number — this log
+    # lets us detect that per carrier before it corrupts lead capture.
+    forwarded_from = str(form.get("ForwardedFrom", ""))
+    logger.info(
+        "Inbound call webhook hit — caller=%s called=%s forwarded_from=%s",
+        caller,
+        called,
+        forwarded_from or "(none)",
+    )
 
     tenant = db.get_by_twilio_number(called) if called else None
     if tenant is None and called and called != settings.TWILIO_PHONE_NUMBER:
@@ -757,7 +812,27 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
         logger.warning("RESEND_API_KEY/lead email not configured — lead email skipped")
         return
 
-    caller = session.get("caller_number", "sconosciuto")
+    # Work out a usable callback number. If the auto-detected caller ID is
+    # usable, use it; otherwise fall back to a number the caller spoke aloud
+    # (captured into caller_info/left_message via the tools' 'phone' field).
+    # A lead with no callback number at all is useless to the agent — skip it.
+    spoken = (
+        (session.get("caller_info") or {}).get("phone")
+        or (session.get("left_message") or {}).get("phone")
+    )
+    if session.get("caller_number_known"):
+        caller = session.get("caller_number", "sconosciuto")
+    else:
+        caller = spoken
+    if not caller:
+        logger.info(
+            "Lead suppressed — no usable caller number (caller ID was the "
+            "tenant's own number / withheld and the caller left none)"
+        )
+        return
+    # Make the resolved number the one every downstream step (summary, body,
+    # subject) sees.
+    session["caller_number"] = caller
 
     try:
         lines: list[str] = [
@@ -855,6 +930,7 @@ async def stream_ws(websocket: WebSocket) -> None:
         "stream_sid": None,
         "call_sid": None,
         "caller_number": "sconosciuto",
+        "caller_number_known": False,
         "lead_email": None,
         "listings_shown": [],
         "interested_listings": [],
@@ -905,6 +981,26 @@ async def stream_ws(websocket: WebSocket) -> None:
         instructions = _SYSTEM_PROMPT
         tenant_store = store
         session["lead_email"] = settings.LEAD_EMAIL
+
+    # Decide whether we actually have a usable caller number. When a tenant's
+    # carrier clobbers the caller ID on forwarding, From arrives as the tenant's
+    # OWN number (real_number) — useless as a callback. Same for a withheld
+    # number. In that case tell Apollonia to ask the caller for one; if she
+    # still doesn't get it, _send_lead_email suppresses the (useless) lead.
+    raw_caller = session["caller_number"]
+    tenant_real = tenant.get("real_number") if tenant else None
+    session["caller_number_known"] = (
+        raw_caller not in ("", "sconosciuto")
+        and not _same_number(raw_caller, tenant_real)
+    )
+    if not session["caller_number_known"]:
+        instructions = instructions + _ASK_FOR_NUMBER_INSTRUCTION
+        logger.info(
+            "Caller number not usable (caller=%s real_number=%s) — "
+            "Apollonia will ask the caller for one",
+            raw_caller,
+            tenant_real,
+        )
 
     session_update = json.loads(json.dumps(_SESSION_UPDATE))
     session_update["session"]["instructions"] = instructions
