@@ -18,7 +18,7 @@ from call.router import setup_twilio_webhook
 from config import settings
 from demo.router import router as demo_router
 from leadgen import db as leadgen_db
-from listings.store import store, tenant_stores
+from listings.store import ListingsStore, store, tenant_stores
 from routers.leads import router as leads_router
 from signup.router import router as signup_router
 from tenants import db
@@ -72,6 +72,32 @@ def _startup_migration() -> None:
             tenant_stores.attach(demo["id"], store)
 
 
+def _setup_sk_demo() -> None:
+    """Slovak-language demo tenant, mirroring the Italian demo above.
+
+    When TWILIO_PHONE_NUMBER_SK is set, ensure a locale='sk' "Štúdio Demo"
+    tenant exists on that number and bind it to a Slovak seed-listings store
+    (no Immobiliare.it scrape — Slovak agencies aren't on immobiliare.it).
+    Point that Twilio number's voice webhook at {PUBLIC_BASE_URL}/call/inbound.
+    """
+    number = settings.TWILIO_PHONE_NUMBER_SK
+    if not number:
+        return
+    sk = db.get_by_twilio_number(number)
+    if sk is None:
+        sk = db.create(
+            agency_name="Štúdio Demo",
+            agent_name="Apollonia",
+            twilio_number=number,
+            lead_email=settings.LEAD_EMAIL or "",
+            locale="sk",
+        )
+        logger.info("Created Slovak demo tenant 'Štúdio Demo' on %s", number)
+    # Attach a Slovak-seeded store so the first listings load serves Slovak
+    # examples instead of the Italian seed default.
+    tenant_stores.attach(sk["id"], ListingsStore(locale="sk"))
+
+
 async def _load_all_tenant_listings() -> None:
     tenants = await asyncio.to_thread(db.get_all_active)
     if not tenants:
@@ -98,6 +124,7 @@ async def _sync_loop() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await asyncio.to_thread(_startup_migration)
+    await asyncio.to_thread(_setup_sk_demo)
     await asyncio.to_thread(leadgen_db.init)
     await _load_all_tenant_listings()
     await asyncio.to_thread(setup_twilio_webhook)

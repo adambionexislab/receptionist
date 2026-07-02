@@ -13,6 +13,7 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from twilio.twiml.voice_response import Connect, Stream, VoiceResponse
 
+from call import locales
 from config import settings
 from listings.store import store, tenant_stores
 from tenants import db
@@ -24,11 +25,13 @@ router = APIRouter(prefix="/call")
 _GREETING_TEXT = "Buongiorno, sono Apollonia. Come posso aiutarla?"
 
 
-def _format_listing_brief(listing: dict[str, Any]) -> str:
+def _format_listing_brief(content: dict[str, Any], listing: dict[str, Any]) -> str:
+    raw_type = listing.get("type", "?")
+    ltype = content["type_display"].get(raw_type, raw_type)
     return (
         f"{listing.get('address', '?')} — {listing.get('zone', '?')} — "
-        f"{listing.get('type', '?')} — {listing.get('rooms', '?')} locali — "
-        f"{listing.get('size_sqm', '?')}mq — €{listing.get('price', '?')}"
+        f"{ltype} — {listing.get('rooms', '?')} {content['brief_rooms']} — "
+        f"{listing.get('size_sqm', '?')}{content['brief_area']} — €{listing.get('price', '?')}"
     )
 
 
@@ -83,13 +86,24 @@ def _load_static_audio(filename: str) -> tuple[str, float] | None:
         return None
 
 
-_greeting = _load_static_audio("greeting.wav")
-_GREETING_AUDIO: str | None = _greeting[0] if _greeting else None
-_GREETING_DURATION: float = _greeting[1] if _greeting else 0.0
+_SUPPORTED_LOCALES = ("it", "sk")
 
-_goodbye = _load_static_audio("goodbye.wav")
-_GOODBYE_AUDIO: str | None = _goodbye[0] if _goodbye else None
-_GOODBYE_DURATION: float = _goodbye[1] if _goodbye else 0.0
+
+def _load_locale_audio(locale: str, base: str) -> tuple[str, float] | None:
+    """Load a prerecorded clip for a locale. 'it' keeps the original flat
+    filenames (greeting.wav / goodbye.wav); other locales use
+    static/<base>_<locale>.wav (e.g. greeting_sk.wav). Missing files return
+    None — the caller then falls back to a model-generated greeting and, for
+    goodbye, to a short pause before hangup."""
+    filename = f"{base}.wav" if locale == "it" else f"{base}_{locale}.wav"
+    return _load_static_audio(filename)
+
+
+# (base64 mulaw payload, duration) per locale, or None when no clip is recorded.
+# Picked per call by the tenant's locale; 'it' uses the existing greeting.wav /
+# goodbye.wav, 'sk' has no clip yet (greeting is model-generated).
+_GREETING_BY_LOCALE = {loc: _load_locale_audio(loc, "greeting") for loc in _SUPPORTED_LOCALES}
+_GOODBYE_BY_LOCALE = {loc: _load_locale_audio(loc, "goodbye") for loc in _SUPPORTED_LOCALES}
 
 # Only the first line of the system prompt is tenant-specific; the body
 # (language rule, Type A/B/C flows, geography rules, qualifying questions)
@@ -327,17 +341,81 @@ _ASK_FOR_NUMBER_INSTRUCTION = (
 )
 
 
-def _build_system_prompt(agency_name: str | None, agent_name: str | None) -> str:
-    """Inject the tenant's agency/agent name into the first line of the
-    prompt; everything else stays identical to the single-tenant version."""
+# Italian baseline content (the original single-tenant strings, unchanged) keyed
+# alongside the Slovak content from call/locales.py. Both dicts share the same
+# keys; a tenant's `locale` column selects which one the phone agent uses.
+_IT_CONTENT: dict[str, Any] = {
+    "first_line_default": _DEFAULT_FIRST_LINE,
+    "first_line_template": (
+        "# Ruolo e obiettivo\nSei {name}, la receptionist virtuale di {agency}.\n"
+    ),
+    "system_prompt_body": _SYSTEM_PROMPT_BODY,
+    "ask_for_number": _ASK_FOR_NUMBER_INSTRUCTION,
+    "greeting_text": _GREETING_TEXT,
+    "greeting_prompt": (
+        "Il telefono ha squillato e hai risposto. "
+        "Saluta il chiamante e chiedi come puoi aiutarlo."
+    ),
+    "caller_info_labels": _CALLER_INFO_LABELS,
+    "summary_instruction": (
+        "Sei l'assistente di un'agenzia immobiliare. "
+        "Riassumi in UNA sola frase, in italiano, l'esito "
+        "della telefonata descritta dall'utente, in modo "
+        "che l'agente capisca subito di cosa si tratta "
+        "(chi ha chiamato e cosa vuole). Scrivi solo la "
+        "frase, senza preamboli, virgolette o elenchi."
+    ),
+    "unknown_caller": "sconosciuto",
+    "email_caller_label": "Chiamante",
+    "email_section_collected": "=== Dati raccolti dal chiamante ===",
+    "email_no_data": "Nessun dato raccolto.",
+    "email_section_interested": "=== Immobile di interesse ===",
+    "email_none_specified": "Nessuno specificato dal chiamante.",
+    "email_section_others": "=== Altri immobili presentati ===",
+    "email_none": "Nessuno.",
+    "email_section_message": "=== Messaggio lasciato ===",
+    "email_name_label": "Nome",
+    "email_urgency_label": "Urgenza",
+    "email_urgency_default": "normale",
+    "email_message_label": "Messaggio",
+    "email_format_error": (
+        "(errore nella formattazione del corpo della mail — controlla i log)"
+    ),
+    "email_subject_lead": "Nuovo lead — {caller}",
+    "email_subject_message": "Nuovo messaggio — {caller}",
+    "email_subject_call": "Chiamata — {caller}",
+    "urgency_display": {"normale": "normale", "urgente": "urgente"},
+    "brief_rooms": "locali",
+    "brief_area": "mq",
+    "type_display": {"vendita": "vendita", "affitto": "affitto"},
+    "listing_noun": (lambda n: "immobile" if n == 1 else "immobili"),
+    "summary_interested": "{who} ha chiamato ed è interessato a {n} {noun}.",
+    "summary_message": "{who} ha lasciato un messaggio in segreteria.",
+    "summary_shown": (
+        "{who} ha chiamato e ha visto alcuni immobili, "
+        "senza indicarne uno di interesse."
+    ),
+    "summary_plain": "{who} ha chiamato.",
+}
+
+_CONTENT: dict[str, dict[str, Any]] = {"it": _IT_CONTENT, "sk": locales.SK}
+
+
+def _content(locale: str | None) -> dict[str, Any]:
+    """Per-locale agent content, defaulting to Italian for unknown locales."""
+    return _CONTENT.get(locale or "it", _IT_CONTENT)
+
+
+def _build_system_prompt(
+    content: dict[str, Any], agency_name: str | None, agent_name: str | None
+) -> str:
+    """Build the system prompt for a locale: inject the tenant's agency/agent
+    name into the first line; the body is the locale's full instruction set."""
+    body = content["system_prompt_body"]
     if not agency_name:
-        return _SYSTEM_PROMPT
+        return content["first_line_default"] + body
     name = agent_name or "Apollonia"
-    return (
-        "# Ruolo e obiettivo\n"
-        f"Sei {name}, la receptionist virtuale di {agency_name}.\n"
-        + _SYSTEM_PROMPT_BODY
-    )
+    return content["first_line_template"].format(name=name, agency=agency_name) + body
 
 _SEARCH_TOOL: dict[str, Any] = {
     "type": "function",
@@ -716,10 +794,10 @@ async def recording_status(request: Request) -> Response:
 _SUMMARY_MODEL = "gpt-5.4-nano"
 
 
-def _fallback_lead_summary(session: dict[str, Any]) -> str:
+def _fallback_lead_summary(content: dict[str, Any], session: dict[str, Any]) -> str:
     """Deterministic one-sentence summary, used when the text model is
     unavailable (no API key) or the request fails."""
-    caller = session.get("caller_number", "sconosciuto")
+    caller = session.get("caller_number", content["unknown_caller"])
     caller_name = (
         (session.get("caller_info") or {}).get("name")
         or (session.get("left_message") or {}).get("caller_name")
@@ -727,18 +805,13 @@ def _fallback_lead_summary(session: dict[str, Any]) -> str:
     who = caller_name or caller
     n_interested = len(session.get("interested_listings") or [])
     if n_interested:
-        return (
-            f"{who} ha chiamato ed è interessato a "
-            f"{n_interested} immobil{'e' if n_interested == 1 else 'i'}."
-        )
+        noun = content["listing_noun"](n_interested)
+        return content["summary_interested"].format(who=who, n=n_interested, noun=noun)
     if session.get("left_message") is not None:
-        return f"{who} ha lasciato un messaggio in segreteria."
+        return content["summary_message"].format(who=who)
     if session.get("listings_shown"):
-        return (
-            f"{who} ha chiamato e ha visto alcuni immobili, "
-            "senza indicarne uno di interesse."
-        )
-    return f"{who} ha chiamato."
+        return content["summary_shown"].format(who=who)
+    return content["summary_plain"].format(who=who)
 
 
 def _extract_response_text(data: dict[str, Any]) -> str:
@@ -757,12 +830,15 @@ def _extract_response_text(data: dict[str, Any]) -> str:
     return "".join(parts)
 
 
-async def _generate_lead_summary(detail_body: str, session: dict[str, Any]) -> str:
-    """Ask a text model to write a one-sentence Italian summary of the call so
-    the agent immediately understands what the email is about. Falls back to a
-    deterministic template if the API key is missing or the request fails."""
+async def _generate_lead_summary(
+    content: dict[str, Any], detail_body: str, session: dict[str, Any]
+) -> str:
+    """Ask a text model to write a one-sentence summary of the call, in the
+    tenant's locale, so the agent immediately understands what the email is
+    about. Falls back to a deterministic template if the API key is missing or
+    the request fails."""
     if not settings.OPENAI_API_KEY:
-        return _fallback_lead_summary(session)
+        return _fallback_lead_summary(content, session)
     try:
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.post(
@@ -770,14 +846,7 @@ async def _generate_lead_summary(detail_body: str, session: dict[str, Any]) -> s
                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
                 json={
                     "model": _SUMMARY_MODEL,
-                    "instructions": (
-                        "Sei l'assistente di un'agenzia immobiliare. "
-                        "Riassumi in UNA sola frase, in italiano, l'esito "
-                        "della telefonata descritta dall'utente, in modo "
-                        "che l'agente capisca subito di cosa si tratta "
-                        "(chi ha chiamato e cosa vuole). Scrivi solo la "
-                        "frase, senza preamboli, virgolette o elenchi."
-                    ),
+                    "instructions": content["summary_instruction"],
                     "input": detail_body,
                     # nano on a simple summarisation task: lightest supported
                     # reasoning + terse output. max_output_tokens covers
@@ -797,17 +866,18 @@ async def _generate_lead_summary(detail_body: str, session: dict[str, Any]) -> s
                     response.status_code,
                     response.text,
                 )
-                return _fallback_lead_summary(session)
+                return _fallback_lead_summary(content, session)
             summary = _extract_response_text(response.json()).strip()
             if summary:
                 return summary
     except Exception as exc:
         logger.error("Failed to generate lead summary via LLM: %s", exc)
-    return _fallback_lead_summary(session)
+    return _fallback_lead_summary(content, session)
 
 
 async def _send_lead_email(session: dict[str, Any]) -> None:
     recipient = session.get("lead_email") or settings.LEAD_EMAIL
+    content = _content(session.get("locale"))
     if not settings.RESEND_API_KEY or not recipient:
         logger.warning("RESEND_API_KEY/lead email not configured — lead email skipped")
         return
@@ -821,7 +891,7 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
         or (session.get("left_message") or {}).get("phone")
     )
     if session.get("caller_number_known"):
-        caller = session.get("caller_number", "sconosciuto")
+        caller = session.get("caller_number", content["unknown_caller"])
     else:
         caller = spoken
     if not caller:
@@ -836,57 +906,59 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
 
     try:
         lines: list[str] = [
-            f"Chiamante: {caller}",
+            f"{content['email_caller_label']}: {caller}",
             "",
         ]
 
-        lines += ["=== Dati raccolti dal chiamante ==="]
+        lines += [content["email_section_collected"]]
         caller_info = session.get("caller_info") or {}
         if caller_info:
-            for key, label in _CALLER_INFO_LABELS.items():
+            for key, label in content["caller_info_labels"].items():
                 if caller_info.get(key):
                     lines.append(f"{label}: {caller_info[key]}")
         else:
-            lines.append("Nessun dato raccolto.")
+            lines.append(content["email_no_data"])
         lines.append("")
 
-        lines += ["=== Immobile di interesse ==="]
+        lines += [content["email_section_interested"]]
         if session["interested_listings"]:
             for listing in session["interested_listings"]:
-                lines.append(_format_listing_brief(listing))
+                lines.append(_format_listing_brief(content, listing))
         else:
-            lines.append("Nessuno specificato dal chiamante.")
+            lines.append(content["email_none_specified"])
             lines.append("")
 
         others = [
             listing for listing in session["listings_shown"]
             if listing not in session["interested_listings"]
         ]
-        lines += ["", "=== Altri immobili presentati ==="]
+        lines += ["", content["email_section_others"]]
         if others:
             for listing in others:
-                lines.append(_format_listing_brief(listing))
+                lines.append(_format_listing_brief(content, listing))
         else:
-            lines.append("Nessuno.")
+            lines.append(content["email_none"])
 
         if session.get("left_message"):
             msg_data = session["left_message"]
-            lines += ["", "=== Messaggio lasciato ==="]
-            lines.append(f"Nome: {msg_data.get('caller_name', 'sconosciuto')}")
-            lines.append(f"Urgenza: {msg_data.get('urgency', 'normale')}")
-            lines.append(f"Messaggio: {msg_data.get('message', '')}")
+            urgency_tok = msg_data.get("urgency") or content["email_urgency_default"]
+            urgency_disp = content["urgency_display"].get(urgency_tok, urgency_tok)
+            lines += ["", content["email_section_message"]]
+            lines.append(f"{content['email_name_label']}: {msg_data.get('caller_name', content['unknown_caller'])}")
+            lines.append(f"{content['email_urgency_label']}: {urgency_disp}")
+            lines.append(f"{content['email_message_label']}: {msg_data.get('message', '')}")
 
         detail_body = "\n".join(lines)
     except Exception as exc:
         logger.error("Failed to format lead email body: %s", exc)
         detail_body = (
-            f"Chiamante: {caller}\n"
-            f"(errore nella formattazione del corpo della mail — controlla i log)"
+            f"{content['email_caller_label']}: {caller}\n"
+            f"{content['email_format_error']}"
         )
 
     # Let a text model write a one-sentence summary of the call so the agent
     # grasps the lead at a glance, then prepend it to the detailed body.
-    summary = await _generate_lead_summary(detail_body, session)
+    summary = await _generate_lead_summary(content, detail_body, session)
     body = f"{summary}\n\n{detail_body}"
 
     try:
@@ -898,11 +970,11 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
                     "from": settings.RESEND_FROM,
                     "to": [recipient],
                     "subject": (
-                        f"Nuovo lead — {caller}"
+                        content["email_subject_lead"].format(caller=caller)
                         if session.get("listings_shown")
-                        else f"Nuovo messaggio — {caller}"
+                        else content["email_subject_message"].format(caller=caller)
                         if session.get("left_message") is not None
-                        else f"Chiamata — {caller}"
+                        else content["email_subject_call"].format(caller=caller)
                     ),
                     "text": body,
                 },
@@ -972,15 +1044,28 @@ async def stream_ws(websocket: WebSocket) -> None:
         return
 
     tenant = db.get_by_id(tenant_id) if tenant_id else None
+    locale = (tenant.get("locale") if tenant else None) or "it"
+    content = _content(locale)
+    session["locale"] = locale
     if tenant is not None:
-        instructions = _build_system_prompt(tenant["agency_name"], tenant["agent_name"])
+        instructions = _build_system_prompt(content, tenant["agency_name"], tenant["agent_name"])
         tenant_store = tenant_stores.get_or_create(tenant["id"])
         session["lead_email"] = tenant.get("lead_email") or settings.LEAD_EMAIL
     else:
         # Env-var fallback: demo behaviour, global store, owner's lead email.
-        instructions = _SYSTEM_PROMPT
+        instructions = _build_system_prompt(content, None, None)
         tenant_store = store
         session["lead_email"] = settings.LEAD_EMAIL
+
+    # Prerecorded clips for this locale (None when none is recorded — e.g. the
+    # Slovak demo has no WAV yet, so the greeting is model-generated and the
+    # goodbye is a short pause + hangup).
+    greeting_clip = _GREETING_BY_LOCALE.get(locale)
+    greeting_audio = greeting_clip[0] if greeting_clip else None
+    greeting_duration = greeting_clip[1] if greeting_clip else 0.0
+    goodbye_clip = _GOODBYE_BY_LOCALE.get(locale)
+    goodbye_audio = goodbye_clip[0] if goodbye_clip else None
+    goodbye_duration = goodbye_clip[1] if goodbye_clip else 0.0
 
     # Decide whether we actually have a usable caller number. When a tenant's
     # carrier clobbers the caller ID on forwarding, From arrives as the tenant's
@@ -994,7 +1079,7 @@ async def stream_ws(websocket: WebSocket) -> None:
         and not _same_number(raw_caller, tenant_real)
     )
     if not session["caller_number_known"]:
-        instructions = instructions + _ASK_FOR_NUMBER_INSTRUCTION
+        instructions = instructions + content["ask_for_number"]
         logger.info(
             "Caller number not usable (caller=%s real_number=%s) — "
             "Apollonia will ask the caller for one",
@@ -1031,7 +1116,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                 else:
                     logger.info("OpenAI startup event: %s", etype)
 
-            if _GREETING_AUDIO:
+            if greeting_audio:
                 # Inject prerecorded greeting as an assistant turn so OpenAI
                 # knows the greeting was said without generating its own audio.
                 await oai_ws.send(json.dumps({
@@ -1039,7 +1124,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                     "item": {
                         "type": "message",
                         "role": "assistant",
-                        "content": [{"type": "output_text", "text": _GREETING_TEXT}],
+                        "content": [{"type": "output_text", "text": content["greeting_text"]}],
                     },
                 }))
                 logger.info("Prerecorded greeting injected into context")
@@ -1049,15 +1134,15 @@ async def stream_ws(websocket: WebSocket) -> None:
                         "streamSid": session["stream_sid"],
                         "media": {
                             "track": "outbound",
-                            "payload": _GREETING_AUDIO,
+                            "payload": greeting_audio,
                         },
                     }))
                     session["suppress_input_until"] = (
                         asyncio.get_event_loop().time()
-                        + _GREETING_DURATION + 0.5
+                        + greeting_duration + 0.5
                     )
             else:
-                # Fallback: let OpenAI generate the greeting.
+                # Fallback: let OpenAI generate the greeting (in this locale).
                 await oai_ws.send(json.dumps({
                     "type": "conversation.item.create",
                     "item": {
@@ -1066,10 +1151,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                         "content": [
                             {
                                 "type": "input_text",
-                                "text": (
-                                    "Il telefono ha squillato e hai risposto. "
-                                    "Saluta il chiamante e chiedi come puoi aiutarlo."
-                                ),
+                                "text": content["greeting_prompt"],
                             }
                         ],
                     },
@@ -1269,13 +1351,13 @@ async def stream_ws(websocket: WebSocket) -> None:
                                     "output": json.dumps({"ended": True}),
                                 },
                             }))
-                            if _GOODBYE_AUDIO and session["stream_sid"]:
+                            if goodbye_audio and session["stream_sid"]:
                                 await websocket.send_text(json.dumps({
                                     "event": "media",
                                     "streamSid": session["stream_sid"],
                                     "media": {
                                         "track": "outbound",
-                                        "payload": _GOODBYE_AUDIO,
+                                        "payload": goodbye_audio,
                                     },
                                 }))
                                 # Mark the end of the goodbye so Twilio tells us
@@ -1289,14 +1371,18 @@ async def stream_ws(websocket: WebSocket) -> None:
                                 try:
                                     await asyncio.wait_for(
                                         session["goodbye_played"].wait(),
-                                        timeout=_GOODBYE_DURATION + 2.0,
+                                        timeout=goodbye_duration + 2.0,
                                     )
                                 except asyncio.TimeoutError:
                                     logger.warning(
                                         "Goodbye mark not received — hanging up anyway"
                                     )
                             else:
-                                await asyncio.sleep(1.5)
+                                # No prerecorded goodbye for this locale: the
+                                # prompt has the agent speak her own farewell, so
+                                # give it a moment to finish streaming out before
+                                # we hang up.
+                                await asyncio.sleep(3.0)
                             await asyncio.to_thread(_hangup_call, session["call_sid"])
                             await websocket.close()
                             return

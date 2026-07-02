@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: Optional[str] = None
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_PHONE_NUMBER: Optional[str] = None
+    # Optional second demo number for the Slovak-language demo tenant. When set,
+    # a locale='sk' "Štúdio Demo" tenant (Slovak seed listings, Slovak agent) is
+    # created/bound to it at startup, exactly as TWILIO_PHONE_NUMBER drives the
+    # Italian demo tenant. Point an existing Twilio number's voice webhook here.
+    TWILIO_PHONE_NUMBER_SK: Optional[str] = None
     # ISO country code to provision tenant numbers from. "AT" (Austria) is the
     # default: cheap to host, and on the intra-EU forwarding leg from an Italian
     # carrier it's price-capped/usually plan-included. "US" is cheapest to host

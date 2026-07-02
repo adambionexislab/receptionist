@@ -38,9 +38,17 @@ CREATE TABLE IF NOT EXISTS tenants (
   plan            TEXT,
   billing_period  TEXT,
   management_mode TEXT DEFAULT 'perse_cancellate',
+  locale          TEXT NOT NULL DEFAULT 'it',
   active          INTEGER DEFAULT 1
 )
 """
+
+# Columns added after the original table shipped. CREATE TABLE IF NOT EXISTS
+# won't alter an existing tenants table on already-deployed disks, so each of
+# these is added with an idempotent ALTER on startup (see _migrate).
+_ADDED_COLUMNS = {
+    "locale": "TEXT NOT NULL DEFAULT 'it'",
+}
 
 _COLUMNS = {
     "id",
@@ -54,6 +62,7 @@ _COLUMNS = {
     "plan",
     "billing_period",
     "management_mode",
+    "locale",
     "active",
 }
 
@@ -69,10 +78,21 @@ def _get_conn() -> sqlite3.Connection:
                 conn = sqlite3.connect(str(db_path), check_same_thread=False)
                 conn.row_factory = sqlite3.Row
                 conn.execute(_SCHEMA)
+                _migrate(conn)
                 conn.commit()
                 _conn = conn
                 logger.info("Tenants DB opened at %s", db_path)
     return _conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add columns introduced after the table first shipped. Idempotent: each
+    column is added only if a pre-existing tenants table is missing it."""
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(tenants)")}
+    for column, ddl in _ADDED_COLUMNS.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE tenants ADD COLUMN {column} {ddl}")
+            logger.info("Migrated tenants table: added column %s", column)
 
 
 def get_connection() -> sqlite3.Connection:
@@ -122,6 +142,7 @@ def create(**fields: Any) -> dict:
         "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "agent_name": "Apollonia",
         "management_mode": "perse_cancellate",
+        "locale": "it",
         "active": 1,
         **fields,
     }

@@ -71,10 +71,14 @@ class ListingsStore:
         self,
         immobiliare_url: Optional[str] = None,
         use_github_csv: bool = False,
+        locale: str = "it",
     ) -> None:
         self._listings: list[dict] = []
         self.immobiliare_url = immobiliare_url
         self.use_github_csv = use_github_csv
+        # Which seed set to fall back to (it / sk). Lets a seed-only tenant (e.g.
+        # the Slovak demo) serve listings in its own locale.
+        self.locale = locale
 
     async def load(self) -> None:
         """Two loading strategies:
@@ -91,7 +95,7 @@ class ListingsStore:
         if self.use_github_csv:
             loaded = await self._load_from_github()
             if not loaded:
-                self._listings = get_seed_listings()
+                self._listings = get_seed_listings(self.locale)
                 logger.info("Loaded %d seed listings as fallback", len(self._listings))
 
             if _APIFY_SYNC_PAUSED:
@@ -108,7 +112,7 @@ class ListingsStore:
 
         if not self.immobiliare_url:
             if not self._listings:
-                self._listings = get_seed_listings()
+                self._listings = get_seed_listings(self.locale)
                 logger.info("Tenant has no immobiliare_url — loaded %d seed listings", len(self._listings))
             return
 
@@ -118,7 +122,7 @@ class ListingsStore:
             await self._apify_scrape(self.immobiliare_url, write_github=False)
 
         if not self._listings:
-            self._listings = get_seed_listings()
+            self._listings = get_seed_listings(self.locale)
             logger.info("Scrape yielded nothing — loaded %d seed listings as fallback", len(self._listings))
 
     async def _load_from_github(self) -> bool:
