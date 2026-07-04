@@ -626,11 +626,18 @@ _SESSION_UPDATE: dict[str, Any] = {
         "audio": {
             "input": {
                 "format": {"type": "audio/pcm", "rate": 24000},
+                # server VAD decides when the caller's turn ends and only then
+                # does the model reply. threshold is how loud audio must be to
+                # count as speech: too high and quiet/short utterances never
+                # register, so she stays silent until the caller repeats. 0.5 is
+                # the API default; we sit just under 0.6 to catch more real
+                # speech while still ignoring line noise. silence_duration is how
+                # long a pause ends the turn — shorter = snappier replies.
                 "turn_detection": {
                     "type": "server_vad",
-                    "threshold": 0.6,
-                    "prefix_padding_ms": 500,
-                    "silence_duration_ms": 800,
+                    "threshold": 0.5,
+                    "prefix_padding_ms": 300,
+                    "silence_duration_ms": 600,
                 },
             },
             "output": {

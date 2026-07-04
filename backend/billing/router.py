@@ -42,6 +42,11 @@ _PRICE_TO_PLAN = {
     "price_1TgQbj17IdyiO0xX6lzHNXk6": "Max (Annuale)",
 }
 
+# Which market the checkout started from ("it" = homepage, "sk" = /sk/ page).
+# It drives the Stripe Checkout UI language and where the cancel button returns.
+# Anything else falls back to Italian. The same six prices serve both markets.
+_ALLOWED_LOCALES = {"it", "sk"}
+
 
 class CheckoutRequest(BaseModel):
     price_id: str
@@ -54,6 +59,9 @@ class CheckoutRequest(BaseModel):
     plan: Optional[str] = None
     pagamento: Optional[str] = None
     modalita: Optional[str] = None
+    # Originating market ("it" homepage or "sk" /sk/ page). Sets the Stripe
+    # Checkout UI language and the cancel-return page; validated server-side.
+    locale: Optional[str] = "it"
 
 
 @router.post("/create-checkout-session")
@@ -67,6 +75,10 @@ async def create_checkout_session(data: CheckoutRequest):
 
     stripe.api_key = settings.STRIPE_SECRET_KEY
     base = settings.PUBLIC_BASE_URL.rstrip("/")
+
+    checkout_locale = data.locale if data.locale in _ALLOWED_LOCALES else "it"
+    # Return a cancelled Slovak checkout to /sk/, everything else to the homepage.
+    cancel_path = "/sk/" if checkout_locale == "sk" else "/"
 
     metadata = {
         "plan_label": _PRICE_TO_PLAN[data.price_id],
@@ -84,8 +96,10 @@ async def create_checkout_session(data: CheckoutRequest):
             # No payment_method_types: let Stripe pick eligible methods dynamically.
             line_items=[{"price": data.price_id, "quantity": 1}],
             customer_email=data.customer_email,
+            # Show Stripe's hosted checkout in the market's language.
+            locale=checkout_locale,
             success_url=f"{base}/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{base}/",
+            cancel_url=f"{base}{cancel_path}",
             metadata=metadata,
             subscription_data={"metadata": metadata},
         )
@@ -155,23 +169,25 @@ async def _send_customer_confirmation(meta: dict, email: Optional[str]) -> None:
         return
 
     studio = meta.get("studio_name")
-    greeting = f"Gentile {studio}," if studio else "Buongiorno,"
-    plan = meta.get("plan_label") or meta.get("plan") or ""
+    greeting = f"Dear {studio}," if studio else "Hello,"
+    # Use the language-neutral plan tier ("Base"/"Pro"/"Max"), not the Italian
+    # plan_label, so this English email doesn't embed "(Mensile)".
+    plan = meta.get("plan") or ""
     body = "\n".join([
         greeting,
         "",
-        "grazie! Abbiamo ricevuto il tuo pagamento" + (f" per il piano {plan}." if plan else "."),
+        "thank you! We've received your payment" + (f" for the {plan} plan." if plan else "."),
         "",
-        "Il nostro team ti contatterà entro 24 ore per configurare il tuo "
-        "numero Apollonia e attivare l'inoltro delle chiamate.",
+        "Our team will contact you within 24 hours to set up your Apollonia "
+        "number and activate call forwarding.",
         "",
-        "Se hai domande, rispondi pure a questa email.",
+        "If you have any questions, just reply to this email.",
         "",
-        "A presto,",
-        "il team ApollonIA",
+        "Best regards,",
+        "The ApollonIA team",
     ])
     try:
-        await _send_email(email, "ApollonIA — pagamento confermato", body)
+        await _send_email(email, "ApollonIA — payment confirmed", body)
         logger.info("Customer confirmation sent to %s", email)
     except Exception as exc:
         logger.error("Failed to send customer confirmation to %s: %s", email, exc)

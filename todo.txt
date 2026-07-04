@@ -34,3 +34,9 @@ add to terms and conditions that tennant is responsible for carrier forwarding c
 
 in slovak: stripe slovak localization, scraping nehnutelnosti/reality, lead gen for slovakia
 prezzo su richiesta - deve sapere gestirlo
+
+confirmation email is now in english for both markets you need to change that
+
+Two product-content decisions for you (non-blocking — I translated faithfully)
+immobiliare.it still appears throughout the Slovak page (marquee, how-it-works card, feature/pricing bullets, the signup field "Odkaz na profil immobiliare.it", JSON-LD). Slovak agencies aren't on immobiliare.it — do you want that swapped for a Slovak portal / generic "listings sync" wording, or left as-is for now?
+Signup field immobiliare_url is still required by the form + backend. A Slovak agency has no such URL. Same question — leave, relabel, or make optional later?
