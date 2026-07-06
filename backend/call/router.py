@@ -1,17 +1,17 @@
 import asyncio
-import audioop
 import base64
+import hashlib
+import hmac
 import json
 import logging
-import wave
-from pathlib import Path
+import re
+import time
 from typing import Any
 
 import httpx
 import websockets
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
-from twilio.twiml.voice_response import Connect, Stream, VoiceResponse
 
 from call import locales
 from config import settings
@@ -60,50 +60,6 @@ _CALLER_INFO_LABELS: dict[str, str] = {
     "visit_availability": "Disponibilità per visita",
 }
 
-
-def _load_static_audio(filename: str) -> tuple[str, float] | None:
-    """Load static/<filename> and return (base64 mulaw 8kHz payload, duration
-    in seconds), or None if the file is missing or fails to load."""
-    path = Path(__file__).parent.parent / "static" / filename
-    if not path.exists():
-        return None
-    try:
-        with wave.open(str(path), "rb") as wf:
-            pcm = wf.readframes(wf.getnframes())
-            rate = wf.getframerate()
-            channels = wf.getnchannels()
-            width = wf.getsampwidth()
-        if width != 2:
-            pcm = audioop.lin2lin(pcm, width, 2)
-        if channels > 1:
-            pcm = audioop.tomono(pcm, 2, 1)
-        if rate != 8000:
-            pcm, _ = audioop.ratecv(pcm, 2, 1, rate, 8000, None)
-        mulaw = audioop.lin2ulaw(pcm, 2)
-        return base64.b64encode(mulaw).decode(), len(mulaw) / 8000.0
-    except Exception as exc:
-        logger.error("Failed to load audio file %s: %s", filename, exc)
-        return None
-
-
-_SUPPORTED_LOCALES = ("it", "sk")
-
-
-def _load_locale_audio(locale: str, base: str) -> tuple[str, float] | None:
-    """Load a prerecorded clip for a locale. 'it' keeps the original flat
-    filenames (greeting.wav / goodbye.wav); other locales use
-    static/<base>_<locale>.wav (e.g. greeting_sk.wav). Missing files return
-    None — the caller then falls back to a model-generated greeting and, for
-    goodbye, to a short pause before hangup."""
-    filename = f"{base}.wav" if locale == "it" else f"{base}_{locale}.wav"
-    return _load_static_audio(filename)
-
-
-# (base64 mulaw payload, duration) per locale, or None when no clip is recorded.
-# Picked per call by the tenant's locale; 'it' uses the existing greeting.wav /
-# goodbye.wav, 'sk' has no clip yet (greeting is model-generated).
-_GREETING_BY_LOCALE = {loc: _load_locale_audio(loc, "greeting") for loc in _SUPPORTED_LOCALES}
-_GOODBYE_BY_LOCALE = {loc: _load_locale_audio(loc, "goodbye") for loc in _SUPPORTED_LOCALES}
 
 # Only the first line of the system prompt is tenant-specific; the body
 # (language rule, Type A/B/C flows, geography rules, qualifying questions)
@@ -315,9 +271,9 @@ _SYSTEM_PROMPT_BODY = (
     "Subito dopo aver detto al chiamante che inoltrerai la sua richiesta a\n"
     "un agente immobiliare:\n"
     "1. Chiedi se può aiutarlo con qualcos'altro.\n"
-    "2. Se dice di no: NON salutare a voce e non dire arrivederci — il saluto\n"
-    "   di chiusura viene riprodotto automaticamente dal sistema. Chiama\n"
-    "   semplicemente lo strumento end_call senza aggiungere altro.\n"
+    "2. Se dice di no: salutalo brevemente (es. 'Grazie della chiamata, buona\n"
+    "   giornata, arrivederci.') e SUBITO DOPO chiama lo strumento end_call.\n"
+    "   Non aggiungere altro dopo il saluto.\n"
     "3. Se dice di sì: continua ad aiutarlo normalmente, e ripeti questa\n"
     "   procedura quando hai finito.\n"
 )
@@ -561,9 +517,8 @@ _END_CALL_TOOL: dict[str, Any] = {
     "description": (
         "End the phone call. Use this ONLY after telling the caller you'll "
         "forward their request to a real estate agent, asking if there's "
-        "anything else you can help with, and the caller says no. Do NOT say "
-        "goodbye yourself first — a closing message is played automatically; "
-        "just call this tool."
+        "anything else you can help with, and the caller says no. Say a short "
+        "goodbye to the caller first, then call this tool to hang up."
     ),
     "parameters": {
         "type": "object",
@@ -658,141 +613,268 @@ _SESSION_UPDATE: dict[str, Any] = {
 }
 
 
-def setup_twilio_webhook() -> None:
-    """Set the voice webhook URL on the configured Twilio number. Runs at startup."""
-    if not settings.TWILIO_ACCOUNT_SID or not settings.PUBLIC_BASE_URL:
-        logger.info("Twilio credentials not set — skipping automatic webhook setup")
-        return
-    try:
-        from twilio.rest import Client as TwilioClient
+# ── OpenAI Realtime SIP call control ─────────────────────────────────────────
+# Inbound calls arrive over SIP: the Twilio number's SIP trunk routes the call
+# to OpenAI's SIP connector (sip:<PROJECT_ID>@sip.api.openai.com;transport=tls),
+# OpenAI terminates the media itself, and notifies us with a signed
+# `realtime.call.incoming` webhook. We accept the call (configuring the realtime
+# session), then attach a control WebSocket to drive tools + hangup. No audio
+# ever flows through this server anymore.
+_OPENAI_REALTIME_BASE = "https://api.openai.com/v1/realtime"
 
-        client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
-        numbers = client.incoming_phone_numbers.list(
-            phone_number=settings.TWILIO_PHONE_NUMBER
-        )
-        if not numbers:
-            logger.error(
-                "Twilio number %s not found in account", settings.TWILIO_PHONE_NUMBER
+# Strong references to in-flight call tasks. A minutes-long call runs on a
+# detached task; without a live reference the event loop can garbage-collect it
+# mid-call and drop the line. Tasks remove themselves on completion.
+_active_calls: set[asyncio.Task] = set()
+
+
+def _verify_openai_webhook(secret: str, headers, raw_body: bytes) -> bool:
+    """Verify an OpenAI webhook (Standard Webhooks spec, same scheme Resend/Svix
+    use): HMAC-SHA256 over '{id}.{timestamp}.{body}', base64-compared
+    constant-time against the v1 entries of the webhook-signature header."""
+    msg_id = headers.get("webhook-id", "")
+    timestamp = headers.get("webhook-timestamp", "")
+    signatures = headers.get("webhook-signature", "")
+    if not (msg_id and timestamp and signatures):
+        return False
+    # Drop stale deliveries (>5 min) to blunt replay attacks.
+    try:
+        if abs(time.time() - int(timestamp)) > 300:
+            return False
+    except ValueError:
+        return False
+    key = secret.split("_", 1)[1] if secret.startswith("whsec_") else secret
+    try:
+        key_bytes = base64.b64decode(key)
+    except Exception:
+        return False
+    signed = msg_id.encode() + b"." + timestamp.encode() + b"." + raw_body
+    expected = base64.b64encode(
+        hmac.new(key_bytes, signed, hashlib.sha256).digest()
+    ).decode()
+    for entry in signatures.split():
+        _, _, sig = entry.partition(",")
+        if sig and hmac.compare_digest(sig, expected):
+            return True
+    return False
+
+
+def _sip_header(headers: list[dict[str, Any]], name: str) -> str:
+    """First value of a SIP header from the webhook's sip_headers array."""
+    for h in headers or []:
+        if (h.get("name") or "").lower() == name.lower():
+            return h.get("value") or ""
+    return ""
+
+
+def _extract_sip_number(header_value: str) -> str:
+    """Pull a phone number out of a SIP From/To header value, which looks like
+    '"Mario" <sip:+3902123@host;user=phone>;tag=..' or '<tel:+3902123>'. Returns
+    E.164-ish (keeps a leading + when present) or '' for anonymous/withheld."""
+    if not header_value:
+        return ""
+    m = re.search(r"(?:sip|tel):([^@;>\s]+)", header_value, re.IGNORECASE)
+    user = m.group(1) if m else header_value
+    if "anonymous" in user.lower():
+        return ""
+    digits = "".join(ch for ch in user if ch.isdigit())
+    if not digits:
+        return ""
+    return ("+" if user.strip().startswith("+") else "") + digits
+
+
+def _find_tenant_by_dialed(dialed: str) -> dict | None:
+    """Route an inbound call to a tenant by the dialed DID. Tries an exact
+    twilio_number match first, then a tolerant last-9-digit match so SIP
+    formatting differences (+prefix, leading zeros) don't miss the tenant."""
+    if not dialed:
+        return None
+    exact = db.get_by_twilio_number(dialed)
+    if exact:
+        return exact
+    for cand in db.get_all_active():
+        if _same_number(cand.get("twilio_number"), dialed):
+            return cand
+    return None
+
+
+def _build_accept_config(instructions: str) -> dict[str, Any]:
+    """Session config for POST /calls/{id}/accept. Reuses the phone agent's
+    tuned VAD, voice, reasoning and tools, but drops the PCM format fields: over
+    SIP, OpenAI negotiates the codec with the carrier and owns the media path."""
+    cfg = json.loads(json.dumps(_SESSION_UPDATE["session"]))
+    cfg["instructions"] = instructions
+    cfg["audio"]["input"].pop("format", None)
+    cfg["audio"]["output"].pop("format", None)
+    return cfg
+
+
+async def _accept_call(call_id: str, config: dict[str, Any]) -> bool:
+    """Accept an incoming SIP call and configure its realtime session."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{_OPENAI_REALTIME_BASE}/calls/{call_id}/accept",
+                headers={
+                    "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=config,
             )
-            return
-        webhook_url = f"{settings.PUBLIC_BASE_URL}/call/inbound"
-        numbers[0].update(voice_url=webhook_url, voice_method="POST")
-        logger.info("Twilio voice_url set to %s", webhook_url)
+            if resp.status_code >= 400:
+                logger.error(
+                    "Accept failed for call %s: %s — %s",
+                    call_id, resp.status_code, resp.text,
+                )
+                return False
+        logger.info("Accepted SIP call %s", call_id)
+        return True
     except Exception as exc:
-        logger.error("Failed to configure Twilio webhook: %s", exc)
+        logger.error("Accept error for call %s: %s", call_id, exc)
+        return False
 
 
-def _start_call_recording(call_sid: str) -> None:
-    """Start a dual-channel recording of the call via the Twilio REST API.
-
-    <Connect><Stream> doesn't support a record="true" attribute like <Dial>
-    does, so recording is started out-of-band on the Call resource — it runs
-    in parallel and doesn't affect the media stream.
-    """
+async def _reject_call(call_id: str, status_code: int = 603) -> None:
+    """Reject an incoming SIP call (default 603 Decline)."""
     try:
-        from twilio.rest import Client as TwilioClient
-
-        client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
-        client.calls(call_sid).recordings.create(
-            recording_status_callback=f"{settings.PUBLIC_BASE_URL}/call/recording-status",
-            recording_status_callback_method="POST",
-        )
-        logger.info("Started recording for call_sid=%s", call_sid)
+        async with httpx.AsyncClient(timeout=15) as client:
+            await client.post(
+                f"{_OPENAI_REALTIME_BASE}/calls/{call_id}/reject",
+                headers={
+                    "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={"status_code": status_code},
+            )
+        logger.info("Rejected SIP call %s (%s)", call_id, status_code)
     except Exception as exc:
-        logger.error("Failed to start call recording for %s: %s", call_sid, exc)
+        logger.error("Reject error for call %s: %s", call_id, exc)
 
 
-def _hangup_call(call_sid: str) -> None:
-    """Hang up the call via the Twilio REST API.
-
-    Closing the media-stream WebSocket on its own does not reliably end the
-    call — it can leave the caller listening to dead air — so the call is
-    terminated explicitly here.
-    """
-    if not call_sid or not settings.TWILIO_ACCOUNT_SID:
-        logger.warning(
-            "Cannot hang up via REST: call_sid=%r account_sid_set=%s",
-            call_sid,
-            bool(settings.TWILIO_ACCOUNT_SID),
-        )
+async def _hangup_call(call_id: str) -> None:
+    """Hang up a live SIP call via the OpenAI REST API."""
+    if not call_id:
+        logger.warning("Cannot hang up: no call_id")
         return
     try:
-        from twilio.rest import Client as TwilioClient
-
-        client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
-        client.calls(call_sid).update(status="completed")
-        logger.info("Hung up call_sid=%s", call_sid)
+        async with httpx.AsyncClient(timeout=15) as client:
+            await client.post(
+                f"{_OPENAI_REALTIME_BASE}/calls/{call_id}/hangup",
+                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+            )
+        logger.info("Hung up call %s", call_id)
     except Exception as exc:
-        logger.error("Failed to hang up call %s: %s", call_sid, exc)
+        logger.error("Failed to hang up call %s: %s", call_id, exc)
 
 
-@router.post("/inbound")
-async def inbound_call(request: Request) -> Response:
-    """
-    Twilio calls this when a call arrives. Returns TwiML that immediately opens
-    a bidirectional Media Stream WebSocket back to this server.
-    """
-    form = await request.form()
-    caller = str(form.get("From", "sconosciuto"))
-    called = str(form.get("To", ""))
-    call_sid = str(form.get("CallSid", ""))
-    # When a tenant's carrier forwards their real number to our Twilio number,
-    # ForwardedFrom should carry the tenant's number while From stays the
-    # original caller. If a carrier instead overwrites From with the tenant's
-    # number, every lead would be logged with the tenant's number — this log
-    # lets us detect that per carrier before it corrupts lead capture.
-    forwarded_from = str(form.get("ForwardedFrom", ""))
+@router.post("/incoming")
+async def incoming_call(request: Request) -> Response:
+    """OpenAI's `realtime.call.incoming` webhook: fires when a SIP call reaches
+    our project's connector. We verify the signature, route to the tenant by the
+    dialed number, accept the call with its configured session, and hand off to
+    a detached control task. Returns 200 so OpenAI connects the accepted call."""
+    raw = await request.body()
+
+    secret = settings.OPENAI_WEBHOOK_SECRET
+    if secret:
+        if not _verify_openai_webhook(secret, request.headers, raw):
+            logger.warning("Incoming call webhook: signature verification failed")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+    else:
+        logger.warning(
+            "OPENAI_WEBHOOK_SECRET not set — accepting call webhook UNVERIFIED"
+        )
+
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        logger.warning("Incoming call webhook: body was not JSON")
+        return Response(status_code=400)
+
+    if payload.get("type") != "realtime.call.incoming":
+        logger.info("Ignoring webhook type=%s", payload.get("type"))
+        return Response(status_code=200)
+
+    data = payload.get("data") or {}
+    call_id = data.get("call_id")
+    sip_headers = data.get("sip_headers") or []
+    if not call_id:
+        logger.warning("Incoming call webhook: no call_id")
+        return Response(status_code=400)
+
+    caller = _extract_sip_number(_sip_header(sip_headers, "From")) or "sconosciuto"
+    dialed = _extract_sip_number(_sip_header(sip_headers, "To"))
+    # Diversion carries the forwarding party (the tenant's real number) when a
+    # carrier forwards their line to us — the SIP analogue of Twilio's
+    # ForwardedFrom. Logged so we can spot carriers that clobber From instead.
+    diversion = _sip_header(sip_headers, "Diversion")
     logger.info(
-        "Inbound call webhook hit — caller=%s called=%s forwarded_from=%s",
-        caller,
-        called,
-        forwarded_from or "(none)",
+        "Inbound SIP call — call_id=%s caller=%s dialed=%s diversion=%s",
+        call_id, caller, dialed, diversion or "(none)",
     )
 
-    tenant = db.get_by_twilio_number(called) if called else None
-    if tenant is None and called and called != settings.TWILIO_PHONE_NUMBER:
-        # Unknown number and not the env-var demo number: reject.
-        logger.warning("No tenant found for called number %s — rejecting", called)
-        response = VoiceResponse()
-        response.say("Numero non attivo.", language="it-IT")
-        response.hangup()
-        return Response(content=str(response), media_type="text/xml")
+    tenant = _find_tenant_by_dialed(dialed)
+    if tenant is None and not _same_number(dialed, settings.TWILIO_PHONE_NUMBER):
+        # Unknown number and not the env-var demo number: decline the call.
+        logger.warning("No tenant for dialed number %s — rejecting", dialed)
+        await _reject_call(call_id, 404)
+        return Response(status_code=200)
 
-    if call_sid and settings.TWILIO_ACCOUNT_SID:
-        asyncio.create_task(asyncio.to_thread(_start_call_recording, call_sid))
-
-    wss_base = settings.PUBLIC_BASE_URL.replace("https://", "wss://").replace(
-        "http://", "ws://"
-    )
-
-    response = VoiceResponse()
-    connect = Connect()
-    stream = Stream(url=f"{wss_base}/call/stream", track="inbound_track")
-    stream.parameter(name="caller", value=caller)
-    # Pass the call SID explicitly — the stream "start" event's callSid is not
-    # always reliable, and we need it to hang up the call via the REST API.
-    if call_sid:
-        stream.parameter(name="call_sid", value=call_sid)
+    locale = (tenant.get("locale") if tenant else None) or "it"
+    content = _content(locale)
     if tenant is not None:
-        stream.parameter(name="tenant_id", value=tenant["id"])
-    connect.append(stream)
-    response.append(connect)
+        instructions = _build_system_prompt(
+            content, tenant["agency_name"], tenant["agent_name"]
+        )
+        tenant_store = tenant_stores.get_or_create(tenant["id"])
+        lead_email = tenant.get("lead_email") or settings.LEAD_EMAIL
+    else:
+        # Env-var fallback: demo behaviour, global store, owner's lead email.
+        instructions = _build_system_prompt(content, None, None)
+        tenant_store = store
+        lead_email = settings.LEAD_EMAIL
 
-    return Response(content=str(response), media_type="text/xml")
-
-
-@router.post("/recording-status")
-async def recording_status(request: Request) -> Response:
-    """Twilio calls this when a call recording's status changes (e.g. completed)."""
-    form = await request.form()
-    logger.info(
-        "Recording status callback — call_sid=%s recording_sid=%s status=%s url=%s",
-        form.get("CallSid"),
-        form.get("RecordingSid"),
-        form.get("RecordingStatus"),
-        form.get("RecordingUrl"),
+    # Decide whether we have a usable caller number. When a tenant's carrier
+    # clobbers the caller ID on forwarding, From arrives as the tenant's OWN
+    # number (real_number) — useless as a callback. Same for a withheld number.
+    # In that case tell Apollonia to ask the caller for one; if she still
+    # doesn't get it, _send_lead_email suppresses the (useless) lead.
+    tenant_real = tenant.get("real_number") if tenant else None
+    caller_number_known = (
+        caller not in ("", "sconosciuto")
+        and not _same_number(caller, tenant_real)
     )
-    return Response(status_code=204)
+    if not caller_number_known:
+        instructions = instructions + content["ask_for_number"]
+        logger.info(
+            "Caller number not usable (caller=%s real_number=%s) — "
+            "Apollonia will ask the caller for one",
+            caller, tenant_real,
+        )
+
+    session: dict[str, Any] = {
+        "call_id": call_id,
+        "caller_number": caller,
+        "caller_number_known": caller_number_known,
+        "lead_email": lead_email,
+        "locale": locale,
+        "listings_shown": [],
+        "interested_listings": [],
+        "caller_info": {},
+        "left_message": None,
+        "last_speech_at": 0.0,
+    }
+
+    # Accept + run the call on a detached task so this webhook returns 200
+    # promptly; OpenAI keeps the call pending until the task accepts it.
+    task = asyncio.create_task(
+        _run_call(
+            call_id, _build_accept_config(instructions), session, content, tenant_store
+        )
+    )
+    _active_calls.add(task)
+    task.add_done_callback(_active_calls.discard)
+    return Response(status_code=200)
 
 
 # Cheap text model used for the post-call one-sentence lead summary. The
@@ -992,242 +1074,52 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
         logger.error("Failed to send lead email: %s", exc)
 
 
-@router.websocket("/stream")
-async def stream_ws(websocket: WebSocket) -> None:
-    """
-    Bidirectional audio bridge between Twilio Media Streams and OpenAI Realtime API.
-    Two concurrent tasks run for the lifetime of the call:
-      - twilio_to_openai: forwards inbound mulaw audio to OpenAI
-      - openai_to_twilio: forwards OpenAI audio deltas back to Twilio
-    Whichever task exits first causes the other to be cancelled, then the lead
-    summary email is sent in the finally block.
-    """
-    await websocket.accept()
-    logger.info("Twilio media stream WebSocket connected")
+async def _run_call(
+    call_id: str,
+    accept_config: dict[str, Any],
+    session: dict[str, Any],
+    content: dict[str, Any],
+    tenant_store: Any,
+) -> None:
+    """Accept a pending SIP call, then drive it over its control WebSocket:
+    trigger the greeting, answer tool calls, hang up when Apollonia ends the
+    call or the line goes silent, then send the lead-summary email. OpenAI owns
+    the media, so no audio flows through here — pure control + tool-calling."""
+    if not await _accept_call(call_id, accept_config):
+        return  # accept failed: nothing to run and no lead to report
 
-    session: dict[str, Any] = {
-        "stream_sid": None,
-        "call_sid": None,
-        "caller_number": "sconosciuto",
-        "caller_number_known": False,
-        "lead_email": None,
-        "listings_shown": [],
-        "interested_listings": [],
-        "caller_info": {},
-        "left_message": None,
-        "suppress_input_until": 0.0,
-        "last_speech_at": 0.0,
-        "goodbye_played": asyncio.Event(),
-    }
-
-    # Twilio sends "connected" then "start" as the first frames. Read them
-    # before opening the OpenAI session so we know which tenant is being
-    # called and can inject its agency name into the instructions.
-    tenant_id = ""
-    try:
-        while True:
-            msg = json.loads(await websocket.receive_text())
-            event = msg.get("event")
-            if event == "start":
-                start = msg.get("start", {})
-                params = start.get("customParameters", {})
-                session["stream_sid"] = msg.get("streamSid") or start.get("streamSid")
-                session["call_sid"] = params.get("call_sid") or start.get("callSid")
-                session["caller_number"] = params.get("caller", session["caller_number"])
-                tenant_id = params.get("tenant_id", "")
-                logger.info(
-                    "Stream started sid=%s call_sid=%s caller=%s tenant=%s",
-                    session["stream_sid"],
-                    session["call_sid"],
-                    session["caller_number"],
-                    tenant_id or "(env fallback)",
-                )
-                break
-            if event == "stop":
-                logger.info("Stream stopped before start event")
-                return
-    except WebSocketDisconnect:
-        logger.info("Twilio WebSocket disconnected before start event")
-        return
-
-    tenant = db.get_by_id(tenant_id) if tenant_id else None
-    locale = (tenant.get("locale") if tenant else None) or "it"
-    content = _content(locale)
-    session["locale"] = locale
-    if tenant is not None:
-        instructions = _build_system_prompt(content, tenant["agency_name"], tenant["agent_name"])
-        tenant_store = tenant_stores.get_or_create(tenant["id"])
-        session["lead_email"] = tenant.get("lead_email") or settings.LEAD_EMAIL
-    else:
-        # Env-var fallback: demo behaviour, global store, owner's lead email.
-        instructions = _build_system_prompt(content, None, None)
-        tenant_store = store
-        session["lead_email"] = settings.LEAD_EMAIL
-
-    # Prerecorded clips for this locale (None when none is recorded — e.g. the
-    # Slovak demo has no WAV yet, so the greeting is model-generated and the
-    # goodbye is a short pause + hangup).
-    greeting_clip = _GREETING_BY_LOCALE.get(locale)
-    greeting_audio = greeting_clip[0] if greeting_clip else None
-    greeting_duration = greeting_clip[1] if greeting_clip else 0.0
-    goodbye_clip = _GOODBYE_BY_LOCALE.get(locale)
-    goodbye_audio = goodbye_clip[0] if goodbye_clip else None
-    goodbye_duration = goodbye_clip[1] if goodbye_clip else 0.0
-
-    # Decide whether we actually have a usable caller number. When a tenant's
-    # carrier clobbers the caller ID on forwarding, From arrives as the tenant's
-    # OWN number (real_number) — useless as a callback. Same for a withheld
-    # number. In that case tell Apollonia to ask the caller for one; if she
-    # still doesn't get it, _send_lead_email suppresses the (useless) lead.
-    raw_caller = session["caller_number"]
-    tenant_real = tenant.get("real_number") if tenant else None
-    session["caller_number_known"] = (
-        raw_caller not in ("", "sconosciuto")
-        and not _same_number(raw_caller, tenant_real)
-    )
-    if not session["caller_number_known"]:
-        instructions = instructions + content["ask_for_number"]
-        logger.info(
-            "Caller number not usable (caller=%s real_number=%s) — "
-            "Apollonia will ask the caller for one",
-            raw_caller,
-            tenant_real,
-        )
-
-    session_update = json.loads(json.dumps(_SESSION_UPDATE))
-    session_update["session"]["instructions"] = instructions
-
-    oai_headers = [
-        ("Authorization", f"Bearer {settings.OPENAI_API_KEY}"),
-    ]
+    ws_url = f"wss://api.openai.com/v1/realtime?call_id={call_id}"
+    oai_headers = [("Authorization", f"Bearer {settings.OPENAI_API_KEY}")]
 
     try:
         async with websockets.connect(
-            "wss://api.openai.com/v1/realtime?model=gpt-realtime-2",
-            additional_headers=oai_headers,
-        ) as oai_ws:
-            await oai_ws.send(json.dumps(session_update))
-            logger.info("OpenAI Realtime session initialised")
+            ws_url, additional_headers=oai_headers
+        ) as ws:
+            logger.info("Control WebSocket attached to call %s", call_id)
 
-            # Wait for OpenAI to confirm the session is ready before greeting.
-            # session.updated is the ack for session.update; it arrives before
-            # any audio tasks are running so we can read from oai_ws directly.
-            async for raw in oai_ws:
-                evt = json.loads(raw)
-                etype = evt.get("type")
-                if etype == "session.updated":
-                    logger.info("OpenAI session ready")
-                    break
-                elif etype == "error":
-                    logger.error("OpenAI startup error: %s", evt)
-                else:
-                    logger.info("OpenAI startup event: %s", etype)
+            # The session was already configured by the accept call, so just
+            # trigger the (model-generated) greeting in the tenant's locale.
+            await ws.send(json.dumps({
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": content["greeting_prompt"]}
+                    ],
+                },
+            }))
+            await ws.send(json.dumps({"type": "response.create"}))
+            logger.info("Greeting triggered for call %s", call_id)
 
-            if greeting_audio:
-                # Inject prerecorded greeting as an assistant turn so OpenAI
-                # knows the greeting was said without generating its own audio.
-                await oai_ws.send(json.dumps({
-                    "type": "conversation.item.create",
-                    "item": {
-                        "type": "message",
-                        "role": "assistant",
-                        "content": [{"type": "output_text", "text": content["greeting_text"]}],
-                    },
-                }))
-                logger.info("Prerecorded greeting injected into context")
-                if session["stream_sid"]:
-                    await websocket.send_text(json.dumps({
-                        "event": "media",
-                        "streamSid": session["stream_sid"],
-                        "media": {
-                            "track": "outbound",
-                            "payload": greeting_audio,
-                        },
-                    }))
-                    session["suppress_input_until"] = (
-                        asyncio.get_event_loop().time()
-                        + greeting_duration + 0.5
-                    )
-            else:
-                # Fallback: let OpenAI generate the greeting (in this locale).
-                await oai_ws.send(json.dumps({
-                    "type": "conversation.item.create",
-                    "item": {
-                        "type": "message",
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": content["greeting_prompt"],
-                            }
-                        ],
-                    },
-                }))
-                await oai_ws.send(json.dumps({"type": "response.create"}))
-                logger.info("Greeting triggered via OpenAI")
+            session["last_speech_at"] = asyncio.get_event_loop().time()
 
-            async def twilio_to_openai() -> None:
-                upsample_state = None
-                async for raw in websocket.iter_text():
-                    msg = json.loads(raw)
-                    event = msg.get("event")
-
-                    if event == "media":
-                        if asyncio.get_event_loop().time() < session["suppress_input_until"]:
-                            continue
-                        mulaw = base64.b64decode(msg["media"]["payload"])
-                        pcm16 = audioop.ulaw2lin(mulaw, 2)
-                        pcm24k, upsample_state = audioop.ratecv(
-                            pcm16, 2, 1, 8000, 24000, upsample_state
-                        )
-                        await oai_ws.send(
-                            json.dumps(
-                                {
-                                    "type": "input_audio_buffer.append",
-                                    "audio": base64.b64encode(pcm24k).decode(),
-                                }
-                            )
-                        )
-
-                    elif event == "mark":
-                        # Twilio echoes our "goodbye" mark once that audio has
-                        # finished playing out to the caller — that's our cue to
-                        # hang up immediately.
-                        if msg.get("mark", {}).get("name") == "goodbye":
-                            session["goodbye_played"].set()
-
-                    elif event == "stop":
-                        logger.info(
-                            "Stream stop received sid=%s", session["stream_sid"]
-                        )
-                        break
-
-            async def openai_to_twilio() -> None:
-                downsample_state = None
-                async for raw in oai_ws:
+            async def event_loop() -> None:
+                async for raw in ws:
                     msg = json.loads(raw)
                     etype = msg.get("type")
-                    if etype == "response.output_audio.delta":
-                        if session["stream_sid"]:
-                            pcm24k = base64.b64decode(msg["delta"])
-                            pcm8k, downsample_state = audioop.ratecv(
-                                pcm24k, 2, 1, 24000, 8000, downsample_state
-                            )
-                            mulaw = audioop.lin2ulaw(pcm8k, 2)
-                            await websocket.send_text(
-                                json.dumps(
-                                    {
-                                        "event": "media",
-                                        "streamSid": session["stream_sid"],
-                                        "media": {
-                                            "track": "outbound",
-                                            "payload": base64.b64encode(mulaw).decode(),
-                                        },
-                                    }
-                                )
-                            )
 
-                    elif etype == "response.output_audio_transcript.done":
+                    if etype == "response.output_audio_transcript.done":
                         session["last_speech_at"] = asyncio.get_event_loop().time()
                         text = msg.get("transcript", "").strip()
                         if text:
@@ -1235,7 +1127,7 @@ async def stream_ws(websocket: WebSocket) -> None:
 
                     elif etype == "response.function_call_arguments.done":
                         if msg.get("name") == "search_listings":
-                            call_id = msg.get("call_id")
+                            fc_id = msg.get("call_id")
                             try:
                                 args = json.loads(msg.get("arguments", "{}"))
                             except json.JSONDecodeError:
@@ -1245,13 +1137,13 @@ async def stream_ws(websocket: WebSocket) -> None:
                             logger.info(
                                 "search_listings(%s) → %d results", args, len(results)
                             )
-                            await oai_ws.send(
+                            await ws.send(
                                 json.dumps(
                                     {
                                         "type": "conversation.item.create",
                                         "item": {
                                             "type": "function_call_output",
-                                            "call_id": call_id,
+                                            "call_id": fc_id,
                                             "output": json.dumps(
                                                 results, ensure_ascii=False
                                             ),
@@ -1259,10 +1151,10 @@ async def stream_ws(websocket: WebSocket) -> None:
                                     }
                                 )
                             )
-                            await oai_ws.send(json.dumps({"type": "response.create"}))
+                            await ws.send(json.dumps({"type": "response.create"}))
 
                         elif msg.get("name") == "get_listing_by_address":
-                            call_id = msg.get("call_id")
+                            fc_id = msg.get("call_id")
                             try:
                                 args = json.loads(msg.get("arguments", "{}"))
                             except json.JSONDecodeError:
@@ -1272,18 +1164,18 @@ async def stream_ws(websocket: WebSocket) -> None:
                             logger.info(
                                 "get_listing_by_address(%s) → %d results", args, len(results)
                             )
-                            await oai_ws.send(json.dumps({
+                            await ws.send(json.dumps({
                                 "type": "conversation.item.create",
                                 "item": {
                                     "type": "function_call_output",
-                                    "call_id": call_id,
+                                    "call_id": fc_id,
                                     "output": json.dumps(results, ensure_ascii=False),
                                 },
                             }))
-                            await oai_ws.send(json.dumps({"type": "response.create"}))
+                            await ws.send(json.dumps({"type": "response.create"}))
 
                         elif msg.get("name") == "mark_listing_interest":
-                            call_id = msg.get("call_id")
+                            fc_id = msg.get("call_id")
                             try:
                                 args = json.loads(msg.get("arguments", "{}"))
                             except json.JSONDecodeError:
@@ -1296,18 +1188,18 @@ async def stream_ws(websocket: WebSocket) -> None:
                             if match and match not in session["interested_listings"]:
                                 session["interested_listings"].append(match)
                             logger.info("Caller interested in: %s (found=%s)", address, bool(match))
-                            await oai_ws.send(json.dumps({
+                            await ws.send(json.dumps({
                                 "type": "conversation.item.create",
                                 "item": {
                                     "type": "function_call_output",
-                                    "call_id": call_id,
+                                    "call_id": fc_id,
                                     "output": json.dumps({"recorded": bool(match)}),
                                 },
                             }))
-                            await oai_ws.send(json.dumps({"type": "response.create"}))
+                            await ws.send(json.dumps({"type": "response.create"}))
 
                         elif msg.get("name") == "record_caller_info":
-                            call_id = msg.get("call_id")
+                            fc_id = msg.get("call_id")
                             try:
                                 args = json.loads(msg.get("arguments", "{}"))
                             except json.JSONDecodeError:
@@ -1316,82 +1208,50 @@ async def stream_ws(websocket: WebSocket) -> None:
                                 {k: v for k, v in args.items() if v}
                             )
                             logger.info("Recorded caller info: %s", args)
-                            await oai_ws.send(json.dumps({
+                            await ws.send(json.dumps({
                                 "type": "conversation.item.create",
                                 "item": {
                                     "type": "function_call_output",
-                                    "call_id": call_id,
+                                    "call_id": fc_id,
                                     "output": json.dumps({"recorded": True}),
                                 },
                             }))
-                            await oai_ws.send(json.dumps({"type": "response.create"}))
-
+                            await ws.send(json.dumps({"type": "response.create"}))
 
                         elif msg.get("name") == "leave_message":
-                            call_id = msg.get("call_id")
+                            fc_id = msg.get("call_id")
                             try:
                                 args = json.loads(msg.get("arguments", "{}"))
                             except json.JSONDecodeError:
                                 args = {}
                             session["left_message"] = args
                             logger.info("leave_message: %s", args)
-                            await oai_ws.send(json.dumps({
+                            await ws.send(json.dumps({
                                 "type": "conversation.item.create",
                                 "item": {
                                     "type": "function_call_output",
-                                    "call_id": call_id,
+                                    "call_id": fc_id,
                                     "output": json.dumps({"status": "saved"}, ensure_ascii=False),
                                 },
                             }))
-                            await oai_ws.send(json.dumps({"type": "response.create"}))
+                            await ws.send(json.dumps({"type": "response.create"}))
 
                         elif msg.get("name") == "end_call":
-                            call_id = msg.get("call_id")
-                            logger.info(
-                                "Apollonia ending call sid=%s", session["stream_sid"]
-                            )
-                            await oai_ws.send(json.dumps({
+                            fc_id = msg.get("call_id")
+                            logger.info("Apollonia ending call %s", call_id)
+                            await ws.send(json.dumps({
                                 "type": "conversation.item.create",
                                 "item": {
                                     "type": "function_call_output",
-                                    "call_id": call_id,
+                                    "call_id": fc_id,
                                     "output": json.dumps({"ended": True}),
                                 },
                             }))
-                            if goodbye_audio and session["stream_sid"]:
-                                await websocket.send_text(json.dumps({
-                                    "event": "media",
-                                    "streamSid": session["stream_sid"],
-                                    "media": {
-                                        "track": "outbound",
-                                        "payload": goodbye_audio,
-                                    },
-                                }))
-                                # Mark the end of the goodbye so Twilio tells us
-                                # the instant it finishes playing; hang up then
-                                # instead of guessing with a fixed delay.
-                                await websocket.send_text(json.dumps({
-                                    "event": "mark",
-                                    "streamSid": session["stream_sid"],
-                                    "mark": {"name": "goodbye"},
-                                }))
-                                try:
-                                    await asyncio.wait_for(
-                                        session["goodbye_played"].wait(),
-                                        timeout=goodbye_duration + 2.0,
-                                    )
-                                except asyncio.TimeoutError:
-                                    logger.warning(
-                                        "Goodbye mark not received — hanging up anyway"
-                                    )
-                            else:
-                                # No prerecorded goodbye for this locale: the
-                                # prompt has the agent speak her own farewell, so
-                                # give it a moment to finish streaming out before
-                                # we hang up.
-                                await asyncio.sleep(3.0)
-                            await asyncio.to_thread(_hangup_call, session["call_sid"])
-                            await websocket.close()
+                            # The prompt has her say a short goodbye just before
+                            # calling end_call; give that farewell audio a moment
+                            # to play out over SIP before we tear the call down.
+                            await asyncio.sleep(3.0)
+                            await _hangup_call(call_id)
                             return
 
                     elif etype == "input_audio_buffer.speech_started":
@@ -1401,22 +1261,18 @@ async def stream_ws(websocket: WebSocket) -> None:
                     elif etype == "error":
                         logger.error("OpenAI Realtime error: %s", msg)
 
-            session["last_speech_at"] = asyncio.get_event_loop().time()
-
             async def silence_watchdog() -> None:
                 while True:
                     await asyncio.sleep(1)
                     if asyncio.get_event_loop().time() - session["last_speech_at"] > 100:
-                        logger.info("100s silence — hanging up sid=%s", session["stream_sid"])
-                        await asyncio.to_thread(_hangup_call, session["call_sid"])
-                        await websocket.close()
+                        logger.info("100s silence — hanging up call %s", call_id)
+                        await _hangup_call(call_id)
                         break
 
-            t1 = asyncio.create_task(twilio_to_openai())
-            t2 = asyncio.create_task(openai_to_twilio())
-            t3 = asyncio.create_task(silence_watchdog())
+            t1 = asyncio.create_task(event_loop())
+            t2 = asyncio.create_task(silence_watchdog())
             _done, pending = await asyncio.wait(
-                [t1, t2, t3], return_when=asyncio.FIRST_COMPLETED
+                [t1, t2], return_when=asyncio.FIRST_COMPLETED
             )
             for task in pending:
                 task.cancel()
@@ -1425,11 +1281,7 @@ async def stream_ws(websocket: WebSocket) -> None:
                 except (asyncio.CancelledError, Exception):
                     pass
 
-    except WebSocketDisconnect:
-        logger.info(
-            "Twilio WebSocket disconnected sid=%s", session.get("stream_sid")
-        )
     except Exception as exc:
-        logger.exception("Unhandled error in stream_ws: %s", exc)
+        logger.exception("Unhandled error in _run_call for %s: %s", call_id, exc)
     finally:
         await _send_lead_email(session)

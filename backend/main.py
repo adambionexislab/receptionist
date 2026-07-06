@@ -14,7 +14,6 @@ from pydantic import BaseModel
 
 from billing.router import router as billing_router
 from call.router import router as call_router
-from call.router import setup_twilio_webhook
 from config import settings
 from demo.router import router as demo_router
 from leadgen import db as leadgen_db
@@ -78,7 +77,7 @@ def _setup_sk_demo() -> None:
     When TWILIO_PHONE_NUMBER_SK is set, ensure a locale='sk' "Štúdio Demo"
     tenant exists on that number and bind it to a Slovak seed-listings store
     (no Immobiliare.it scrape — Slovak agencies aren't on immobiliare.it).
-    Point that Twilio number's voice webhook at {PUBLIC_BASE_URL}/call/inbound.
+    Attach that number to the OpenAI SIP trunk, same as the Italian demo number.
     """
     number = settings.TWILIO_PHONE_NUMBER_SK
     if not number:
@@ -127,7 +126,6 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(_setup_sk_demo)
     await asyncio.to_thread(leadgen_db.init)
     await _load_all_tenant_listings()
-    await asyncio.to_thread(setup_twilio_webhook)
     task = asyncio.create_task(_sync_loop())
     try:
         yield

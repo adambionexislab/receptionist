@@ -20,8 +20,15 @@ class Settings(BaseSettings):
 
     # OpenAI
     OPENAI_API_KEY: Optional[str] = None
+    # Signing secret (whsec_…) of the OpenAI project webhook that delivers
+    # `realtime.call.incoming` events to POST /call/incoming. When set, the
+    # handler verifies the Standard-Webhooks signature and rejects forgeries.
+    OPENAI_WEBHOOK_SECRET: Optional[str] = None
 
-    # Twilio
+    # Twilio — numbers only. Inbound calls no longer hit a Twilio voice webhook:
+    # each number's SIP trunk routes the call to OpenAI's SIP connector, which
+    # notifies us via the OpenAI webhook above. ACCOUNT_SID/AUTH_TOKEN are used
+    # only by the (now dormant) auto-provisioner; the live call path needs none.
     TWILIO_ACCOUNT_SID: Optional[str] = None
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_PHONE_NUMBER: Optional[str] = None
