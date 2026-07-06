@@ -804,19 +804,26 @@ async def incoming_call(request: Request) -> Response:
 
     caller = _extract_sip_number(_sip_header(sip_headers, "From")) or "sconosciuto"
     dialed = _extract_sip_number(_sip_header(sip_headers, "To"))
-    # Diversion carries the forwarding party (the tenant's real number) when a
-    # carrier forwards their line to us — the SIP analogue of Twilio's
-    # ForwardedFrom. Logged so we can spot carriers that clobber From instead.
-    diversion = _sip_header(sip_headers, "Diversion")
+    # When a carrier/Twilio forwards a line to the Apollonia number, the call's
+    # To header carries the originally-dialed number, and the Apollonia (Twilio)
+    # number that identifies the tenant lands in the Diversion header instead —
+    # which is also the SIP analogue of Twilio's ForwardedFrom. So route on
+    # either. Full headers are logged to diagnose per-carrier quirks.
+    diversion = _extract_sip_number(_sip_header(sip_headers, "Diversion"))
     logger.info(
-        "Inbound SIP call — call_id=%s caller=%s dialed=%s diversion=%s",
-        call_id, caller, dialed, diversion or "(none)",
+        "Inbound SIP call — call_id=%s caller=%s dialed=%s diversion=%s headers=%s",
+        call_id, caller, dialed, diversion or "(none)", json.dumps(sip_headers),
     )
 
-    tenant = _find_tenant_by_dialed(dialed)
-    if tenant is None and not _same_number(dialed, settings.TWILIO_PHONE_NUMBER):
+    tenant = _find_tenant_by_dialed(dialed) or _find_tenant_by_dialed(diversion)
+    is_demo = _same_number(dialed, settings.TWILIO_PHONE_NUMBER) or _same_number(
+        diversion, settings.TWILIO_PHONE_NUMBER
+    )
+    if tenant is None and not is_demo:
         # Unknown number and not the env-var demo number: decline the call.
-        logger.warning("No tenant for dialed number %s — rejecting", dialed)
+        logger.warning(
+            "No tenant for dialed=%s / diversion=%s — rejecting", dialed, diversion
+        )
         await _reject_call(call_id, 404)
         return Response(status_code=200)
 
