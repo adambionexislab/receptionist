@@ -125,6 +125,13 @@ _SYSTEM_PROMPT_BODY = (
     "  o quando devi solo fare una domanda qualificante.\n"
     "- NON usare riempitivi vuoti come 'Allora...', 'Mmm, vediamo...',\n"
     "  'Ecco...', 'Un attimo, ci penso...': vai dritta all'azione.\n"
+    "- Il preambolo non è tutto il tuo turno: appena lo strumento restituisce\n"
+    "  il risultato, prosegui SUBITO e di' il contenuto vero (es. la conferma\n"
+    "  o la domanda successiva). Dopo un preambolo non restare mai in silenzio\n"
+    "  in attesa che il chiamante parli.\n"
+    "- Non usare un preambolo prima di mark_listing_interest e di end_call.\n"
+    "  Il saluto di chiusura non è un preambolo: pronuncia direttamente le\n"
+    "  parole del saluto, non annunciarlo.\n"
     "\n"
     "# Lunghezza delle risposte\n"
     "- Rispondi in modo breve: una o due frasi di contenuto. Prima di usare\n"
@@ -253,7 +260,10 @@ _SYSTEM_PROMPT_BODY = (
     "Subito dopo aver raccolto TUTTE le risposte alle domande qualificanti\n"
     "(incluso il nome del chiamante), e PRIMA di dire che inoltrerai la\n"
     "richiesta, chiama lo strumento record_caller_info passando tutti i\n"
-    "dati raccolti durante la chiamata. Poi prosegui normalmente.\n"
+    "dati raccolti durante la chiamata. Appena record_caller_info restituisce\n"
+    "il risultato, nello stesso turno — senza aspettare che il chiamante\n"
+    "parli — di' al chiamante che inoltrerai la sua richiesta a un agente\n"
+    "immobiliare e chiedigli se puoi aiutarlo con qualcos'altro.\n"
     "Di' che inoltrerai la richiesta a un agente immobiliare SOLO nelle\n"
     "seguenti situazioni, e SOLO dopo aver raccolto tutte le informazioni\n"
     "qualificanti. Non dire MAI che l'agente lo ricontatterà o che lo farà\n"
@@ -271,9 +281,11 @@ _SYSTEM_PROMPT_BODY = (
     "Subito dopo aver detto al chiamante che inoltrerai la sua richiesta a\n"
     "un agente immobiliare:\n"
     "1. Chiedi se può aiutarlo con qualcos'altro.\n"
-    "2. Se dice di no: salutalo brevemente (es. 'Grazie della chiamata, buona\n"
-    "   giornata, arrivederci.') e SUBITO DOPO chiama lo strumento end_call.\n"
-    "   Non aggiungere altro dopo il saluto.\n"
+    "2. Se dice di no: pronuncia le vere parole di saluto che il chiamante\n"
+    "   deve sentire (es. 'Grazie della chiamata, buona giornata,\n"
+    "   arrivederci.'). NON annunciare il saluto ('la saluto', 'le dico\n"
+    "   arrivederci'): di' subito quelle parole. Subito dopo il saluto chiama\n"
+    "   lo strumento end_call e non aggiungere altro.\n"
     "3. Se dice di sì: continua ad aiutarlo normalmente, e ripeti questa\n"
     "   procedura quando hai finito.\n"
 )
@@ -455,7 +467,9 @@ _RECORD_CALLER_INFO_TOOL: dict[str, Any] = {
         "once, right after you've collected all the qualifying answers for "
         "the current request (rental or purchase) — and before telling the "
         "caller you'll forward their request. Only include fields the "
-        "caller actually answered."
+        "caller actually answered. After this tool returns, immediately tell "
+        "the caller you'll forward their request to an agent — don't wait for "
+        "the caller to speak first."
     ),
     "parameters": {
         "type": "object",
@@ -517,8 +531,10 @@ _END_CALL_TOOL: dict[str, Any] = {
     "description": (
         "End the phone call. Use this ONLY after telling the caller you'll "
         "forward their request to a real estate agent, asking if there's "
-        "anything else you can help with, and the caller says no. Say a short "
-        "goodbye to the caller first, then call this tool to hang up."
+        "anything else you can help with, and the caller says no. Say the "
+        "actual goodbye words to the caller first (a real farewell like "
+        "'Thank you for calling, have a nice day, goodbye') — not a statement "
+        "that you're about to say goodbye — then call this tool to hang up."
     ),
     "parameters": {
         "type": "object",
@@ -1122,6 +1138,14 @@ async def _run_call(
             session["last_speech_at"] = asyncio.get_event_loop().time()
 
             async def event_loop() -> None:
+                try:
+                    await _drive_events()
+                except websockets.exceptions.ConnectionClosed:
+                    # Normal end of call: the caller hung up (or OpenAI closed
+                    # the SIP leg), so the control WebSocket dropped.
+                    logger.info("Call %s ended (control WebSocket closed)", call_id)
+
+            async def _drive_events() -> None:
                 async for raw in ws:
                     msg = json.loads(raw)
                     etype = msg.get("type")
@@ -1278,11 +1302,14 @@ async def _run_call(
 
             t1 = asyncio.create_task(event_loop())
             t2 = asyncio.create_task(silence_watchdog())
-            _done, pending = await asyncio.wait(
+            done, pending = await asyncio.wait(
                 [t1, t2], return_when=asyncio.FIRST_COMPLETED
             )
             for task in pending:
                 task.cancel()
+            # Await every task so no exception (incl. the cancelled watchdog or a
+            # loop error) is left unretrieved and logged by asyncio.
+            for task in (*done, *pending):
                 try:
                     await task
                 except (asyncio.CancelledError, Exception):

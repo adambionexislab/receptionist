@@ -40,3 +40,8 @@ confirmation email is now in english for both markets you need to change that
 Two product-content decisions for you (non-blocking — I translated faithfully)
 immobiliare.it still appears throughout the Slovak page (marquee, how-it-works card, feature/pricing bullets, the signup field "Odkaz na profil immobiliare.it", JSON-LD). Slovak agencies aren't on immobiliare.it — do you want that swapped for a Slovak portal / generic "listings sync" wording, or left as-is for now?
 Signup field immobiliare_url is still required by the form + backend. A Slovak agency has no such URL. Same question — leave, relabel, or make optional later?
+in the apollonia knowledge base Sk mark down file used for demo in slovak the immobiliare.it is still mentioned
+immobiliare.it URL in the form in slovak (and italian)
+
+zapíšem si vaše údaje - potom ticho- povedal som haloo. potom povedala ze posunie požiadavku realitnému maklérovi
+opýtala sa či môže ešte s niečim pomôcť ja som povedal nia a ona: dobre teraz sa s vamy krátko rozlúčim a zložila.
