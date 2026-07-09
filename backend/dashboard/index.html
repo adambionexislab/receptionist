@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex" />
+<title>ApollonIA · Area clienti</title>
+<style>
+  :root {
+    --bg:        #0e1116;
+    --surface:   #171b22;
+    --surface-2: #1f242d;
+    --border:    #2a313c;
+    --text:      #e7ebf0;
+    --text-dim:  #9aa4b2;
+    --accent:    #5b8cff;
+    --accent-2:  #3a6bf0;
+    --green:     #3ecf8e;
+    --red:       #f4675b;
+    --radius:    10px;
+    --shadow:    0 6px 24px rgba(0,0,0,.35);
+    font-size: 15px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+
+  /* ── login ──────────────────────────────────────────── */
+  .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .login-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 32px; width: 400px; max-width: 100%;
+  }
+  .brand { font-weight: 700; font-size: 1.3rem; letter-spacing: .3px; }
+  .brand span { color: var(--accent); }
+  .login-card h1 { font-size: 1.1rem; margin: 20px 0 6px; }
+  .login-card p.sub { color: var(--text-dim); font-size: .9rem; margin: 0 0 20px; }
+  label { display: block; font-size: .78rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+  input {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 11px 12px; border-radius: 8px; font-size: .95rem; width: 100%;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  button.btn {
+    background: var(--accent-2); color: #fff; border: none;
+    padding: 11px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;
+    font-size: .95rem; width: 100%; margin-top: 16px;
+  }
+  button.btn:hover { background: var(--accent); }
+  button.btn:disabled { opacity: .5; cursor: default; }
+  button.btn.ghost {
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+    width: auto; padding: 8px 14px; margin: 0; font-size: .85rem;
+  }
+  button.btn.ghost:hover { border-color: var(--accent); }
+  .err { color: var(--red); font-size: .85rem; margin-top: 12px; min-height: 1.1em; }
+
+  /* ── app shell ──────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 0 24px; height: 60px; background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  header .spacer { flex: 1; }
+  header .agency { color: var(--text-dim); font-size: .9rem; }
+  main { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
+  .empty { padding: 48px; text-align: center; color: var(--text-dim); }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN VIEW -->
+<div id="login" class="login-wrap hidden">
+  <div class="login-card">
+    <div class="brand">Apollon<span>IA</span></div>
+    <h1 id="login-title">Area clienti</h1>
+    <p class="sub" id="login-sub">Inserisci il codice di accesso ricevuto via email.</p>
+    <form id="login-form">
+      <label for="code" id="code-label">Codice di accesso</label>
+      <input id="code" name="code" type="text" autocomplete="off" spellcheck="false" autofocus />
+      <button class="btn" type="submit" id="login-btn">Accedi</button>
+      <div class="err" id="login-err"></div>
+    </form>
+  </div>
+</div>
+
+<!-- APP SHELL -->
+<div id="app" class="hidden">
+  <header>
+    <div class="brand">Apollon<span>IA</span></div>
+    <div class="spacer"></div>
+    <span class="agency" id="agency-name"></span>
+    <button class="btn ghost" id="logout-btn">Esci</button>
+  </header>
+  <main>
+    <div class="empty" id="app-placeholder">
+      Dashboard in arrivo.
+    </div>
+  </main>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  async function api(path, opts) {
+    return fetch(path, Object.assign({ credentials: "same-origin" }, opts || {}));
+  }
+
+  function showApp(me) {
+    $("login").classList.add("hidden");
+    $("app").classList.remove("hidden");
+    $("agency-name").textContent = me.agency_name || "";
+  }
+
+  function showLogin() {
+    $("app").classList.add("hidden");
+    $("login").classList.remove("hidden");
+    $("code").focus();
+  }
+
+  async function init() {
+    const resp = await api("/dashboard/api/me");
+    if (resp.ok) {
+      showApp(await resp.json());
+    } else {
+      showLogin();
+    }
+  }
+
+  $("login-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("login-btn");
+    const err = $("login-err");
+    err.textContent = "";
+    btn.disabled = true;
+    try {
+      const resp = await api("/dashboard/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: $("code").value.trim() }),
+      });
+      if (resp.ok) {
+        showApp(await resp.json());
+      } else {
+        err.textContent = "Codice non valido.";
+      }
+    } catch (_) {
+      err.textContent = "Errore di connessione. Riprova.";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $("logout-btn").addEventListener("click", async () => {
+    await api("/dashboard/logout", { method: "POST" });
+    showLogin();
+  });
+
+  init();
+</script>
+</body>
+</html>

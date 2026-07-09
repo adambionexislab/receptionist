@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     # Multi-tenant
     ADMIN_TOKEN: Optional[str] = None
     DATA_DIR: str = "/data"
+    # HMAC key used to sign the agency dashboard session cookie. Falls back to
+    # ADMIN_TOKEN (already set in prod) so sessions still sign if this is unset;
+    # a random ephemeral key is used only as a last resort (logs everyone out on
+    # restart). Set a stable value in production.
+    SESSION_SECRET: Optional[str] = None
 
     # Lead capture (sent via Resend's HTTP API — Render blocks outbound SMTP)
     LEAD_EMAIL: Optional[str] = None

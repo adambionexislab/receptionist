@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from billing.router import router as billing_router
 from call.router import router as call_router
 from config import settings
+from dashboard.router import router as dashboard_router
 from demo.router import router as demo_router
 from leadgen import db as leadgen_db
 from listings.store import ListingsStore, store, tenant_stores
@@ -157,6 +158,7 @@ app.include_router(signup_router)
 app.include_router(billing_router)
 app.include_router(demo_router)
 app.include_router(leads_router)
+app.include_router(dashboard_router)
 
 
 class Listing(BaseModel):

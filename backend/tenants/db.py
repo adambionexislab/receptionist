@@ -7,6 +7,7 @@ and background scrapes can't interleave inserts/updates.
 
 import datetime
 import logging
+import secrets
 import sqlite3
 import threading
 import uuid
@@ -39,6 +40,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   billing_period  TEXT,
   management_mode TEXT DEFAULT 'perse_cancellate',
   locale          TEXT NOT NULL DEFAULT 'it',
+  access_code     TEXT,
   active          INTEGER DEFAULT 1
 )
 """
@@ -46,8 +48,11 @@ CREATE TABLE IF NOT EXISTS tenants (
 # Columns added after the original table shipped. CREATE TABLE IF NOT EXISTS
 # won't alter an existing tenants table on already-deployed disks, so each of
 # these is added with an idempotent ALTER on startup (see _migrate).
+# access_code is added nullable (a random per-row default can't be an ALTER
+# literal) and then backfilled per row in _migrate.
 _ADDED_COLUMNS = {
     "locale": "TEXT NOT NULL DEFAULT 'it'",
+    "access_code": "TEXT",
 }
 
 _COLUMNS = {
@@ -63,8 +68,15 @@ _COLUMNS = {
     "billing_period",
     "management_mode",
     "locale",
+    "access_code",
     "active",
 }
+
+
+def _new_access_code() -> str:
+    """A long, unguessable per-tenant login code (the agency dashboard's only
+    credential). ~32 URL-safe chars ≈ 192 bits of entropy."""
+    return secrets.token_urlsafe(24)
 
 
 def _get_conn() -> sqlite3.Connection:
@@ -94,6 +106,19 @@ def _migrate(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE tenants ADD COLUMN {column} {ddl}")
             logger.info("Migrated tenants table: added column %s", column)
 
+    # Backfill access codes for any tenant (pre-existing or otherwise) that has
+    # none, so every tenant can log into the dashboard. Each gets a unique code.
+    missing = conn.execute(
+        "SELECT id FROM tenants WHERE access_code IS NULL OR access_code = ''"
+    ).fetchall()
+    for row in missing:
+        conn.execute(
+            "UPDATE tenants SET access_code = ? WHERE id = ?",
+            (_new_access_code(), row["id"]),
+        )
+    if missing:
+        logger.info("Backfilled access codes for %d tenant(s)", len(missing))
+
 
 def get_connection() -> sqlite3.Connection:
     """The process-wide shared SQLite connection.
@@ -116,6 +141,19 @@ def get_by_twilio_number(number: str) -> Optional[dict]:
 def get_by_id(tenant_id: str) -> Optional[dict]:
     row = _get_conn().execute(
         "SELECT * FROM tenants WHERE id = ?", (tenant_id,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def get_by_access_code(code: str) -> Optional[dict]:
+    """Look up an active tenant by its dashboard login code. Returns None for an
+    empty/blank code so a misconfigured (codeless) tenant can never be matched."""
+    code = (code or "").strip()
+    if not code:
+        return None
+    row = _get_conn().execute(
+        "SELECT * FROM tenants WHERE access_code = ? AND active = 1",
+        (code,),
     ).fetchone()
     return dict(row) if row else None
 
@@ -143,6 +181,7 @@ def create(**fields: Any) -> dict:
         "agent_name": "Apollonia",
         "management_mode": "perse_cancellate",
         "locale": "it",
+        "access_code": _new_access_code(),
         "active": 1,
         **fields,
     }
