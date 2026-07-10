@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from billing.router import router as billing_router
 from call.router import router as call_router
+from calls import db as calls_db
 from config import settings
 from dashboard.router import router as dashboard_router
 from demo.router import router as demo_router
@@ -126,6 +127,7 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(_startup_migration)
     await asyncio.to_thread(_setup_sk_demo)
     await asyncio.to_thread(leadgen_db.init)
+    await asyncio.to_thread(calls_db.init)
     await _load_all_tenant_listings()
     task = asyncio.create_task(_sync_loop())
     try:

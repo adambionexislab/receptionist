@@ -16,6 +16,7 @@
     --accent:    #5b8cff;
     --accent-2:  #3a6bf0;
     --green:     #3ecf8e;
+    --amber:     #f0b429;
     --red:       #f4675b;
     --radius:    10px;
     --shadow:    0 6px 24px rgba(0,0,0,.35);
@@ -68,7 +69,53 @@
   header .spacer { flex: 1; }
   header .agency { color: var(--text-dim); font-size: .9rem; }
   main { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
+  main h2 { font-size: 1.25rem; margin: 0 0 16px; }
   .empty { padding: 48px; text-align: center; color: var(--text-dim); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 28px; }
+  @media (max-width: 720px) { .stats { grid-template-columns: 1fr; } }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 20px;
+  }
+  .stat .num { font-size: 2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat .lbl { color: var(--text-dim); font-size: .82rem; margin-top: 6px; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 12px 16px; font-size: .9rem; vertical-align: top; }
+  th { color: var(--text-dim); font-weight: 600; text-transform: uppercase; font-size: .72rem; letter-spacing: .4px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  td.nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td.dim { color: var(--text-dim); }
+
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+    white-space: nowrap;
+  }
+  .b-lead    { background: rgba(91,140,255,.16); color: var(--accent); }
+  .b-message { background: rgba(240,180,41,.16); color: var(--amber); }
+  .b-call    { background: #2a313c; color: var(--text-dim); }
+
+  nav.tabs { display: flex; gap: 4px; }
+  .tab {
+    background: none; border: none; color: var(--text-dim);
+    padding: 8px 16px; border-radius: var(--radius); cursor: pointer;
+    font-size: .95rem; font-weight: 600; font-family: inherit;
+  }
+  .tab:hover { color: var(--text); background: var(--surface-2); }
+  .tab.active { color: var(--text); background: var(--surface-2); }
+  .view { display: none; }
+  .view.active { display: block; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th.num { text-align: right; }
 
   .hidden { display: none !important; }
 </style>
@@ -94,14 +141,72 @@
 <div id="app" class="hidden">
   <header>
     <div class="brand">Apollon<span>IA</span></div>
+    <nav class="tabs">
+      <button class="tab active" id="tab-contacts" data-view="contacts">Contatti</button>
+      <button class="tab" id="tab-listings" data-view="listings">Immobili</button>
+    </nav>
     <div class="spacer"></div>
     <span class="agency" id="agency-name"></span>
     <button class="btn ghost" id="logout-btn">Esci</button>
   </header>
   <main>
-    <div class="empty" id="app-placeholder">
-      Dashboard in arrivo.
+    <div class="stats">
+      <div class="stat">
+        <div class="num" id="stat-minutes">—</div>
+        <div class="lbl" id="stat-minutes-lbl">Minuti questo mese</div>
+      </div>
+      <div class="stat">
+        <div class="num" id="stat-calls">—</div>
+        <div class="lbl" id="stat-calls-lbl">Chiamate questo mese</div>
+      </div>
+      <div class="stat">
+        <div class="num" id="stat-contacts">—</div>
+        <div class="lbl" id="stat-contacts-lbl">Contatti questo mese</div>
+      </div>
     </div>
+
+    <section id="view-contacts" class="view active">
+      <h2 id="contacts-title">Contatti</h2>
+      <div class="card">
+        <div class="table-wrap">
+          <table id="contacts-table">
+            <thead>
+              <tr>
+                <th id="th-date">Data</th>
+                <th id="th-name">Nome</th>
+                <th id="th-phone">Telefono</th>
+                <th id="th-summary">Riepilogo</th>
+                <th id="th-outcome">Esito</th>
+              </tr>
+            </thead>
+            <tbody id="contacts-body"></tbody>
+          </table>
+        </div>
+        <div class="empty hidden" id="contacts-empty">Nessun contatto ancora.</div>
+      </div>
+    </section>
+
+    <section id="view-listings" class="view">
+      <h2 id="listings-title">Immobili</h2>
+      <div class="card">
+        <div class="table-wrap">
+          <table id="listings-table">
+            <thead>
+              <tr>
+                <th id="th-address">Indirizzo</th>
+                <th id="th-zone">Zona</th>
+                <th id="th-type">Tipo</th>
+                <th id="th-rooms" class="num">Locali</th>
+                <th id="th-size" class="num">m²</th>
+                <th id="th-price" class="num">Prezzo</th>
+              </tr>
+            </thead>
+            <tbody id="listings-body"></tbody>
+          </table>
+        </div>
+        <div class="empty hidden" id="listings-empty">Nessun immobile disponibile.</div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -112,10 +217,220 @@
     return fetch(path, Object.assign({ credentials: "same-origin" }, opts || {}));
   }
 
+  // One dict per locale, identical keys, Italian default — the same pattern the
+  // backend uses (call/locales). The tenant's `locale` selects the set once
+  // logged in; before that (login screen) the URL does (/sk/dashboard → sk).
+  const STRINGS = {
+    it: {
+      title: "ApollonIA · Area clienti",
+      clients_area: "Area clienti",
+      login_sub: "Inserisci il codice di accesso ricevuto via email.",
+      code_label: "Codice di accesso",
+      login_btn: "Accedi",
+      err_invalid: "Codice non valido.",
+      err_conn: "Errore di connessione. Riprova.",
+      contacts: "Contatti",
+      listings: "Immobili",
+      logout: "Esci",
+      stat_minutes: "Minuti questo mese",
+      stat_calls: "Chiamate questo mese",
+      stat_contacts: "Contatti questo mese",
+      th_date: "Data", th_name: "Nome", th_phone: "Telefono",
+      th_summary: "Riepilogo", th_outcome: "Esito",
+      contacts_empty: "Nessun contatto ancora.",
+      th_address: "Indirizzo", th_zone: "Zona", th_type: "Tipo",
+      th_rooms: "Locali", th_size: "m²", th_price: "Prezzo",
+      listings_empty: "Nessun immobile disponibile.",
+      outcomes: { lead: "Lead", message: "Messaggio", call: "Chiamata" },
+      types: { vendita: "Vendita", affitto: "Affitto" },
+    },
+    sk: {
+      title: "ApollonIA · Zákaznícka zóna",
+      clients_area: "Zákaznícka zóna",
+      login_sub: "Zadajte prístupový kód, ktorý ste dostali e-mailom.",
+      code_label: "Prístupový kód",
+      login_btn: "Prihlásiť sa",
+      err_invalid: "Neplatný kód.",
+      err_conn: "Chyba pripojenia. Skúste znova.",
+      contacts: "Kontakty",
+      listings: "Nehnuteľnosti",
+      logout: "Odhlásiť sa",
+      stat_minutes: "Minúty tento mesiac",
+      stat_calls: "Hovory tento mesiac",
+      stat_contacts: "Kontakty tento mesiac",
+      th_date: "Dátum", th_name: "Meno", th_phone: "Telefón",
+      th_summary: "Zhrnutie", th_outcome: "Výsledok",
+      contacts_empty: "Zatiaľ žiadne kontakty.",
+      th_address: "Adresa", th_zone: "Lokalita", th_type: "Typ",
+      th_rooms: "Izby", th_size: "m²", th_price: "Cena",
+      listings_empty: "Žiadne dostupné nehnuteľnosti.",
+      outcomes: { lead: "Záujemca", message: "Odkaz", call: "Hovor" },
+      types: { vendita: "Predaj", affitto: "Prenájom" },
+    },
+  };
+
+  // Initial locale from the URL so the login screen is localised before we know
+  // the tenant; showApp() switches it to the tenant's locale after login.
+  let LOCALE = location.pathname.startsWith("/sk/") ? "sk" : "it";
+  const S = () => STRINGS[LOCALE] || STRINGS.it;
+  const intlTag = () => (LOCALE === "sk" ? "sk-SK" : "it-IT");
+
+  // id → string key for every static text node; applied on load and re-applied
+  // once the tenant's locale is known.
+  const TEXT_IDS = {
+    "login-title": "clients_area", "login-sub": "login_sub",
+    "code-label": "code_label", "login-btn": "login_btn",
+    "tab-contacts": "contacts", "tab-listings": "listings", "logout-btn": "logout",
+    "stat-minutes-lbl": "stat_minutes", "stat-calls-lbl": "stat_calls",
+    "stat-contacts-lbl": "stat_contacts",
+    "contacts-title": "contacts",
+    "th-date": "th_date", "th-name": "th_name", "th-phone": "th_phone",
+    "th-summary": "th_summary", "th-outcome": "th_outcome",
+    "contacts-empty": "contacts_empty",
+    "listings-title": "listings",
+    "th-address": "th_address", "th-zone": "th_zone", "th-type": "th_type",
+    "th-rooms": "th_rooms", "th-size": "th_size", "th-price": "th_price",
+    "listings-empty": "listings_empty",
+  };
+
+  function applyStrings() {
+    const s = S();
+    for (const [id, key] of Object.entries(TEXT_IDS)) {
+      const n = $(id);
+      if (n && s[key] != null) n.textContent = s[key];
+    }
+    document.documentElement.lang = LOCALE;
+    document.title = s.title;
+  }
+
   function showApp(me) {
     $("login").classList.add("hidden");
     $("app").classList.remove("hidden");
     $("agency-name").textContent = me.agency_name || "";
+    LOCALE = me.locale || "it";
+    applyStrings();
+    loadSummary();
+    loadContacts();
+    loadListings();
+  }
+
+  function showView(name) {
+    for (const s of document.querySelectorAll(".view"))
+      s.classList.toggle("active", s.id === "view-" + name);
+    for (const t of document.querySelectorAll(".tab"))
+      t.classList.toggle("active", t.dataset.view === name);
+  }
+
+  async function loadSummary() {
+    try {
+      const resp = await api("/dashboard/api/summary");
+      if (!resp.ok) return;
+      const s = await resp.json();
+      $("stat-minutes").textContent = (s.minutes ?? 0).toLocaleString(LOCALE === "sk" ? "sk-SK" : "it-IT");
+      $("stat-calls").textContent = s.calls ?? 0;
+      $("stat-contacts").textContent = s.contacts ?? 0;
+    } catch (_) { /* leave the placeholder dashes on a transient error */ }
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d)) return "";
+    const tag = LOCALE === "sk" ? "sk-SK" : "it-IT";
+    return d.toLocaleString(tag, {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  }
+
+  function el(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function renderContacts(rows) {
+    const body = $("contacts-body");
+    const empty = $("contacts-empty");
+    const table = $("contacts-table");
+    body.innerHTML = "";
+    if (!rows.length) {
+      table.classList.add("hidden");
+      empty.classList.remove("hidden");
+      return;
+    }
+    empty.classList.add("hidden");
+    table.classList.remove("hidden");
+    for (const c of rows) {
+      const tr = document.createElement("tr");
+      tr.appendChild(el("td", "nowrap dim", fmtDate(c.created_at)));
+      tr.appendChild(el("td", null, c.name || "—"));
+      tr.appendChild(el("td", "nowrap", c.phone || "—"));
+      tr.appendChild(el("td", null, c.summary || c.interest || "—"));
+      const outcome = c.outcome || "call";
+      const badge = el("span", "badge b-" + outcome, S().outcomes[outcome] || outcome);
+      const td = el("td"); td.appendChild(badge);
+      tr.appendChild(td);
+      body.appendChild(tr);
+    }
+  }
+
+  async function loadContacts() {
+    try {
+      const resp = await api("/dashboard/api/contacts");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      renderContacts(data.contacts || []);
+    } catch (_) { /* leave the table empty on a transient error */ }
+  }
+
+  function fmtPrice(value, currency) {
+    if (value == null || value === "") return "—";
+    try {
+      return new Intl.NumberFormat(intlTag(), {
+        style: "currency", currency: currency || "EUR", maximumFractionDigits: 0,
+      }).format(value);
+    } catch (_) { return String(value); }
+  }
+
+  function fmtNum(value) {
+    if (value == null || value === "") return "—";
+    return Number(value).toLocaleString(intlTag());
+  }
+
+  function renderListings(rows) {
+    const body = $("listings-body");
+    const empty = $("listings-empty");
+    const table = $("listings-table");
+    body.innerHTML = "";
+    if (!rows.length) {
+      table.classList.add("hidden");
+      empty.classList.remove("hidden");
+      return;
+    }
+    empty.classList.add("hidden");
+    table.classList.remove("hidden");
+    for (const l of rows) {
+      const tr = document.createElement("tr");
+      tr.appendChild(el("td", null, l.address || "—"));
+      tr.appendChild(el("td", "dim", l.zone || "—"));
+      const type = (l.type || "").toLowerCase();
+      tr.appendChild(el("td", null, S().types[type] || l.type || "—"));
+      tr.appendChild(el("td", "num", fmtNum(l.rooms)));
+      tr.appendChild(el("td", "num", fmtNum(l.size_sqm)));
+      tr.appendChild(el("td", "num", fmtPrice(l.price, l.currency)));
+      body.appendChild(tr);
+    }
+  }
+
+  async function loadListings() {
+    try {
+      const resp = await api("/dashboard/api/listings");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      renderListings(data.listings || []);
+    } catch (_) { /* leave the table empty on a transient error */ }
   }
 
   function showLogin() {
@@ -148,10 +463,10 @@
       if (resp.ok) {
         showApp(await resp.json());
       } else {
-        err.textContent = "Codice non valido.";
+        err.textContent = S().err_invalid;
       }
     } catch (_) {
-      err.textContent = "Errore di connessione. Riprova.";
+      err.textContent = S().err_conn;
     } finally {
       btn.disabled = false;
     }
@@ -162,6 +477,10 @@
     showLogin();
   });
 
+  for (const t of document.querySelectorAll(".tab"))
+    t.addEventListener("click", () => showView(t.dataset.view));
+
+  applyStrings();  // localise the login screen before the tenant is known
   init();
 </script>
 </body>

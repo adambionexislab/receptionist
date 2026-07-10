@@ -17,7 +17,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
+from calls import db as calls_db
 from dashboard import session as sess
+from listings.store import tenant_stores
 from tenants import db
 
 logger = logging.getLogger(__name__)
@@ -73,6 +75,38 @@ def me(tenant: dict = Depends(current_tenant)):
         "agent_name": tenant.get("agent_name") or "Apollonia",
         "locale": tenant.get("locale") or "it",
     }
+
+
+@router.get("/dashboard/api/contacts")
+def contacts(tenant: dict = Depends(current_tenant)):
+    """Contacts captured by Apollonia for THIS tenant, most recent first.
+    Strictly scoped to the logged-in tenant's id."""
+    return {"contacts": calls_db.list_contacts(tenant["id"])}
+
+
+@router.get("/dashboard/api/summary")
+def summary(tenant: dict = Depends(current_tenant)):
+    """This calendar month's call minutes for THIS tenant. Counts only calls
+    handled since call persistence went live (there is no earlier history).
+    Strictly scoped to the logged-in tenant's id."""
+    stats = calls_db.monthly_call_stats(tenant["id"])
+    return {
+        "year": stats["year"],
+        "month": stats["month"],
+        "minutes": round(stats["seconds"] / 60),
+        "seconds": stats["seconds"],
+        "calls": stats["calls"],
+        "contacts": stats["contacts"],
+    }
+
+
+@router.get("/dashboard/api/listings")
+def listings(tenant: dict = Depends(current_tenant)):
+    """The tenant's current listings, read straight from its in-memory store
+    (the same per-tenant store the phone agent searches). Keyed by tenant id, so
+    a tenant only ever sees its own inventory."""
+    store = tenant_stores.get_or_create(tenant["id"])
+    return {"listings": store.search()}
 
 
 # ── page (served before the catch-all StaticFiles mount in main.py) ──────────

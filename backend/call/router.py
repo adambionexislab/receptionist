@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import datetime
 import hashlib
 import hmac
 import json
@@ -14,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
 from call import locales
+from calls import db as calls_db
 from config import settings
 from listings.store import store, tenant_stores
 from tenants import db
@@ -889,6 +891,9 @@ async def incoming_call(request: Request) -> Response:
 
     session: dict[str, Any] = {
         "call_id": call_id,
+        # tenant_id scopes the persisted call/contact rows. None on the pure
+        # env-var demo fallback (no tenant row): that path is not persisted.
+        "tenant_id": tenant["id"] if tenant else None,
         "caller_number": caller,
         "caller_number_known": caller_number_known,
         "lead_email": lead_email,
@@ -898,6 +903,9 @@ async def incoming_call(request: Request) -> Response:
         "caller_info": {},
         "left_message": None,
         "last_speech_at": 0.0,
+        # Wall-clock call start, stamped once the call is accepted (see
+        # _run_call); used to compute duration_seconds when the call is persisted.
+        "started_at": None,
     }
 
     # Accept + run the call on a detached task so this webhook returns 200
@@ -999,6 +1007,93 @@ async def _generate_lead_summary(
     return _fallback_lead_summary(content, session)
 
 
+def _resolve_callback_number(session: dict[str, Any]) -> str | None:
+    """The best number an agent could call back on: the auto-detected caller ID
+    when it's usable, otherwise a number the caller spoke aloud (captured into
+    caller_info/left_message via the tools' 'phone' field). None when neither
+    exists. Pure and idempotent, so email and persistence agree on the number."""
+    spoken = (
+        (session.get("caller_info") or {}).get("phone")
+        or (session.get("left_message") or {}).get("phone")
+    )
+    if session.get("caller_number_known"):
+        return session.get("caller_number") or None
+    return spoken or None
+
+
+def _call_outcome(session: dict[str, Any]) -> str:
+    """Classify the call for the dashboard, matching the lead-email subject
+    logic: engaged with listings → lead, else left a message → message, else a
+    plain call."""
+    if session.get("listings_shown"):
+        return "lead"
+    if session.get("left_message") is not None:
+        return "message"
+    return "call"
+
+
+def _persist_call(session: dict[str, Any]) -> None:
+    """Write one call_sessions row (always, for the minutes metric) and, when the
+    call produced someone to follow up on, one contacts row — both scoped to the
+    tenant. Synchronous SQLite; call via asyncio.to_thread. Skips the env-var
+    demo fallback (no tenant_id) and never raises into the call task."""
+    tenant_id = session.get("tenant_id")
+    if not tenant_id:
+        return
+
+    started = session.get("started_at")
+    ended = datetime.datetime.now(datetime.timezone.utc)
+    duration = int((ended - started).total_seconds()) if started else 0
+    ended_iso = ended.isoformat()
+
+    callback = _resolve_callback_number(session)
+    content = _content(session.get("locale"))
+    summary = session.get("summary") or _fallback_lead_summary(content, session)
+
+    call_session_id = calls_db.add_call_session(
+        tenant_id=tenant_id,
+        call_id=session.get("call_id"),
+        caller_number=callback or session.get("caller_number"),
+        started_at=started.isoformat() if started else None,
+        ended_at=ended_iso,
+        duration_seconds=duration,
+        locale=session.get("locale") or "it",
+        outcome=_call_outcome(session),
+        summary=summary,
+    )
+
+    # A contact is only worth surfacing if there's a way to act on it — a name
+    # to recognise or a number to call back. Otherwise it's just a logged call.
+    caller_info = session.get("caller_info") or {}
+    left_message = session.get("left_message")
+    interested = session.get("interested_listings") or []
+    name = caller_info.get("name") or (left_message or {}).get("caller_name")
+    if not (name or callback):
+        return
+
+    interest = "; ".join(
+        l.get("address", "") for l in interested if l.get("address")
+    )
+    details = json.dumps(
+        {
+            "caller_info": caller_info,
+            "interested_listings": interested,
+            "left_message": left_message,
+        },
+        ensure_ascii=False,
+    )
+    calls_db.add_contact(
+        tenant_id=tenant_id,
+        call_session_id=call_session_id,
+        name=name,
+        phone=callback,
+        interest=interest or None,
+        summary=summary,
+        details=details,
+        created_at=ended_iso,
+    )
+
+
 async def _send_lead_email(session: dict[str, Any]) -> None:
     recipient = session.get("lead_email") or settings.LEAD_EMAIL
     content = _content(session.get("locale"))
@@ -1006,18 +1101,9 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
         logger.warning("RESEND_API_KEY/lead email not configured — lead email skipped")
         return
 
-    # Work out a usable callback number. If the auto-detected caller ID is
-    # usable, use it; otherwise fall back to a number the caller spoke aloud
-    # (captured into caller_info/left_message via the tools' 'phone' field).
-    # A lead with no callback number at all is useless to the agent — skip it.
-    spoken = (
-        (session.get("caller_info") or {}).get("phone")
-        or (session.get("left_message") or {}).get("phone")
-    )
-    if session.get("caller_number_known"):
-        caller = session.get("caller_number", content["unknown_caller"])
-    else:
-        caller = spoken
+    # Work out a usable callback number (auto-detected caller ID, else a number
+    # the caller spoke aloud). A lead with no callback number is useless — skip.
+    caller = _resolve_callback_number(session)
     if not caller:
         logger.info(
             "Lead suppressed — no usable caller number (caller ID was the "
@@ -1083,6 +1169,9 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
     # Let a text model write a one-sentence summary of the call so the agent
     # grasps the lead at a glance, then prepend it to the detailed body.
     summary = await _generate_lead_summary(content, detail_body, session)
+    # Stash the summary so the persistence step can reuse it instead of paying
+    # for a second summarisation LLM call.
+    session["summary"] = summary
     body = f"{summary}\n\n{detail_body}"
 
     try:
@@ -1122,6 +1211,10 @@ async def _run_call(
     the media, so no audio flows through here — pure control + tool-calling."""
     if not await _accept_call(call_id, accept_config):
         return  # accept failed: nothing to run and no lead to report
+
+    # The call is now connected: stamp the start so duration reflects the live
+    # conversation, not the accept latency before it.
+    session["started_at"] = datetime.datetime.now(datetime.timezone.utc)
 
     ws_url = f"wss://api.openai.com/v1/realtime?call_id={call_id}"
     oai_headers = [("Authorization", f"Bearer {settings.OPENAI_API_KEY}")]
@@ -1331,3 +1424,9 @@ async def _run_call(
         logger.exception("Unhandled error in _run_call for %s: %s", call_id, exc)
     finally:
         await _send_lead_email(session)
+        # Persist after the email so the LLM summary it generated can be reused.
+        # Guarded so a DB hiccup can't crash the call task or lose the email.
+        try:
+            await asyncio.to_thread(_persist_call, session)
+        except Exception:
+            logger.exception("Failed to persist call %s", call_id)
