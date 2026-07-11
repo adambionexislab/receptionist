@@ -3,6 +3,7 @@ import base64
 import csv
 import io
 import logging
+import unicodedata
 from difflib import SequenceMatcher
 from typing import Optional
 
@@ -64,6 +65,49 @@ def _listings_to_csv(listings: list[dict]) -> str:
             "text": listing.get("text", ""),
         })
     return buf.getvalue()
+
+
+# ── Location matching ────────────────────────────────────────────────────────
+# Callers name places in whatever grammatical case and with whatever diacritics
+# the speech-to-text produced. Slovak inflects place names heavily ("Bratislava"
+# → "v Bratislave" → "z Bratislavy") while keeping the stem, so plain substring
+# matching misses most real queries. These helpers normalise diacritics and case
+# and match on a shared stem, with a fuzzy-ratio fallback.
+def _norm(s: str) -> str:
+    """Lowercase and strip diacritics ('Košice' → 'kosice')."""
+    decomposed = unicodedata.normalize("NFKD", s.lower())
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
+
+
+def _stem_match(a: str, b: str) -> bool:
+    """True when two already-normalised words share a long-enough common prefix
+    that the only difference is a trailing case ending — how Slovak declines
+    place names ('bratislava'/'bratislave', 'kosice'/'kosiciach')."""
+    n = 0
+    for ca, cb in zip(a, b):
+        if ca != cb:
+            break
+        n += 1
+    return n >= 4 and n >= min(len(a), len(b)) - 3
+
+
+def _word_in(query_word: str, text: str) -> bool:
+    """True if a caller's word matches any significant word in `text`, tolerant
+    of diacritics and Slovak case endings. Normalises both sides."""
+    qn = _norm(query_word)
+    if len(qn) <= 3:
+        return qn in _norm(text)
+    for t in _norm(text).split():
+        if len(t) <= 3:
+            continue
+        if (
+            qn in t
+            or t in qn
+            or _stem_match(qn, t)
+            or SequenceMatcher(None, qn, t).ratio() >= 0.8
+        ):
+            return True
+    return False
 
 
 class ListingsStore:
@@ -311,10 +355,19 @@ class ListingsStore:
             if type is not None and listing["type"] != type.lower():
                 continue
             if zone is not None:
-                z = zone.lower()
-                lz = listing["zone"].lower()
-                zone_words = [w for w in z.split() if len(w) > 3]
-                if z not in lz and lz not in z and not any(w in lz for w in zone_words):
+                # Match the caller's zone against the listing zone plus the city
+                # part of the address (segment after the last comma), so a city
+                # named only in the address still matches — while not matching
+                # street names that merely share a city's name (an Italian "Via
+                # Roma" must not match a search for the city Roma). Matching
+                # ignores diacritics and tolerates Slovak case endings
+                # ("v Bratislave"/"Bratislavy" ≈ the stored "Bratislava").
+                addr = listing["address"]
+                city = addr.rsplit(",", 1)[-1] if "," in addr else ""
+                hay = f"{listing['zone']} {city}"
+                if _norm(zone) not in _norm(hay) and not any(
+                    _word_in(w, hay) for w in zone.split() if len(w) > 3
+                ):
                     continue
             if rooms_min is not None and listing["rooms"] < rooms_min:
                 continue
@@ -325,26 +378,16 @@ class ListingsStore:
             results.append(dict(listing))
         return results
 
-    @staticmethod
-    def _fuzzy_word_in(word: str, text: str, threshold: float = 0.75) -> bool:
-        if word in text:
-            return True
-        return any(
-            SequenceMatcher(None, word, t).ratio() >= threshold
-            for t in text.split()
-            if len(t) > 3
-        )
-
     def get_by_address(self, address_query: str) -> list[dict]:
-        query = address_query.lower().strip()
+        query = address_query.strip()
+        qn = _norm(query)
         words = [w for w in query.split() if len(w) > 3]
         return [
             l for l in self._listings
-            if query in l["address"].lower()
-            or query in l["zone"].lower()
+            if qn in _norm(l["address"])
+            or qn in _norm(l["zone"])
             or any(
-                self._fuzzy_word_in(w, l["address"].lower())
-                or self._fuzzy_word_in(w, l["zone"].lower())
+                _word_in(w, l["address"]) or _word_in(w, l["zone"])
                 for w in words
             )
         ]
