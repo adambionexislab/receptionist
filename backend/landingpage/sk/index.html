@@ -1576,7 +1576,7 @@
           var tokenData = await tokenResp.json();
           var ephemeral = tokenData.value ||
                           (tokenData.client_secret && tokenData.client_secret.value);
-          var model = (tokenData.session && tokenData.session.model) || 'gpt-realtime-2';
+          var model = (tokenData.session && tokenData.session.model) || 'gpt-realtime-2.1';
           if (!ephemeral) throw new Error('no ephemeral key');
 
           // 3. WebRTC peer connection straight to OpenAI.

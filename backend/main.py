@@ -1,14 +1,16 @@
 import asyncio
 import datetime
+import hmac
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -198,10 +200,23 @@ async def reload_listings():
     return {"status": "ok", "count": len(store._listings)}
 
 
-@app.get("/admin/tenants")
-async def admin_tenants(authorization: str = Header(default="")):
-    if not settings.ADMIN_TOKEN or authorization != f"Bearer {settings.ADMIN_TOKEN}":
+# Bearer-token guard for the owner-only admin endpoints. Declaring it as an
+# HTTPBearer security scheme makes Swagger show the "Authorize" button, so you
+# paste just the raw token (no "Bearer " prefix to fumble). auto_error=False so a
+# missing/malformed header yields our 401 rather than HTTPBearer's default 403.
+_admin_scheme = HTTPBearer(auto_error=False, description="ADMIN_TOKEN value")
+
+
+def _require_admin(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_admin_scheme),
+) -> None:
+    token = credentials.credentials if credentials else ""
+    if not settings.ADMIN_TOKEN or not hmac.compare_digest(token, settings.ADMIN_TOKEN):
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+@app.get("/admin/tenants", dependencies=[Depends(_require_admin)])
+async def admin_tenants():
     tenants = await asyncio.to_thread(db.get_all_active)
     counts = tenant_stores.counts()
     for tenant in tenants:

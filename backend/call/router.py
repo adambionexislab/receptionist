@@ -605,7 +605,7 @@ _SESSION_UPDATE: dict[str, Any] = {
     "type": "session.update",
     "session": {
         "type": "realtime",
-        "model": "gpt-realtime-2",
+        "model": "gpt-realtime-2.1",
         "instructions": _SYSTEM_PROMPT,
         "reasoning": {"effort": "low"},
         "audio": {
