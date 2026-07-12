@@ -14,6 +14,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from acquisizione import db as acquisizione_db
+from acquisizione.router import router as acquisizione_router
 from billing.router import router as billing_router
 from call.router import router as call_router
 from calls import db as calls_db
@@ -130,6 +132,7 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(_setup_sk_demo)
     await asyncio.to_thread(leadgen_db.init)
     await asyncio.to_thread(calls_db.init)
+    await asyncio.to_thread(acquisizione_db.init)
     await _load_all_tenant_listings()
     task = asyncio.create_task(_sync_loop())
     try:
@@ -163,6 +166,8 @@ app.include_router(billing_router)
 app.include_router(demo_router)
 app.include_router(leads_router)
 app.include_router(dashboard_router)
+if settings.ACQUISIZIONE_ENABLED:
+    app.include_router(acquisizione_router)
 
 
 class Listing(BaseModel):

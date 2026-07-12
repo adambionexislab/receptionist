@@ -45,3 +45,7 @@ immobiliare.it URL in the form in slovak (and italian)
 
 should ask about kids in rentals and time of visit
 
+fix faq, pricing and all the info on the landing page
+
+build the meeting summary and image editing in dashboard
+

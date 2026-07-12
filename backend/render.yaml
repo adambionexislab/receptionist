@@ -52,6 +52,14 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      - key: ACQUISIZIONE_ENABLED
+        value: "false"
+      - key: REALTIME_TRANSCRIBE_MODEL
+        value: gpt-realtime-whisper
+      - key: EXTRACTION_MODEL
+        value: gpt-5.6-terra
+      - key: IMAGE_EDIT_MODEL
+        value: gpt-image-2
       - key: GOOGLE_PLACES_API_KEY
         sync: false
       - key: OUTREACH_FROM_EMAIL

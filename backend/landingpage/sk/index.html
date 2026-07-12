@@ -380,9 +380,8 @@
           {
             "@type": "Offer",
             "name": "Program Studio",
-            "price": "120",
             "priceCurrency": "EUR",
-            "description": "Pre tímy a kancelárie s viacerými zamestnancami: prispôsobené minúty, neobmedzené čísla a agenti, individuálne zaškolenie. Od 120 €/mesiac za zamestnanca."
+            "description": "Individuálny program pre kancelárie, ktoré potrebujú viac minút než program Max: neobmedzené čísla a agenti, individuálne zaškolenie. Cena na mieru podľa objemu hovorov."
           }
         ]
       },
@@ -413,7 +412,7 @@
           {
             "@type": "Question",
             "name": "Integruje sa s nástrojmi, ktoré už používam?",
-            "acceptedAnswer": { "@type": "Answer", "text": "ApollonIA sa napojí na vaše existujúce telefónne číslo, pozná vaše ponuky a odpovie na otázky o nich a posiela záujemcov priamo do vašej e-mailovej schránky, takže zapadne do vášho pracovného postupu bez nutnosti meniť nástroje." }
+            "acceptedAnswer": { "@type": "Answer", "text": "ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce. Toto číslo si jednoducho pridáte ako presmerovanie, pozná vaše ponuky a odpovie na otázky o nich a posiela záujemcov priamo do vašej e-mailovej schránky, takže zapadne do vášho pracovného postupu bez nutnosti meniť nástroje." }
           },
           {
             "@type": "Question",
@@ -423,7 +422,7 @@
           {
             "@type": "Question",
             "name": "Ako môžem začať?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Stačí kliknúť na \"Zverte hovory ApollonIA\", aktivovať asistentku na svojom čísle za pár minút a začať dostávať záujemcov e-mailom — bez záväzkov a s možnosťou kedykoľvek zrušiť." }
+            "acceptedAnswer": { "@type": "Answer", "text": "Dostanete vyhradené telefónne číslo pre vašu kanceláriu, na ktorom hovory preberá ApollonIA. Ak by ste s čímkoľvek potrebovali pomôcť, kedykoľvek nás môžete požiadať o asistenciu." }
           },
           {
             "@type": "Question",
@@ -433,7 +432,7 @@
           {
             "@type": "Question",
             "name": "Čo sa stane, ak prekročím limit svojho programu?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Všetky hovory smerujú na vaše telefónne číslo: po prekročení limitu vášho programu hovory jednoducho ďalej zvonia na vašom mobile, presne ako je to dnes." }
+            "acceptedAnswer": { "@type": "Answer", "text": "ApollonIA funguje vždy. Ak prekročíte limit svojho programu, jednoducho doplatíte za dodatočné minúty — sadzba je 0,25 € za minútu." }
           }
         ]
       }
@@ -604,27 +603,27 @@
                    onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 8px 32px rgba(139,105,20,0.18)'"
                    onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
             <span class="text-[11px] font-semibold tracking-[.2em] uppercase" style="color:var(--accent)">02</span>
-            <p class="text-[11px] font-medium uppercase tracking-[.15em] mt-1 mb-5" style="color:var(--muted)">Presmerovanie hovorov</p>
-            <h3 class="text-2xl font-light mb-3" style="color:var(--fg)">Vaše číslo, o ktoré sa stará ApollonIA</h3>
+            <p class="text-[11px] font-medium uppercase tracking-[.15em] mt-1 mb-5" style="color:var(--muted)">Virtuálna recepčná</p>
+            <h3 class="text-2xl font-light mb-3" style="color:var(--fg)">Rozumie každému hovoru a prispôsobí sa mu</h3>
             <p class="text-sm leading-relaxed mb-5" style="color:var(--muted)">
-              Prepojenie za pár minút. Vyberte si režim:
+              ApollonIA prijíma všetky prichádzajúce hovory, rozpozná, o čo volajúci žiada, a podľa typu požiadavky prispôsobí priebeh konverzácie.
             </p>
             <div class="flex flex-col gap-3">
               <div class="rounded-xl p-4" style="border:1px solid var(--border)">
                 <div class="flex items-center gap-2 mb-1.5">
                   <span class="text-[10px] font-semibold tracking-widest uppercase px-2 py-0.5 rounded"
-                        style="background:rgba(139,105,20,0.15);color:var(--accent)">Režim A</span>
-                  <span class="text-xs" style="color:var(--muted)">Vždy aktívny</span>
+                        style="background:rgba(139,105,20,0.15);color:var(--accent)">Rozpoznanie požiadavky</span>
+                  <span class="text-xs" style="color:var(--muted)">Automaticky</span>
                 </div>
-                <p class="text-xs leading-relaxed" style="color:var(--muted)">Všetky hovory vybavuje ApollonIA. Ideálne, keď ste na stretnutí.</p>
+                <p class="text-xs leading-relaxed" style="color:var(--muted)">Záujem o ponuku, dohodnutie obhliadky či všeobecný dopyt — ApollonIA rozpozná zámer volajúceho a vedie rozhovor podľa neho.</p>
               </div>
               <div class="rounded-xl p-4" style="border:1px solid var(--border)">
                 <div class="flex items-center gap-2 mb-1.5">
                   <span class="text-[10px] font-semibold tracking-widest uppercase px-2 py-0.5 rounded"
-                        style="background:rgba(139,105,20,0.15);color:var(--accent)">Režim B</span>
+                        style="background:rgba(139,105,20,0.15);color:var(--accent)">Presmerovanie mobilu</span>
                   <span class="text-xs" style="color:var(--muted)">Podľa potreby</span>
                 </div>
-                <p class="text-xs leading-relaxed" style="color:var(--muted)">Hovor prijmete bežne. Jedným tlačidlom ho kedykoľvek odovzdáte ApollonIA.</p>
+                <p class="text-xs leading-relaxed" style="color:var(--muted)">Keď je maklér nedostupný, môže si na ApollonIA kedykoľvek presmerovať svoje vlastné mobilné číslo.</p>
               </div>
             </div>
           </article>
@@ -781,7 +780,7 @@
             <svg class="faq-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
           <div class="faq-panel"><div class="faq-panel-inner"><p>
-            ApollonIA sa napojí na vaše existujúce telefónne číslo, pozná vaše ponuky a odpovie na otázky o nich a posiela záujemcov priamo do vašej e-mailovej schránky, takže zapadne do vášho pracovného postupu bez nutnosti meniť nástroje.
+ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce. Toto číslo si jednoducho pridáte ako presmerovanie, pozná vaše ponuky a odpovie na otázky o nich a posiela záujemcov priamo do vašej e-mailovej schránky, takže zapadne do vášho pracovného postupu bez nutnosti meniť nástroje.
           </p></div></div>
         </div>
         <div class="faq-item" data-faq>
@@ -799,7 +798,7 @@
             <svg class="faq-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
           <div class="faq-panel"><div class="faq-panel-inner"><p>
-            Stačí kliknúť na "Zverte hovory ApollonIA", aktivovať asistentku na svojom čísle za pár minút a začať dostávať záujemcov e-mailom — bez záväzkov a s možnosťou kedykoľvek zrušiť.
+            Dostanete vyhradené telefónne číslo pre vašu kanceláriu, na ktorom hovory preberá ApollonIA. Ak by ste s čímkoľvek potrebovali pomôcť, kedykoľvek nás môžete požiadať o asistenciu.
           </p></div></div>
         </div>
         <div class="faq-item" data-faq>
@@ -817,7 +816,7 @@
             <svg class="faq-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
           <div class="faq-panel"><div class="faq-panel-inner"><p>
-            Všetky hovory smerujú na vaše telefónne číslo: po prekročení limitu vášho programu hovory jednoducho ďalej zvonia na vašom mobile, presne ako je to dnes.
+            ApollonIA funguje vždy. Ak prekročíte limit svojho programu, jednoducho doplatíte za dodatočné minúty — sadzba je 0,25 € za minútu.
           </p></div></div>
         </div>
       </div>
@@ -988,15 +987,14 @@
           <article class="reveal d3 price-card">
             <div class="text-center">
               <h3 class="text-xl font-medium" style="color:var(--fg)">Studio</h3>
-              <p class="mt-2 text-sm leading-relaxed" style="color:var(--muted)">Pre tímy a kancelárie s viacerými zamestnancami.</p>
+              <p class="mt-2 text-sm leading-relaxed" style="color:var(--muted)">Individuálny program pre kancelárie, ktoré potrebujú viac minút než program Max.</p>
               <div class="mt-7 price-amount">
-                <span style="font-size:0.8em;opacity:.7">od </span><span class="cur">&euro;</span><span class="num" data-monthly="120" data-annual="100">120</span><span class="per">/ mesiac</span>
+                <span style="font-size:2rem;font-weight:600;letter-spacing:-.02em;color:var(--fg)">Individuálna cena</span>
               </div>
-              <p class="mt-0.5 text-xs" style="color:var(--muted)">za zamestnanca</p>
-              <p class="mt-1 text-xs price-billed" style="color:var(--muted)">Účtované mesačne</p>
+              <p class="mt-1 text-xs" style="color:var(--muted)">Cena na mieru podľa objemu hovorov</p>
             </div>
             <ul class="mt-8 space-y-3 text-sm leading-relaxed text-left" style="color:var(--muted)">
-              <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Prispôsobené minúty</li>
+              <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Viac minút ako program Max</li>
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Neobmedzené čísla a agenti</li>
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Individuálne zaškolenie</li>
             </ul>

@@ -381,9 +381,8 @@
           {
             "@type": "Offer",
             "name": "Piano Studio",
-            "price": "120",
             "priceCurrency": "EUR",
-            "description": "Per team e agenzie con più dipendenti: minuti personalizzati, numeri e agenti illimitati, onboarding personalizzato. Da €120/mese per dipendente."
+            "description": "Piano individuale per agenzie che hanno bisogno di più minuti rispetto al piano Max: numeri e agenti illimitati, onboarding personalizzato. Prezzo su misura in base al volume di chiamate."
           }
         ]
       },
@@ -414,7 +413,7 @@
           {
             "@type": "Question",
             "name": "Si integra con gli strumenti che uso già?",
-            "acceptedAnswer": { "@type": "Answer", "text": "ApollonIA si collega al tuo numero di telefono esistente, legge automaticamente i tuoi annunci e invia i lead direttamente alla tua casella email, così si inserisce nel tuo flusso di lavoro senza bisogno di cambiare strumenti." }
+            "acceptedAnswer": { "@type": "Answer", "text": "ApollonIA riceve un proprio numero di telefono dedicato — non usa il tuo numero esistente. Basta impostarlo come deviazione di chiamata, legge automaticamente i tuoi annunci e invia i lead direttamente alla tua casella email, così si inserisce nel tuo flusso di lavoro senza bisogno di cambiare strumenti." }
           },
           {
             "@type": "Question",
@@ -424,7 +423,7 @@
           {
             "@type": "Question",
             "name": "Come posso iniziare?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Basta cliccare su \"Delega le chiamate ad ApollonIA\", attivare l'assistente sul tuo numero in pochi minuti e iniziare a ricevere i lead via email — senza vincoli e con la possibilità di disdire quando vuoi." }
+            "acceptedAnswer": { "@type": "Answer", "text": "Riceverai un numero di telefono dedicato per la tua agenzia, su cui risponde ApollonIA. Se hai bisogno di aiuto, puoi richiedere assistenza in qualsiasi momento." }
           },
           {
             "@type": "Question",
@@ -434,7 +433,7 @@
           {
             "@type": "Question",
             "name": "Cosa succede se supero il limite del mio piano?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Tutte le chiamate vengono indirizzate al tuo numero di telefono: una volta superato il limite del tuo piano, le chiamate continuano semplicemente a squillare sul tuo cellulare, esattamente come avviene oggi." }
+            "acceptedAnswer": { "@type": "Answer", "text": "ApollonIA funziona sempre. Se superi il limite del tuo piano, paghi semplicemente i minuti aggiuntivi — la tariffa è di 0,25 €/minuto." }
           }
         ]
       }
@@ -605,27 +604,27 @@
                    onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 8px 32px rgba(139,105,20,0.18)'"
                    onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
             <span class="text-[11px] font-semibold tracking-[.2em] uppercase" style="color:var(--accent)">02</span>
-            <p class="text-[11px] font-medium uppercase tracking-[.15em] mt-1 mb-5" style="color:var(--muted)">Trasferimento chiamate</p>
-            <h3 class="text-2xl font-light mb-3" style="color:var(--fg)">Il tuo numero, gestito da ApollonIA</h3>
+            <p class="text-[11px] font-medium uppercase tracking-[.15em] mt-1 mb-5" style="color:var(--muted)">Receptionist virtuale</p>
+            <h3 class="text-2xl font-light mb-3" style="color:var(--fg)">Capisce ogni chiamata e si adatta</h3>
             <p class="text-sm leading-relaxed mb-5" style="color:var(--muted)">
-              Collegamento in pochi minuti. Scegli la modalità:
+              ApollonIA riceve tutte le chiamate in arrivo, capisce cosa vuole chi chiama e adatta lo svolgimento della conversazione in base al tipo di richiesta.
             </p>
             <div class="flex flex-col gap-3">
               <div class="rounded-xl p-4" style="border:1px solid var(--border)">
                 <div class="flex items-center gap-2 mb-1.5">
                   <span class="text-[10px] font-semibold tracking-widest uppercase px-2 py-0.5 rounded"
-                        style="background:rgba(139,105,20,0.15);color:var(--accent)">Modalità A</span>
-                  <span class="text-xs" style="color:var(--muted)">Sempre attiva</span>
+                        style="background:rgba(139,105,20,0.15);color:var(--accent)">Riconoscimento richiesta</span>
+                  <span class="text-xs" style="color:var(--muted)">Automatico</span>
                 </div>
-                <p class="text-xs leading-relaxed" style="color:var(--muted)">Tutte le chiamate gestite da ApollonIA. Ideale quando sei in appuntamento.</p>
+                <p class="text-xs leading-relaxed" style="color:var(--muted)">Interesse per un annuncio, richiesta di un sopralluogo o domanda generica — ApollonIA riconosce l'intento di chi chiama e conduce la conversazione di conseguenza.</p>
               </div>
               <div class="rounded-xl p-4" style="border:1px solid var(--border)">
                 <div class="flex items-center gap-2 mb-1.5">
                   <span class="text-[10px] font-semibold tracking-widest uppercase px-2 py-0.5 rounded"
-                        style="background:rgba(139,105,20,0.15);color:var(--accent)">Modalità B</span>
-                  <span class="text-xs" style="color:var(--muted)">Su scelta</span>
+                        style="background:rgba(139,105,20,0.15);color:var(--accent)">Deviazione del cellulare</span>
+                  <span class="text-xs" style="color:var(--muted)">Su richiesta</span>
                 </div>
-                <p class="text-xs leading-relaxed" style="color:var(--muted)">Ricevi la chiamata normalmente. Con un tasto la passi ad ApollonIA quando preferisci.</p>
+                <p class="text-xs leading-relaxed" style="color:var(--muted)">Quando un agente non è disponibile, può deviare in qualsiasi momento il proprio numero di cellulare verso ApollonIA.</p>
               </div>
             </div>
           </article>
@@ -782,7 +781,7 @@
             <svg class="faq-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
           <div class="faq-panel"><div class="faq-panel-inner"><p>
-            ApollonIA si collega al tuo numero di telefono esistente, legge automaticamente i tuoi annunci e invia i lead direttamente alla tua casella email, così si inserisce nel tuo flusso di lavoro senza bisogno di cambiare strumenti.
+ApollonIA riceve un proprio numero di telefono dedicato — non usa il tuo numero esistente. Basta impostarlo come deviazione di chiamata, legge automaticamente i tuoi annunci e invia i lead direttamente alla tua casella email, così si inserisce nel tuo flusso di lavoro senza bisogno di cambiare strumenti.
           </p></div></div>
         </div>
         <div class="faq-item" data-faq>
@@ -800,7 +799,7 @@
             <svg class="faq-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
           <div class="faq-panel"><div class="faq-panel-inner"><p>
-            Basta cliccare su "Delega le chiamate ad ApollonIA", attivare l'assistente sul tuo numero in pochi minuti e iniziare a ricevere i lead via email — senza vincoli e con la possibilità di disdire quando vuoi.
+            Riceverai un numero di telefono dedicato per la tua agenzia, su cui risponde ApollonIA. Se hai bisogno di aiuto, puoi richiedere assistenza in qualsiasi momento.
           </p></div></div>
         </div>
         <div class="faq-item" data-faq>
@@ -818,7 +817,7 @@
             <svg class="faq-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
           <div class="faq-panel"><div class="faq-panel-inner"><p>
-            Tutte le chiamate vengono indirizzate al tuo numero di telefono: una volta superato il limite del tuo piano, le chiamate continuano semplicemente a squillare sul tuo cellulare, esattamente come avviene oggi.
+            ApollonIA funziona sempre. Se superi il limite del tuo piano, paghi semplicemente i minuti aggiuntivi — la tariffa è di 0,25 €/minuto.
           </p></div></div>
         </div>
       </div>
@@ -989,15 +988,14 @@
           <article class="reveal d3 price-card">
             <div class="text-center">
               <h3 class="text-xl font-medium" style="color:var(--fg)">Studio</h3>
-              <p class="mt-2 text-sm leading-relaxed" style="color:var(--muted)">Per team e agenzie con più dipendenti.</p>
+              <p class="mt-2 text-sm leading-relaxed" style="color:var(--muted)">Piano individuale per agenzie che hanno bisogno di più minuti rispetto al piano Max.</p>
               <div class="mt-7 price-amount">
-                <span style="font-size:0.8em;opacity:.7">da </span><span class="cur">&euro;</span><span class="num" data-monthly="120" data-annual="100">120</span><span class="per">/ mese</span>
+                <span style="font-size:2rem;font-weight:600;letter-spacing:-.02em;color:var(--fg)">Prezzo personalizzato</span>
               </div>
-              <p class="mt-0.5 text-xs" style="color:var(--muted)">per dipendente</p>
-              <p class="mt-1 text-xs price-billed" style="color:var(--muted)">Fatturato mensilmente</p>
+              <p class="mt-1 text-xs" style="color:var(--muted)">Prezzo su misura in base al volume di chiamate</p>
             </div>
             <ul class="mt-8 space-y-3 text-sm leading-relaxed text-left" style="color:var(--muted)">
-              <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Minuti personalizzati</li>
+              <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Più minuti rispetto al piano Max</li>
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Numeri e agenti illimitati</li>
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Onboarding personalizzato</li>
             </ul>

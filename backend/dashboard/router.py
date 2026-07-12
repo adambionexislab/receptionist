@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from calls import db as calls_db
+from config import settings
 from dashboard import session as sess
 from listings.store import tenant_stores
 from tenants import db
@@ -74,6 +75,7 @@ def me(tenant: dict = Depends(current_tenant)):
         "agency_name": tenant["agency_name"],
         "agent_name": tenant.get("agent_name") or "Apollonia",
         "locale": tenant.get("locale") or "it",
+        "features": {"acquisizione": settings.ACQUISIZIONE_ENABLED},
     }
 
 

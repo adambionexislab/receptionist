@@ -118,6 +118,59 @@
   th.num { text-align: right; }
 
   .hidden { display: none !important; }
+
+  /* ── acquisizione (seller-meeting capture) ─────────────────────────── */
+  .acq-pad { padding: 24px; }
+  .acq-consent-text { color: var(--text-dim); font-size: .92rem; line-height: 1.6; white-space: pre-line; margin: 0 0 18px; }
+  .acq-check { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 18px; cursor: pointer; }
+  .acq-check input { width: auto; margin-top: 3px; }
+  .acq-check span { font-size: .9rem; color: var(--text); text-transform: none; letter-spacing: normal; }
+  .acq-live-header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+  .acq-rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+  .acq-rec-dot.live { background: var(--red); animation: acq-pulse 1.4s ease-in-out infinite; }
+  @keyframes acq-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  .acq-transcript { padding: 20px; min-height: 320px; max-height: 60vh; overflow-y: auto; white-space: pre-wrap; line-height: 1.7; font-size: .95rem; }
+  .acq-transcript:empty::before { content: attr(data-placeholder); color: var(--text-dim); }
+  #acq-review h3 { font-size: .95rem; margin: 22px 0 12px; }
+  #acq-review h3:first-child { margin-top: 0; }
+  .acq-fields-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .acq-field { display: flex; flex-direction: column; gap: 5px; }
+  .acq-field label { margin: 0; }
+  .acq-field input[type="text"], .acq-field input[type="number"] {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 10px; border-radius: 8px; font-size: .88rem; width: 100%;
+  }
+  .acq-field.acq-field-missing input { border-color: var(--amber); }
+  .acq-field-missing-tag { color: var(--amber); font-size: .72rem; text-transform: none; letter-spacing: normal; }
+  .acq-field-check { flex-direction: row; align-items: center; gap: 8px; }
+  .acq-field-check input { width: auto; }
+  .acq-textarea {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 12px; border-radius: 8px; font-size: .9rem; width: 100%; min-height: 140px;
+    line-height: 1.6; font-family: inherit; resize: vertical;
+  }
+  .acq-task-row {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; margin-bottom: 10px;
+  }
+  .acq-task-row-top { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .acq-task-row-top input[type="text"] {
+    flex: 1; min-width: 160px; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 10px; border-radius: 8px; font-size: .88rem;
+  }
+  .acq-task-row select {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 8px; font-size: .85rem;
+  }
+  .acq-task-row-bottom { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: .82rem; color: var(--text-dim); }
+  .acq-task-row-bottom label { display: flex; align-items: center; gap: 6px; margin: 0; text-transform: none; }
+  .acq-task-row-bottom input[type="checkbox"] { width: auto; }
+  .acq-task-row-bottom input[type="text"] {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 8px; border-radius: 6px; font-size: .82rem; width: 120px;
+  }
+  .acq-task-quote { color: var(--text-dim); font-size: .78rem; margin-top: 6px; font-style: italic; }
+  .acq-task-remove { background: none; border: none; color: var(--red); cursor: pointer; font-size: .8rem; padding: 4px 8px; }
 </style>
 </head>
 <body>
@@ -144,6 +197,7 @@
     <nav class="tabs">
       <button class="tab active" id="tab-contacts" data-view="contacts">Contatti</button>
       <button class="tab" id="tab-listings" data-view="listings">Immobili</button>
+      <button class="tab hidden" id="tab-acquisizione" data-view="acquisizione">Acquisizione</button>
     </nav>
     <div class="spacer"></div>
     <span class="agency" id="agency-name"></span>
@@ -207,6 +261,65 @@
         <div class="empty hidden" id="listings-empty">Nessun immobile disponibile.</div>
       </div>
     </section>
+
+    <section id="view-acquisizione" class="view">
+      <h2 id="acq-title">Acquisizione</h2>
+
+      <div id="acq-consent" class="card">
+        <div class="acq-pad">
+          <p id="acq-consent-text" class="acq-consent-text"></p>
+          <label class="acq-check">
+            <input type="checkbox" id="acq-consent-check" />
+            <span id="acq-consent-label"></span>
+          </label>
+          <div class="err" id="acq-consent-err"></div>
+          <button class="btn" id="acq-start-btn" disabled></button>
+        </div>
+      </div>
+
+      <div id="acq-live" class="card hidden">
+        <div class="acq-live-header">
+          <span class="acq-rec-dot" id="acq-rec-dot"></span>
+          <span id="acq-status-text"></span>
+          <div class="spacer"></div>
+          <button class="btn ghost" id="acq-pause-btn"></button>
+          <button class="btn" id="acq-finish-btn"></button>
+        </div>
+        <div id="acq-transcript" class="acq-transcript"></div>
+      </div>
+
+      <div id="acq-processing" class="card hidden">
+        <div class="acq-pad">
+          <p id="acq-processing-text"></p>
+          <div class="err" id="acq-finish-err"></div>
+          <button class="btn ghost hidden" id="acq-finish-retry-btn"></button>
+        </div>
+      </div>
+
+      <div id="acq-review" class="card hidden">
+        <div class="acq-pad">
+          <h3 id="acq-review-fields-title"></h3>
+          <div id="acq-fields-grid" class="acq-fields-grid"></div>
+
+          <h3 id="acq-review-text-title"></h3>
+          <textarea id="acq-listing-text" class="acq-textarea"></textarea>
+
+          <h3 id="acq-review-tasks-title"></h3>
+          <div id="acq-tasks-list" class="acq-tasks-list"></div>
+          <button class="btn ghost" id="acq-add-task-btn"></button>
+
+          <div class="err" id="acq-review-err"></div>
+          <button class="btn" id="acq-confirm-btn"></button>
+        </div>
+      </div>
+
+      <div id="acq-confirmed" class="card hidden">
+        <div class="acq-pad">
+          <p id="acq-confirmed-text"></p>
+          <button class="btn" id="acq-new-btn"></button>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -243,6 +356,53 @@
       listings_empty: "Nessun immobile disponibile.",
       outcomes: { lead: "Lead", message: "Messaggio", call: "Chiamata" },
       types: { vendita: "Vendita", affitto: "Affitto" },
+      acq_tab: "Acquisizione",
+      acq_title: "Nuovo immobile",
+      acq_consent_text:
+        "Prima di iniziare, informi il venditore che la conversazione verrà " +
+        "trascritta automaticamente (nessun audio viene registrato o " +
+        "conservato) al solo scopo di preparare la scheda dell'immobile. Il " +
+        "testo trascritto sarà visibile e modificabile prima di essere " +
+        "salvato. Proceda solo dopo aver ottenuto il consenso del venditore.",
+      acq_consent_label: "Il venditore ha acconsentito alla trascrizione della conversazione.",
+      acq_start_btn: "Inizia",
+      acq_status_recording: "Trascrizione in corso",
+      acq_status_paused: "In pausa",
+      acq_pause_btn: "Pausa",
+      acq_resume_btn: "Riprendi",
+      acq_finish_btn: "Termina riunione",
+      acq_transcript_placeholder: "La trascrizione apparirà qui man mano che si parla…",
+      acq_new_btn: "Nuova acquisizione",
+      acq_err_mic: "Per la trascrizione è necessario l'accesso al microfono.",
+      acq_err_conn: "Impossibile avviare la trascrizione. Riprova.",
+      acq_processing_text: "Elaborazione della trascrizione in corso…",
+      acq_err_finish: "Elaborazione non riuscita.",
+      acq_retry_btn: "Riprova",
+      acq_review_fields_title: "Dati immobile",
+      acq_review_text_title: "Descrizione annuncio",
+      acq_review_tasks_title: "Attività",
+      acq_add_task_btn: "+ Aggiungi attività",
+      acq_confirm_btn: "Conferma",
+      acq_err_confirm: "Salvataggio non riuscito. Riprova.",
+      acq_field_missing: "mancante",
+      acq_task_owner_agente: "Agente",
+      acq_task_owner_venditore: "Venditore",
+      acq_task_blocking: "Blocca pubblicazione",
+      acq_task_due_placeholder: "Scadenza",
+      acq_task_remove: "Rimuovi",
+      acq_confirmed_text: "Immobile confermato e salvato.",
+      acq_fields: {
+        tipologia: "Tipologia", indirizzo_o_zona: "Indirizzo / zona",
+        superficie_mq: "Superficie (m²)", locali: "Locali", camere: "Camere da letto",
+        bagni: "Bagni", piano: "Piano", piani_totali: "Piani totali edificio",
+        ascensore: "Ascensore", riscaldamento: "Riscaldamento",
+        stato_immobile: "Stato dell'immobile", anno_costruzione: "Anno di costruzione",
+        esposizione: "Esposizione", spazi_esterni: "Spazi esterni",
+        posto_auto: "Posto auto", cantina: "Cantina", arredato: "Arredamento",
+        prezzo_richiesto: "Prezzo richiesto (€)", note_venditore: "Note del venditore",
+        classe_energetica: "Classe energetica", ipe: "IPE (kWh/m²a)",
+        spese_condominiali: "Spese condominiali (€/mese)", tipo_proprieta: "Tipo di proprietà",
+      },
     },
     sk: {
       title: "ApollonIA · Zákaznícka zóna",
@@ -266,6 +426,54 @@
       listings_empty: "Žiadne dostupné nehnuteľnosti.",
       outcomes: { lead: "Záujemca", message: "Odkaz", call: "Hovor" },
       types: { vendita: "Predaj", affitto: "Prenájom" },
+      acq_tab: "Získanie",
+      acq_title: "Nová nehnuteľnosť",
+      acq_consent_text:
+        "Skôr než začnete, informujte predávajúceho, že konverzácia bude " +
+        "automaticky prepisovaná (žiadny zvuk sa nenahráva ani neukladá) " +
+        "výhradne na účely prípravy inzerátu nehnuteľnosti. Prepísaný text " +
+        "bude pred uložením viditeľný a upraviteľný. Pokračujte až po " +
+        "získaní súhlasu predávajúceho.",
+      acq_consent_label: "Predávajúci súhlasil s prepisom konverzácie.",
+      acq_start_btn: "Spustiť",
+      acq_status_recording: "Prebieha prepis",
+      acq_status_paused: "Pozastavené",
+      acq_pause_btn: "Pozastaviť",
+      acq_resume_btn: "Pokračovať",
+      acq_finish_btn: "Ukončiť stretnutie",
+      acq_transcript_placeholder: "Prepis sa tu bude postupne zobrazovať, ako budete hovoriť…",
+      acq_new_btn: "Nové stretnutie",
+      acq_err_mic: "Na prepis je potrebný prístup k mikrofónu.",
+      acq_err_conn: "Prepis sa nepodarilo spustiť. Skúste znova.",
+      acq_processing_text: "Spracúva sa prepis…",
+      acq_err_finish: "Spracovanie zlyhalo.",
+      acq_retry_btn: "Skúsiť znova",
+      acq_review_fields_title: "Údaje o nehnuteľnosti",
+      acq_review_text_title: "Opis inzerátu",
+      acq_review_tasks_title: "Úlohy",
+      acq_add_task_btn: "+ Pridať úlohu",
+      acq_confirm_btn: "Potvrdiť",
+      acq_err_confirm: "Uloženie zlyhalo. Skúste znova.",
+      acq_field_missing: "chýba",
+      acq_task_owner_agente: "Maklér",
+      acq_task_owner_venditore: "Predávajúci",
+      acq_task_blocking: "Blokuje zverejnenie",
+      acq_task_due_placeholder: "Termín",
+      acq_task_remove: "Odstrániť",
+      acq_confirmed_text: "Nehnuteľnosť potvrdená a uložená.",
+      acq_fields: {
+        tipologia: "Typ nehnuteľnosti", indirizzo_o_zona: "Adresa / lokalita",
+        superficie_mq: "Úžitková plocha (m²)", locali: "Počet izieb", camere: "Spálne",
+        bagni: "Kúpeľne", piano: "Poschodie", piani_totali: "Celkový počet poschodí",
+        ascensore: "Výťah", riscaldamento: "Kúrenie",
+        stato_immobile: "Stav nehnuteľnosti", anno_costruzione: "Rok výstavby",
+        esposizione: "Orientácia", spazi_esterni: "Vonkajšie priestory",
+        posto_auto: "Parkovanie", cantina: "Pivnica", arredato: "Zariadenie",
+        prezzo_richiesto: "Požadovaná cena (€)", note_venditore: "Poznámky predávajúceho",
+        energeticka_trieda: "Energetická trieda",
+        energeticky_certifikat_esiste: "Energetický certifikát existuje",
+        mesacne_poplatky: "Mesačné poplatky (€)", druh_vlastnictva: "Druh vlastníctva",
+      },
     },
   };
 
@@ -291,6 +499,16 @@
     "th-address": "th_address", "th-zone": "th_zone", "th-type": "th_type",
     "th-rooms": "th_rooms", "th-size": "th_size", "th-price": "th_price",
     "listings-empty": "listings_empty",
+    "tab-acquisizione": "acq_tab", "acq-title": "acq_title",
+    "acq-consent-text": "acq_consent_text", "acq-consent-label": "acq_consent_label",
+    "acq-start-btn": "acq_start_btn", "acq-finish-btn": "acq_finish_btn",
+    "acq-new-btn": "acq_new_btn", "acq-processing-text": "acq_processing_text",
+    "acq-finish-retry-btn": "acq_retry_btn",
+    "acq-review-fields-title": "acq_review_fields_title",
+    "acq-review-text-title": "acq_review_text_title",
+    "acq-review-tasks-title": "acq_review_tasks_title",
+    "acq-add-task-btn": "acq_add_task_btn", "acq-confirm-btn": "acq_confirm_btn",
+    "acq-confirmed-text": "acq_confirmed_text",
   };
 
   function applyStrings() {
@@ -299,6 +517,9 @@
       const n = $(id);
       if (n && s[key] != null) n.textContent = s[key];
     }
+    const transcriptEl = $("acq-transcript");
+    if (transcriptEl) transcriptEl.setAttribute("data-placeholder", s.acq_transcript_placeholder);
+    if (window.AcqRefreshLiveLabels) window.AcqRefreshLiveLabels();
     document.documentElement.lang = LOCALE;
     document.title = s.title;
   }
@@ -309,6 +530,7 @@
     $("agency-name").textContent = me.agency_name || "";
     LOCALE = me.locale || "it";
     applyStrings();
+    $("tab-acquisizione").classList.toggle("hidden", !(me.features && me.features.acquisizione));
     loadSummary();
     loadContacts();
     loadListings();
@@ -479,6 +701,591 @@
 
   for (const t of document.querySelectorAll(".tab"))
     t.addEventListener("click", () => showView(t.dataset.view));
+
+  // ── Acquisizione: live-transcribed seller-meeting capture ────────────────
+  // Flow: consent checkbox → POST /acquisizione/consent → Wake Lock (must be
+  // acquired inside this same click handler — the #1 Wake Lock gotcha is that
+  // it can only be requested from a user-gesture context) → mic permission →
+  // ephemeral token from /acquisizione/{id}/session-token → WebRTC straight to
+  // OpenAI's Realtime transcription API (transcription-only: no audio comes
+  // back, so the peer connection is sendonly and there's no <audio> element).
+  // No raw audio is ever sent to our backend — only the transcript text, via
+  // periodic autosave, and the resolved market drives the transcription
+  // language. Self-contained IIFE so its connection state can't collide with
+  // the rest of the dashboard's globals, mirroring the landing page's own
+  // live-demo widget (see landingpage/index.html).
+  (function () {
+    const section = $("view-acquisizione");
+    if (!section) return;
+
+    const consentStep = $("acq-consent");
+    const liveStep = $("acq-live");
+    const processingStep = $("acq-processing");
+    const reviewStep = $("acq-review");
+    const confirmedStep = $("acq-confirmed");
+    const consentCheck = $("acq-consent-check");
+    const startBtn = $("acq-start-btn");
+    const consentErr = $("acq-consent-err");
+    const pauseBtn = $("acq-pause-btn");
+    const finishBtn = $("acq-finish-btn");
+    const newBtn = $("acq-new-btn");
+    const recDot = $("acq-rec-dot");
+    const statusText = $("acq-status-text");
+    const transcriptEl = $("acq-transcript");
+    const finishErr = $("acq-finish-err");
+    const finishRetryBtn = $("acq-finish-retry-btn");
+    const fieldsGrid = $("acq-fields-grid");
+    const listingTextArea = $("acq-listing-text");
+    const tasksList = $("acq-tasks-list");
+    const addTaskBtn = $("acq-add-task-btn");
+    const confirmBtn = $("acq-confirm-btn");
+    const reviewErr = $("acq-review-err");
+    const confirmedText = $("acq-confirmed-text");
+
+    // Field name -> input kind, matching acquisizione/schema.py's field types.
+    // Everything not listed here renders as a plain text input.
+    const BOOLEAN_FIELDS = ["ascensore", "cantina", "energeticky_certifikat_esiste"];
+    const NUMBER_FIELDS = [
+      "superficie_mq", "locali", "camere", "bagni", "piani_totali",
+      "anno_costruzione", "prezzo_richiesto", "ipe", "spese_condominiali",
+      "mesacne_poplatky",
+    ];
+
+    // Silence-triggered chunking: the model has no server-side turn detection
+    // in a transcription session (gpt-realtime-whisper requires manual
+    // input_audio_buffer.commit), so we commit on natural pauses in speech
+    // instead of blindly on a timer, to avoid cutting words in half. A max
+    // chunk length is a safety net for a caller who never pauses.
+    const SILENCE_MS = 700;
+    const MAX_CHUNK_MS = 15000;
+    const AUTOSAVE_MS = 8000;
+    // Reconnect comfortably before the hard 60-minute session cap.
+    const SESSION_MAX_MS = 55 * 60 * 1000;
+
+    let recordId = null;
+    let meetingActive = false;
+    let paused = false;
+    let transcript = "";
+    let micStream = null;
+    let pc = null, dc = null;
+    let audioCtx = null, analyser = null, rafId = null;
+    let hasPendingAudio = false, belowThresholdSince = null, lastCommitAt = 0;
+    let commitSafetyTimer = null, autosaveTimer = null, reconnectTimer = null;
+    let wakeLock = null, noSleepVideo = null, noSleepCanvasTimer = null;
+    let currentMissing = [];
+
+    function updateLiveLabels() {
+      const s = S();
+      if (statusText) statusText.textContent = paused ? s.acq_status_paused : s.acq_status_recording;
+      if (pauseBtn) pauseBtn.textContent = paused ? s.acq_resume_btn : s.acq_pause_btn;
+      if (recDot) recDot.classList.toggle("live", !paused);
+    }
+    // applyStrings() calls this on every locale switch so the two dynamic
+    // labels (status/pause-resume) stay in sync with static TEXT_IDS strings.
+    window.AcqRefreshLiveLabels = updateLiveLabels;
+
+    function renderTranscript() {
+      transcriptEl.textContent = transcript;
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;
+    }
+
+    function resetToConsent() {
+      consentStep.classList.remove("hidden");
+      liveStep.classList.add("hidden");
+      processingStep.classList.add("hidden");
+      reviewStep.classList.add("hidden");
+      confirmedStep.classList.add("hidden");
+      consentCheck.checked = false;
+      startBtn.disabled = true;
+      consentErr.textContent = "";
+      recordId = null;
+      transcript = "";
+      renderTranscript();
+    }
+
+    // ── Wake Lock (+ fallback) ────────────────────────────────────────────
+    async function acquireWakeLock() {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLock = await navigator.wakeLock.request("screen");
+          wakeLock.addEventListener("release", () => { wakeLock = null; });
+          return;
+        }
+      } catch (_) {
+        // OS refused (low battery / power-saver) — fall through to the
+        // NoSleep-style fallback below.
+      }
+      startNoSleepFallback();
+    }
+
+    function startNoSleepFallback() {
+      // iOS < 16.4, installed-PWA iOS < 18.4, and some legacy Android have no
+      // Wake Lock API. Classic NoSleep.js trick, without shipping a binary
+      // video asset: stream a canvas (redrawn every second) into a hidden,
+      // looping, autoplaying <video> — a "playing video" is enough for most
+      // of these platforms to suppress the screen timeout.
+      if (noSleepVideo) return;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1; canvas.height = 1;
+        const ctx2d = canvas.getContext("2d");
+        const stream = canvas.captureStream(1);
+        const video = document.createElement("video");
+        video.setAttribute("playsinline", "");
+        video.muted = true;
+        video.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;";
+        video.srcObject = stream;
+        document.body.appendChild(video);
+        noSleepCanvasTimer = setInterval(() => ctx2d.fillRect(0, 0, 1, 1), 1000);
+        video.play().catch(() => {});
+        noSleepVideo = video;
+      } catch (_) { /* best-effort only */ }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock) { try { wakeLock.release(); } catch (_) {} wakeLock = null; }
+      if (noSleepCanvasTimer) { clearInterval(noSleepCanvasTimer); noSleepCanvasTimer = null; }
+      if (noSleepVideo) {
+        try { noSleepVideo.pause(); } catch (_) {}
+        if (noSleepVideo.parentNode) noSleepVideo.parentNode.removeChild(noSleepVideo);
+        noSleepVideo = null;
+      }
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      // Wake Lock auto-releases when the tab is hidden — re-acquire once
+      // visible again if the meeting is still live and not paused.
+      if (document.visibilityState === "visible" && meetingActive && !paused) {
+        acquireWakeLock();
+      }
+    });
+
+    // ── Amplitude analyser: drives silence-triggered buffer commits ───────
+    function startAnalyser(stream) {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        audioCtx = new AC();
+        if (audioCtx.resume) audioCtx.resume();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.6;
+        audioCtx.createMediaStreamSource(stream).connect(analyser);
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        const tick = () => {
+          if (!analyser) return;
+          analyser.getByteFrequencyData(data);
+          let sum = 0;
+          for (let i = 0; i < data.length; i++) sum += data[i];
+          const level = sum / data.length / 255;
+          const now = Date.now();
+          if (!paused) {
+            if (level > 0.04) {
+              hasPendingAudio = true;
+              belowThresholdSince = null;
+            } else if (belowThresholdSince === null) {
+              belowThresholdSince = now;
+            }
+            const silentLongEnough = belowThresholdSince !== null && (now - belowThresholdSince) > SILENCE_MS;
+            const chunkTooLong = (now - lastCommitAt) > MAX_CHUNK_MS;
+            if (hasPendingAudio && (silentLongEnough || chunkTooLong)) commitBuffer();
+          }
+          rafId = requestAnimationFrame(tick);
+        };
+        tick();
+      } catch (_) {
+        // Transcription still works without silence-based chunking; the
+        // commitSafetyTimer alone will flush on MAX_CHUNK_MS.
+      }
+    }
+
+    function stopAnalyser() {
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+      if (analyser) { try { analyser.disconnect(); } catch (_) {} analyser = null; }
+      if (audioCtx) { try { audioCtx.close(); } catch (_) {} audioCtx = null; }
+    }
+
+    function commitBuffer() {
+      if (!dc || dc.readyState !== "open") return;
+      try {
+        dc.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+        hasPendingAudio = false;
+        lastCommitAt = Date.now();
+      } catch (_) {}
+    }
+
+    // ── Transcript autosave (defensive — a crash mid-meeting shouldn't lose it) ─
+    async function autosaveTranscript() {
+      if (!recordId) return;
+      try {
+        await api("/acquisizione/" + recordId + "/transcript", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript }),
+        });
+      } catch (_) { /* best-effort; the next tick retries */ }
+    }
+
+    // ── WebRTC session (open once, transparently reopened before the 60-min cap) ─
+    async function openSession() {
+      const tokenResp = await api("/acquisizione/" + recordId + "/session-token", { method: "POST" });
+      if (!tokenResp.ok) throw new Error("token " + tokenResp.status);
+      const tokenData = await tokenResp.json();
+      const ephemeral = tokenData.value || (tokenData.client_secret && tokenData.client_secret.value);
+      const model = tokenData._transcribe_model || "gpt-realtime-whisper";
+      if (!ephemeral) throw new Error("no ephemeral key");
+
+      const newPc = new RTCPeerConnection();
+      // Sendonly: a transcription-only session never talks back, so there is
+      // no remote audio track to receive/play.
+      newPc.addTransceiver(micStream.getAudioTracks()[0], { direction: "sendonly" });
+      const newDc = newPc.createDataChannel("oai-events");
+
+      newDc.addEventListener("open", () => {
+        lastCommitAt = Date.now();
+        if (commitSafetyTimer) clearInterval(commitSafetyTimer);
+        commitSafetyTimer = setInterval(() => {
+          if (hasPendingAudio && Date.now() - lastCommitAt > MAX_CHUNK_MS) commitBuffer();
+        }, 2000);
+      });
+      newDc.addEventListener("message", (e) => {
+        let evt;
+        try { evt = JSON.parse(e.data); } catch (_) { return; }
+        if (evt.type === "conversation.item.input_audio_transcription.delta" && evt.delta) {
+          transcript += evt.delta;
+          renderTranscript();
+        } else if (evt.type === "error") {
+          // An empty commit (e.g. a stray safety-net tick right after a
+          // silence-triggered commit already flushed everything) is expected
+          // and harmless; anything else is worth knowing about.
+          if (!evt.error || evt.error.code !== "input_audio_buffer_commit_empty") {
+            console.error("Acquisizione realtime error", evt);
+          }
+        }
+      });
+
+      const connected = new Promise((resolve, reject) => {
+        newPc.onconnectionstatechange = () => {
+          if (newPc.connectionState === "connected") resolve();
+          else if (newPc.connectionState === "failed") reject(new Error("connection failed"));
+        };
+      });
+
+      const offer = await newPc.createOffer();
+      await newPc.setLocalDescription(offer);
+      const sdpResp = await fetch(
+        "https://api.openai.com/v1/realtime/calls?model=" + encodeURIComponent(model),
+        {
+          method: "POST",
+          body: offer.sdp,
+          headers: { "Authorization": "Bearer " + ephemeral, "Content-Type": "application/sdp" },
+        }
+      );
+      if (!sdpResp.ok) throw new Error("sdp " + sdpResp.status);
+      await newPc.setRemoteDescription({ type: "answer", sdp: await sdpResp.text() });
+      await connected;
+
+      // New session is live — now retire the previous one (if any). Briefly
+      // running both avoids a gap in transcription across the seam, at the
+      // small cost of a possible sliver of duplicated text right at the
+      // handover, which is an acceptable trade for "never lose text".
+      const oldPc = pc, oldDc = dc;
+      pc = newPc; dc = newDc;
+      if (oldDc) { try { oldDc.close(); } catch (_) {} }
+      if (oldPc) { try { oldPc.close(); } catch (_) {} }
+
+      scheduleReconnect();
+    }
+
+    function scheduleReconnect() {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(() => {
+        if (!meetingActive) return;
+        openSession().catch((err) => {
+          // Keep the existing connection (if it's still alive) and retry
+          // shortly; a transient network drop shouldn't end the meeting.
+          console.error("Acquisizione reconnect failed, retrying", err);
+          reconnectTimer = setTimeout(() => { if (meetingActive) openSession().catch(() => {}); }, 5000);
+        });
+      }, SESSION_MAX_MS);
+    }
+
+    function cleanupConnection() {
+      stopAnalyser();
+      if (commitSafetyTimer) { clearInterval(commitSafetyTimer); commitSafetyTimer = null; }
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      if (autosaveTimer) { clearInterval(autosaveTimer); autosaveTimer = null; }
+      if (dc) { try { dc.close(); } catch (_) {} dc = null; }
+      if (pc) { try { pc.close(); } catch (_) {} pc = null; }
+      if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
+    }
+
+    // ── UI wiring ──────────────────────────────────────────────────────────
+    consentCheck.addEventListener("change", function () {
+      startBtn.disabled = !this.checked;
+    });
+
+    startBtn.addEventListener("click", async () => {
+      consentErr.textContent = "";
+      startBtn.disabled = true;
+      // Acquire the Wake Lock first and synchronously-as-possible within this
+      // click handler — requesting it after other awaits risks losing the
+      // user-gesture context the API requires.
+      await acquireWakeLock();
+      try {
+        const consentResp = await api("/acquisizione/consent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ method: "checkbox" }),
+        });
+        if (!consentResp.ok) throw new Error("consent " + consentResp.status);
+        const consentData = await consentResp.json();
+        recordId = consentData.id;
+
+        try {
+          micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (_) {
+          throw { userMessage: S().acq_err_mic };
+        }
+
+        await openSession();
+
+        transcript = "";
+        paused = false;
+        meetingActive = true;
+        hasPendingAudio = false;
+        belowThresholdSince = null;
+        startAnalyser(micStream);
+        autosaveTimer = setInterval(autosaveTranscript, AUTOSAVE_MS);
+
+        consentStep.classList.add("hidden");
+        liveStep.classList.remove("hidden");
+        renderTranscript();
+        updateLiveLabels();
+      } catch (err) {
+        cleanupConnection();
+        releaseWakeLock();
+        recordId = null;
+        consentErr.textContent = (err && err.userMessage) || S().acq_err_conn;
+      } finally {
+        startBtn.disabled = !consentCheck.checked;
+      }
+    });
+
+    pauseBtn.addEventListener("click", () => {
+      paused = !paused;
+      if (micStream) micStream.getAudioTracks().forEach((t) => { t.enabled = !paused; });
+      if (paused) {
+        // Stop appending: nothing gets committed/transcribed while paused.
+        hasPendingAudio = false;
+      } else if (document.visibilityState === "visible") {
+        acquireWakeLock(); // in case the OS released it while paused/backgrounded
+      }
+      updateLiveLabels();
+    });
+
+    // ── Review form (Phase 4): render the extraction result as an editable
+    // form, flag missing_required fields, let the agent edit/add/remove
+    // tasks. Nothing is saved as final until "Conferma" (PATCH /confirm).
+    function fieldEl(name, value) {
+      const s = S();
+      const wrap = document.createElement("div");
+      wrap.className = "acq-field";
+      wrap.dataset.field = name;
+      const missing = currentMissing.includes(name);
+      if (missing) wrap.classList.add("acq-field-missing");
+
+      const label = document.createElement("label");
+      const labelText = (s.acq_fields && s.acq_fields[name]) || name;
+      label.textContent = missing
+        ? labelText + " — " + s.acq_field_missing
+        : labelText;
+      if (missing) label.classList.add("acq-field-missing-tag");
+
+      if (BOOLEAN_FIELDS.includes(name)) {
+        wrap.classList.add("acq-field-check");
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.checked = !!value;
+        wrap.appendChild(input);
+        wrap.appendChild(label);
+      } else {
+        wrap.appendChild(label);
+        const input = document.createElement("input");
+        input.type = NUMBER_FIELDS.includes(name) ? "number" : "text";
+        if (value != null) input.value = value;
+        wrap.appendChild(input);
+      }
+      return wrap;
+    }
+
+    function taskRowEl(task) {
+      const s = S();
+      const row = document.createElement("div");
+      row.className = "acq-task-row";
+      row.dataset.citazione = task.citazione || "";
+
+      const top = document.createElement("div");
+      top.className = "acq-task-row-top";
+
+      const descInput = document.createElement("input");
+      descInput.type = "text";
+      descInput.className = "acq-task-desc";
+      descInput.value = task.descrizione || "";
+      top.appendChild(descInput);
+
+      const ownerSelect = document.createElement("select");
+      ownerSelect.className = "acq-task-owner";
+      [["agente", s.acq_task_owner_agente], ["venditore", s.acq_task_owner_venditore]]
+        .forEach(([val, text]) => {
+          const opt = document.createElement("option");
+          opt.value = val; opt.textContent = text;
+          if (task.owner === val) opt.selected = true;
+          ownerSelect.appendChild(opt);
+        });
+      top.appendChild(ownerSelect);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "acq-task-remove";
+      removeBtn.textContent = "× " + s.acq_task_remove;
+      removeBtn.addEventListener("click", () => row.remove());
+      top.appendChild(removeBtn);
+      row.appendChild(top);
+
+      const bottom = document.createElement("div");
+      bottom.className = "acq-task-row-bottom";
+
+      const dueInput = document.createElement("input");
+      dueInput.type = "text";
+      dueInput.className = "acq-task-due";
+      dueInput.placeholder = s.acq_task_due_placeholder;
+      dueInput.value = task.scadenza || "";
+      bottom.appendChild(dueInput);
+
+      const blockLabel = document.createElement("label");
+      const blockInput = document.createElement("input");
+      blockInput.type = "checkbox";
+      blockInput.className = "acq-task-block";
+      blockInput.checked = !!task.blocca_pubblicazione;
+      blockLabel.appendChild(blockInput);
+      blockLabel.appendChild(document.createTextNode(s.acq_task_blocking));
+      bottom.appendChild(blockLabel);
+      row.appendChild(bottom);
+
+      if (task.citazione) {
+        const quote = document.createElement("div");
+        quote.className = "acq-task-quote";
+        quote.textContent = "“" + task.citazione + "”";
+        row.appendChild(quote);
+      }
+      return row;
+    }
+
+    function renderReview(record) {
+      currentMissing = record.missing_required || [];
+      fieldsGrid.innerHTML = "";
+      const fields = record.listing_fields || {};
+      Object.keys(fields).forEach((name) => fieldsGrid.appendChild(fieldEl(name, fields[name])));
+      listingTextArea.value = record.listing_text || "";
+      tasksList.innerHTML = "";
+      (record.tasks || []).forEach((t) => tasksList.appendChild(taskRowEl(t)));
+      reviewErr.textContent = "";
+      processingStep.classList.add("hidden");
+      reviewStep.classList.remove("hidden");
+    }
+
+    function collectFieldsPayload() {
+      const out = {};
+      fieldsGrid.querySelectorAll(".acq-field").forEach((wrap) => {
+        const name = wrap.dataset.field;
+        const input = wrap.querySelector("input");
+        if (input.type === "checkbox") out[name] = input.checked;
+        else if (input.type === "number") out[name] = input.value === "" ? null : Number(input.value);
+        else out[name] = input.value === "" ? null : input.value;
+      });
+      return out;
+    }
+
+    function collectTasksPayload() {
+      const out = [];
+      tasksList.querySelectorAll(".acq-task-row").forEach((row) => {
+        const desc = row.querySelector(".acq-task-desc").value.trim();
+        if (!desc) return; // drop empty rows (e.g. an added-then-abandoned task)
+        out.push({
+          descrizione: desc,
+          owner: row.querySelector(".acq-task-owner").value,
+          scadenza: row.querySelector(".acq-task-due").value || null,
+          blocca_pubblicazione: row.querySelector(".acq-task-block").checked,
+          citazione: row.dataset.citazione || null,
+        });
+      });
+      return out;
+    }
+
+    async function attemptFinish() {
+      finishErr.textContent = "";
+      finishRetryBtn.classList.add("hidden");
+      processingStep.classList.remove("hidden");
+      try {
+        const resp = await api("/acquisizione/" + recordId + "/finish", { method: "POST" });
+        if (!resp.ok) throw new Error("finish " + resp.status);
+        renderReview(await resp.json());
+      } catch (_) {
+        // The record reverted server-side to 'transcribing' on failure — the
+        // transcript is intact, so retrying just re-runs extraction on it.
+        finishErr.textContent = S().acq_err_finish;
+        finishRetryBtn.classList.remove("hidden");
+      }
+    }
+
+    finishBtn.addEventListener("click", async () => {
+      finishBtn.disabled = true;
+      await autosaveTranscript(); // final flush before tearing the session down
+      cleanupConnection();
+      releaseWakeLock();
+      meetingActive = false;
+      liveStep.classList.add("hidden");
+      finishBtn.disabled = false;
+      await attemptFinish();
+    });
+
+    finishRetryBtn.addEventListener("click", attemptFinish);
+
+    addTaskBtn.addEventListener("click", () => {
+      tasksList.appendChild(taskRowEl({
+        descrizione: "", owner: "agente", scadenza: null,
+        blocca_pubblicazione: false, citazione: "",
+      }));
+    });
+
+    confirmBtn.addEventListener("click", async () => {
+      reviewErr.textContent = "";
+      confirmBtn.disabled = true;
+      try {
+        const payload = {
+          listing_fields: collectFieldsPayload(),
+          listing_text: listingTextArea.value,
+          tasks: collectTasksPayload(),
+        };
+        const resp = await api("/acquisizione/" + recordId + "/confirm", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok) throw new Error("confirm " + resp.status);
+        reviewStep.classList.add("hidden");
+        confirmedText.textContent = S().acq_confirmed_text;
+        confirmedStep.classList.remove("hidden");
+      } catch (_) {
+        reviewErr.textContent = S().acq_err_confirm;
+      } finally {
+        confirmBtn.disabled = false;
+      }
+    });
+
+    newBtn.addEventListener("click", resetToConsent);
+  })();
 
   applyStrings();  // localise the login screen before the tenant is known
   init();

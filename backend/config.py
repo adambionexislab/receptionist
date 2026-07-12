@@ -77,6 +77,15 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: Optional[str] = None
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
 
+    # Acquisizione (seller-meeting capture) — ships dark until this is set.
+    ACQUISIZIONE_ENABLED: bool = False
+    # Live streaming transcription model for the browser WebRTC meeting capture.
+    REALTIME_TRANSCRIBE_MODEL: str = "gpt-realtime-whisper"
+    # Transcript → structured listing fields/tasks (reasoning model).
+    EXTRACTION_MODEL: str = "gpt-5.6-terra"
+    # Property photo enhancement (declutter/relight/straighten).
+    IMAGE_EDIT_MODEL: str = "gpt-image-2"
+
     model_config = {"env_file": str(_ENV_FILE)}
 
 
