@@ -932,7 +932,6 @@
       if (!tokenResp.ok) throw new Error("token " + tokenResp.status);
       const tokenData = await tokenResp.json();
       const ephemeral = tokenData.value || (tokenData.client_secret && tokenData.client_secret.value);
-      const model = tokenData._transcribe_model || "gpt-realtime-whisper";
       if (!ephemeral) throw new Error("no ephemeral key");
 
       const newPc = new RTCPeerConnection();
@@ -973,8 +972,13 @@
 
       const offer = await newPc.createOffer();
       await newPc.setLocalDescription(offer);
+      // No `model=` query param here: unlike a "realtime" session, a
+      // transcription session's model is already pinned server-side
+      // (audio.input.transcription.model, set when the ephemeral token was
+      // minted) — OpenAI's /calls endpoint rejects the param for this
+      // session type with invalid_request_error/invalid_model.
       const sdpResp = await fetch(
-        "https://api.openai.com/v1/realtime/calls?model=" + encodeURIComponent(model),
+        "https://api.openai.com/v1/realtime/calls",
         {
           method: "POST",
           body: offer.sdp,

@@ -124,15 +124,12 @@ async def session_token(record_id: str, tenant: dict = Depends(current_tenant)):
         logger.error("OpenAI client_secrets (transcription) error: %s", exc)
         raise HTTPException(status_code=502, detail="Failed to start transcription session")
 
-    # GA shape: {"value": "ek_...", "expires_at": ..., "session": {...}}. A
-    # transcription session's resolved `session` has no top-level `model`
-    # field (it lives nested at audio.input.transcription.model), unlike a
-    # "realtime" session — so add a convenience top-level field for the
-    # frontend's WebRTC SDP handshake instead of making it dig through the
-    # nested shape.
-    data = resp.json()
-    data["_transcribe_model"] = settings.REALTIME_TRANSCRIBE_MODEL
-    return data
+    # GA shape: {"value": "ek_...", "expires_at": ..., "session": {...}}.
+    # Returned as-is; the browser uses `value` for the WebRTC SDP handshake.
+    # Unlike a "realtime" session, the /calls handshake must NOT get a
+    # `model=` query param for a transcription session — see the frontend's
+    # openSession(), which deliberately omits it.
+    return resp.json()
 
 
 @router.post("/{record_id}/finish")

@@ -1073,7 +1073,10 @@ def _persist_call(session: dict[str, Any]) -> None:
         return
 
     started = session.get("started_at")
-    ended = datetime.datetime.now(datetime.timezone.utc)
+    # End time is stamped at call teardown (see _run_call's finally), NOT here —
+    # otherwise duration would also count the post-call summary + email HTTP
+    # calls that run before this, inflating every call by up to tens of seconds.
+    ended = session.get("ended_at") or datetime.datetime.now(datetime.timezone.utc)
     duration = int((ended - started).total_seconds()) if started else 0
     ended_iso = ended.isoformat()
 
@@ -1454,6 +1457,10 @@ async def _run_call(
     except Exception as exc:
         logger.exception("Unhandled error in _run_call for %s: %s", call_id, exc)
     finally:
+        # Stamp the end at teardown, BEFORE the post-call email/summary pipeline,
+        # so duration measures the call itself — not the seconds spent generating
+        # the summary and sending the email afterwards.
+        session["ended_at"] = datetime.datetime.now(datetime.timezone.utc)
         await _send_lead_email(session)
         # Persist after the email so the LLM summary it generated can be reused.
         # Guarded so a DB hiccup can't crash the call task or lose the email.
