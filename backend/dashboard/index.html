@@ -776,6 +776,7 @@
     let commitSafetyTimer = null, autosaveTimer = null, reconnectTimer = null;
     let wakeLock = null, noSleepVideo = null, noSleepCanvasTimer = null;
     let currentMissing = [];
+    let itemDeltaText = {}; // item_id -> delta text seen so far, for the completed-event fallback
 
     function updateLiveLabels() {
       const s = S();
@@ -803,6 +804,7 @@
       consentErr.textContent = "";
       recordId = null;
       transcript = "";
+      itemDeltaText = {};
       renderTranscript();
     }
 
@@ -962,8 +964,20 @@
         let evt;
         try { evt = JSON.parse(e.data); } catch (_) { return; }
         if (evt.type === "conversation.item.input_audio_transcription.delta" && evt.delta) {
+          itemDeltaText[evt.item_id] = (itemDeltaText[evt.item_id] || "") + evt.delta;
           transcript += evt.delta;
           renderTranscript();
+        } else if (evt.type === "conversation.item.input_audio_transcription.completed") {
+          // Some chunks (e.g. very short ones, committed on the fixed
+          // heartbeat rather than a natural pause) may never stream deltas
+          // and instead arrive only as a single completed event with the
+          // full chunk transcript — don't silently drop that text. If deltas
+          // for this item WERE already seen, they already sum to this same
+          // text, so skip to avoid duplicating it.
+          if (!itemDeltaText[evt.item_id] && evt.transcript) {
+            transcript += evt.transcript;
+            renderTranscript();
+          }
         } else if (evt.type === "error") {
           // An empty commit (e.g. a stray safety-net tick right after a
           // silence-triggered commit already flushed everything) is expected
@@ -971,6 +985,11 @@
           if (!evt.error || evt.error.code !== "input_audio_buffer_commit_empty") {
             console.error("Acquisizione realtime error", evt);
           }
+        } else {
+          // Temporary while this feature is dark-launched: log anything we
+          // don't explicitly handle, so an unexpected event shape shows up
+          // in the console instead of silently vanishing.
+          console.debug("Acquisizione event", evt.type, evt);
         }
       });
 
@@ -1066,6 +1085,7 @@
         await openSession();
 
         transcript = "";
+        itemDeltaText = {};
         paused = false;
         meetingActive = true;
         hasPendingAudio = false;
