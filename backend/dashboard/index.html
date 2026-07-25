@@ -758,6 +758,9 @@
     // chunk length is a safety net for a caller who never pauses.
     const SILENCE_MS = 700;
     const MAX_CHUNK_MS = 15000;
+    // Unconditional commit heartbeat — see the dc "open" handler in
+    // openSession() for why this can't just rely on the analyser.
+    const COMMIT_INTERVAL_MS = 4000;
     const AUTOSAVE_MS = 8000;
     // Reconnect comfortably before the hard 60-minute session cap.
     const SESSION_MAX_MS = 55 * 60 * 1000;
@@ -943,9 +946,17 @@
       newDc.addEventListener("open", () => {
         lastCommitAt = Date.now();
         if (commitSafetyTimer) clearInterval(commitSafetyTimer);
-        commitSafetyTimer = setInterval(() => {
-          if (hasPendingAudio && Date.now() - lastCommitAt > MAX_CHUNK_MS) commitBuffer();
-        }, 2000);
+        // Unconditional heartbeat commit — the PRIMARY mechanism, not just a
+        // safety net. Don't rely on the local amplitude analyser (see
+        // startAnalyser) ever firing to trigger a commit: some browsers leave
+        // the AudioContext suspended when it's resumed this far downstream of
+        // the original click (after the mic-permission prompt and network
+        // round-trips), which would otherwise mean input level always reads
+        // ~0 and no commit — hence no transcription — ever happens. An empty
+        // commit (nothing new since the last one) is expected/harmless, see
+        // the 'error' handler below, so committing on a fixed interval
+        // regardless of hasPendingAudio is safe.
+        commitSafetyTimer = setInterval(commitBuffer, COMMIT_INTERVAL_MS);
       });
       newDc.addEventListener("message", (e) => {
         let evt;
