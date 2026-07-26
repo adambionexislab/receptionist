@@ -946,9 +946,12 @@
       if (!ephemeral) throw new Error("no ephemeral key");
 
       const newPc = new RTCPeerConnection();
-      // Sendonly: a transcription-only session never talks back, so there is
-      // no remote audio track to receive/play.
-      newPc.addTransceiver(micStream.getAudioTracks()[0], { direction: "sendonly" });
+      // Plain addTrack (sendrecv), matching the WebRTC setup already proven
+      // working elsewhere in this codebase (landingpage/index.html's live
+      // demo widget). A transcription session never actually sends audio
+      // back, so any remote track that shows up is simply left unused.
+      newPc.addTrack(micStream.getAudioTracks()[0], micStream);
+      newPc.ontrack = () => {}; // no-op: nothing to play for a transcription session
       const newDc = newPc.createDataChannel("oai-events");
 
       newDc.addEventListener("open", () => {
@@ -986,12 +989,11 @@
             renderTranscript();
           }
         } else if (evt.type === "error") {
-          // An empty commit (e.g. a stray safety-net tick right after a
-          // silence-triggered commit already flushed everything) is expected
-          // and harmless; anything else is worth knowing about.
-          if (!evt.error || evt.error.code !== "input_audio_buffer_commit_empty") {
-            console.error("Acquisizione realtime error", evt);
-          }
+          // Temporarily logging every error, including input_audio_buffer_
+          // commit_empty (normally an expected race, but if it fires on
+          // EVERY commit that means no audio is reaching the buffer at all —
+          // worth seeing while we confirm the mic track is actually flowing).
+          console.error("Acquisizione realtime error", evt);
         } else {
           // Temporary while this feature is dark-launched: log anything we
           // don't explicitly handle, so an unexpected event shape shows up
