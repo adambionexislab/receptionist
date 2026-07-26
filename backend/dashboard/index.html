@@ -171,6 +171,29 @@
   }
   .acq-task-quote { color: var(--text-dim); font-size: .78rem; margin-top: 6px; font-style: italic; }
   .acq-task-remove { background: none; border: none; color: var(--red); cursor: pointer; font-size: .8rem; padding: 4px 8px; }
+  .acq-photos-toolbar { margin-bottom: 12px; }
+  .acq-photo-card {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; margin-bottom: 10px;
+  }
+  .acq-photo-card-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .acq-photo-card select {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 7px 9px; border-radius: 8px; font-size: .85rem;
+  }
+  .acq-photo-images { display: flex; gap: 12px; flex-wrap: wrap; }
+  .acq-photo-images figure { margin: 0; flex: 1; min-width: 160px; }
+  .acq-photo-images img { width: 100%; border-radius: 6px; display: block; }
+  .acq-photo-images figcaption {
+    font-size: .72rem; color: var(--text-dim); margin-top: 4px; text-align: center;
+    text-transform: uppercase; letter-spacing: .4px;
+  }
+  .acq-photo-remove { background: none; border: none; color: var(--red); cursor: pointer; font-size: .8rem; padding: 4px 8px; margin-left: auto; }
+  .acq-photo-err { color: var(--red); font-size: .78rem; margin-top: 8px; }
+  .acq-photo-download {
+    display: inline-block; margin-top: 8px; font-size: .82rem; color: var(--accent); text-decoration: none;
+  }
+  .acq-photo-download:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -308,6 +331,13 @@
           <div id="acq-tasks-list" class="acq-tasks-list"></div>
           <button class="btn ghost" id="acq-add-task-btn"></button>
 
+          <h3 id="acq-review-photos-title"></h3>
+          <div class="acq-photos-toolbar">
+            <button class="btn ghost" id="acq-photo-add-btn"></button>
+            <input type="file" id="acq-photo-input" accept="image/png,image/jpeg,image/webp" multiple class="hidden" />
+          </div>
+          <div id="acq-photos-list" class="acq-photos-list"></div>
+
           <div class="err" id="acq-review-err"></div>
           <button class="btn" id="acq-confirm-btn"></button>
         </div>
@@ -391,6 +421,18 @@
       acq_task_due_placeholder: "Scadenza",
       acq_task_remove: "Rimuovi",
       acq_confirmed_text: "Immobile confermato e salvato.",
+      acq_review_photos_title: "Foto",
+      acq_photo_add_btn: "+ Aggiungi foto",
+      acq_photo_enhance_btn: "Migliora",
+      acq_photo_enhancing: "Elaborazione…",
+      acq_photo_remove: "Rimuovi",
+      acq_photo_download: "Scarica",
+      acq_photo_err: "Elaborazione non riuscita.",
+      acq_photo_before: "Originale",
+      acq_photo_after: "Migliorata",
+      acq_presets: {
+        declutter: "Elimina disordine", relight: "Migliora luce", straighten: "Raddrizza",
+      },
       acq_fields: {
         tipologia: "Tipologia", indirizzo_o_zona: "Indirizzo / zona",
         superficie_mq: "Superficie (m²)", locali: "Locali", camere: "Camere da letto",
@@ -461,6 +503,18 @@
       acq_task_due_placeholder: "Termín",
       acq_task_remove: "Odstrániť",
       acq_confirmed_text: "Nehnuteľnosť potvrdená a uložená.",
+      acq_review_photos_title: "Fotografie",
+      acq_photo_add_btn: "+ Pridať fotografiu",
+      acq_photo_enhance_btn: "Vylepšiť",
+      acq_photo_enhancing: "Spracúva sa…",
+      acq_photo_remove: "Odstrániť",
+      acq_photo_download: "Stiahnuť",
+      acq_photo_err: "Spracovanie zlyhalo.",
+      acq_photo_before: "Pôvodná",
+      acq_photo_after: "Vylepšená",
+      acq_presets: {
+        declutter: "Odstrániť neporiadok", relight: "Vylepšiť osvetlenie", straighten: "Vyrovnať",
+      },
       acq_fields: {
         tipologia: "Typ nehnuteľnosti", indirizzo_o_zona: "Adresa / lokalita",
         superficie_mq: "Úžitková plocha (m²)", locali: "Počet izieb", camere: "Spálne",
@@ -509,6 +563,8 @@
     "acq-review-tasks-title": "acq_review_tasks_title",
     "acq-add-task-btn": "acq_add_task_btn", "acq-confirm-btn": "acq_confirm_btn",
     "acq-confirmed-text": "acq_confirmed_text",
+    "acq-review-photos-title": "acq_review_photos_title",
+    "acq-photo-add-btn": "acq_photo_add_btn",
   };
 
   function applyStrings() {
@@ -741,6 +797,11 @@
     const confirmBtn = $("acq-confirm-btn");
     const reviewErr = $("acq-review-err");
     const confirmedText = $("acq-confirmed-text");
+    const photoAddBtn = $("acq-photo-add-btn");
+    const photoInput = $("acq-photo-input");
+    const photosList = $("acq-photos-list");
+    const PHOTO_PRESETS = ["declutter", "relight", "straighten"];
+    let photoObjectUrls = [];
 
     // Field name -> input kind, matching acquisizione/schema.py's field types.
     // Everything not listed here renders as a plain text input.
@@ -806,6 +867,7 @@
       transcript = "";
       itemDeltaText = {};
       renderTranscript();
+      clearPhotos();
     }
 
     // ── Wake Lock (+ fallback) ────────────────────────────────────────────
@@ -1233,7 +1295,116 @@
       return row;
     }
 
+    function clearPhotos() {
+      photoObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+      photoObjectUrls = [];
+      photosList.innerHTML = "";
+    }
+
+    function photoCardEl(file) {
+      const s = S();
+      const card = document.createElement("div");
+      card.className = "acq-photo-card";
+
+      const top = document.createElement("div");
+      top.className = "acq-photo-card-top";
+
+      const presetSelect = document.createElement("select");
+      PHOTO_PRESETS.forEach((p) => {
+        const opt = document.createElement("option");
+        opt.value = p;
+        opt.textContent = (s.acq_presets && s.acq_presets[p]) || p;
+        presetSelect.appendChild(opt);
+      });
+      top.appendChild(presetSelect);
+
+      const enhanceBtn = document.createElement("button");
+      enhanceBtn.type = "button";
+      enhanceBtn.className = "btn ghost";
+      enhanceBtn.textContent = s.acq_photo_enhance_btn;
+      top.appendChild(enhanceBtn);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "acq-photo-remove";
+      removeBtn.textContent = "× " + s.acq_photo_remove;
+      removeBtn.addEventListener("click", () => card.remove());
+      top.appendChild(removeBtn);
+      card.appendChild(top);
+
+      const images = document.createElement("div");
+      images.className = "acq-photo-images";
+
+      const beforeUrl = URL.createObjectURL(file);
+      photoObjectUrls.push(beforeUrl);
+      const beforeFig = document.createElement("figure");
+      const beforeImg = document.createElement("img");
+      beforeImg.src = beforeUrl;
+      const beforeCaption = document.createElement("figcaption");
+      beforeCaption.textContent = s.acq_photo_before;
+      beforeFig.appendChild(beforeImg);
+      beforeFig.appendChild(beforeCaption);
+      images.appendChild(beforeFig);
+      card.appendChild(images);
+
+      const err = document.createElement("div");
+      err.className = "acq-photo-err";
+      card.appendChild(err);
+
+      // Isolated failure: an enhancement error only affects this photo card,
+      // never the listing fields/text/tasks above it.
+      enhanceBtn.addEventListener("click", async () => {
+        err.textContent = "";
+        enhanceBtn.disabled = true;
+        const originalLabel = enhanceBtn.textContent;
+        enhanceBtn.textContent = S().acq_photo_enhancing;
+        try {
+          const formData = new FormData();
+          formData.append("preset", presetSelect.value);
+          formData.append("image", file);
+          const resp = await api("/acquisizione/photos/enhance", { method: "POST", body: formData });
+          if (!resp.ok) throw new Error("enhance " + resp.status);
+          const blob = await resp.blob();
+          const afterUrl = URL.createObjectURL(blob);
+          photoObjectUrls.push(afterUrl);
+
+          const existingAfter = images.querySelector(".acq-photo-after-figure");
+          if (existingAfter) existingAfter.remove();
+
+          const afterFig = document.createElement("figure");
+          afterFig.className = "acq-photo-after-figure";
+          const afterImg = document.createElement("img");
+          afterImg.src = afterUrl;
+          const afterCaption = document.createElement("figcaption");
+          afterCaption.textContent = S().acq_photo_after;
+          afterFig.appendChild(afterImg);
+          afterFig.appendChild(afterCaption);
+          const downloadLink = document.createElement("a");
+          downloadLink.className = "acq-photo-download";
+          downloadLink.href = afterUrl;
+          downloadLink.download = "enhanced-" + (file.name || "photo.png");
+          downloadLink.textContent = "↓ " + S().acq_photo_download;
+          afterFig.appendChild(downloadLink);
+          images.appendChild(afterFig);
+        } catch (_) {
+          err.textContent = S().acq_photo_err;
+        } finally {
+          enhanceBtn.disabled = false;
+          enhanceBtn.textContent = originalLabel;
+        }
+      });
+
+      return card;
+    }
+
+    photoAddBtn.addEventListener("click", () => photoInput.click());
+    photoInput.addEventListener("change", () => {
+      Array.from(photoInput.files || []).forEach((file) => photosList.appendChild(photoCardEl(file)));
+      photoInput.value = ""; // allow re-selecting the same file later
+    });
+
     function renderReview(record) {
+      clearPhotos();
       currentMissing = record.missing_required || [];
       fieldsGrid.innerHTML = "";
       const fields = record.listing_fields || {};

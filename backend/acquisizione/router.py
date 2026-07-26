@@ -1,11 +1,10 @@
 """Acquisizione — seller-meeting capture.
 
 An agent runs a live-transcribed listing-intake meeting with a property
-seller, entirely inside the agency dashboard (dashboard/index.html). This
-router currently covers Phase 1 of the feature: GDPR consent logging, minting
-a short-lived ephemeral token for a browser WebRTC connection straight to
-OpenAI's Realtime transcription API, and periodic transcript autosave. Later
-phases (extraction, review/confirm, photo enhancement) extend this router.
+seller, entirely inside the agency dashboard (dashboard/index.html): GDPR
+consent logging, a live WebRTC transcription session, one-shot extraction
+into structured listing fields/tasks, an editable review + confirm step, and
+optional photo enhancement.
 
 Ships dark behind config.ACQUISIZIONE_ENABLED — main.py only mounts this
 router when the flag is set.
@@ -21,10 +20,11 @@ import logging
 from typing import Any, Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 
-from acquisizione import db, extraction
+from acquisizione import db, extraction, photos
 from config import settings
 from dashboard.router import current_tenant
 
@@ -184,6 +184,38 @@ async def confirm_record(
     if not ok:
         raise HTTPException(status_code=409, detail="Record is not awaiting confirmation")
     return await asyncio.to_thread(db.get, record_id, tenant["id"])
+
+
+_MAX_PHOTO_BYTES = 50 * 1024 * 1024  # OpenAI's own per-image limit
+
+
+@router.post("/photos/enhance")
+async def enhance_photo(
+    preset: str = Form(...),
+    image: UploadFile = File(...),
+    tenant: dict = Depends(current_tenant),
+):
+    """Enhance one uploaded photo (declutter/relight/straighten) and stream
+    the result straight back. Not tied to any intake record and nothing is
+    persisted (see acquisizione/photos.py) — the agent downloads whatever
+    they want to keep. Isolated failure: never touches a listing record."""
+    if preset not in photos.PRESETS:
+        raise HTTPException(status_code=400, detail="Unknown preset")
+    raw = await image.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(raw) > _MAX_PHOTO_BYTES:
+        raise HTTPException(status_code=413, detail="Image too large")
+
+    try:
+        edited = await photos.enhance(
+            raw, image.filename or "photo.png", image.content_type or "image/png", preset,
+        )
+    except photos.PhotoEnhanceError as exc:
+        logger.error("Photo enhancement failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Photo enhancement failed, please retry")
+
+    return Response(content=edited, media_type="image/png")
 
 
 @router.get("")
