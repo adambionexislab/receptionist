@@ -133,6 +133,8 @@
   .acq-transcript:empty::before { content: attr(data-placeholder); color: var(--text-dim); }
   #acq-review h3 { font-size: .95rem; margin: 22px 0 12px; }
   #acq-review h3:first-child { margin-top: 0; }
+  .acq-tool-title { font-size: 1.05rem; margin: 32px 0 14px; }
+  .acq-tool-title:first-of-type { margin-top: 0; }
   .acq-fields-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
   .acq-field { display: flex; flex-direction: column; gap: 5px; }
   .acq-field label { margin: 0; }
@@ -286,8 +288,9 @@
     </section>
 
     <section id="view-acquisizione" class="view">
-      <h2 id="acq-title">Acquisizione</h2>
+      <h2 id="acq-title">Strumenti AI</h2>
 
+      <h3 id="acq-meeting-title" class="acq-tool-title">Acquisizione</h3>
       <div id="acq-consent" class="card">
         <div class="acq-pad">
           <p id="acq-consent-text" class="acq-consent-text"></p>
@@ -331,13 +334,6 @@
           <div id="acq-tasks-list" class="acq-tasks-list"></div>
           <button class="btn ghost" id="acq-add-task-btn"></button>
 
-          <h3 id="acq-review-photos-title"></h3>
-          <div class="acq-photos-toolbar">
-            <button class="btn ghost" id="acq-photo-add-btn"></button>
-            <input type="file" id="acq-photo-input" accept="image/png,image/jpeg,image/webp" multiple class="hidden" />
-          </div>
-          <div id="acq-photos-list" class="acq-photos-list"></div>
-
           <div class="err" id="acq-review-err"></div>
           <button class="btn" id="acq-confirm-btn"></button>
         </div>
@@ -347,6 +343,17 @@
         <div class="acq-pad">
           <p id="acq-confirmed-text"></p>
           <button class="btn" id="acq-new-btn"></button>
+        </div>
+      </div>
+
+      <h3 id="acq-photos-tool-title" class="acq-tool-title">Foto</h3>
+      <div id="acq-photos-tool" class="card">
+        <div class="acq-pad">
+          <div class="acq-photos-toolbar">
+            <button class="btn ghost" id="acq-photo-add-btn"></button>
+            <input type="file" id="acq-photo-input" accept="image/png,image/jpeg,image/webp" multiple class="hidden" />
+          </div>
+          <div id="acq-photos-list" class="acq-photos-list"></div>
         </div>
       </div>
     </section>
@@ -386,8 +393,9 @@
       listings_empty: "Nessun immobile disponibile.",
       outcomes: { lead: "Lead", message: "Messaggio", call: "Chiamata" },
       types: { vendita: "Vendita", affitto: "Affitto" },
-      acq_tab: "Acquisizione",
-      acq_title: "Nuovo immobile",
+      acq_tab: "Strumenti AI",
+      acq_title: "Strumenti AI",
+      acq_meeting_title: "Acquisizione",
       acq_consent_text:
         "Prima di iniziare, informi il venditore che la conversazione verrà " +
         "trascritta automaticamente (nessun audio viene registrato o " +
@@ -421,7 +429,7 @@
       acq_task_due_placeholder: "Scadenza",
       acq_task_remove: "Rimuovi",
       acq_confirmed_text: "Immobile confermato e salvato.",
-      acq_review_photos_title: "Foto",
+      acq_photos_tool_title: "Foto",
       acq_photo_add_btn: "+ Aggiungi foto",
       acq_photo_enhance_btn: "Migliora",
       acq_photo_enhancing: "Elaborazione…",
@@ -468,8 +476,9 @@
       listings_empty: "Žiadne dostupné nehnuteľnosti.",
       outcomes: { lead: "Záujemca", message: "Odkaz", call: "Hovor" },
       types: { vendita: "Predaj", affitto: "Prenájom" },
-      acq_tab: "Získanie",
-      acq_title: "Nová nehnuteľnosť",
+      acq_tab: "Nástroje AI",
+      acq_title: "Nástroje AI",
+      acq_meeting_title: "Získanie",
       acq_consent_text:
         "Skôr než začnete, informujte predávajúceho, že konverzácia bude " +
         "automaticky prepisovaná (žiadny zvuk sa nenahráva ani neukladá) " +
@@ -503,7 +512,7 @@
       acq_task_due_placeholder: "Termín",
       acq_task_remove: "Odstrániť",
       acq_confirmed_text: "Nehnuteľnosť potvrdená a uložená.",
-      acq_review_photos_title: "Fotografie",
+      acq_photos_tool_title: "Fotografie",
       acq_photo_add_btn: "+ Pridať fotografiu",
       acq_photo_enhance_btn: "Vylepšiť",
       acq_photo_enhancing: "Spracúva sa…",
@@ -563,7 +572,8 @@
     "acq-review-tasks-title": "acq_review_tasks_title",
     "acq-add-task-btn": "acq_add_task_btn", "acq-confirm-btn": "acq_confirm_btn",
     "acq-confirmed-text": "acq_confirmed_text",
-    "acq-review-photos-title": "acq_review_photos_title",
+    "acq-meeting-title": "acq_meeting_title",
+    "acq-photos-tool-title": "acq_photos_tool_title",
     "acq-photo-add-btn": "acq_photo_add_btn",
   };
 
@@ -801,7 +811,6 @@
     const photoInput = $("acq-photo-input");
     const photosList = $("acq-photos-list");
     const PHOTO_PRESETS = ["declutter", "relight", "straighten"];
-    let photoObjectUrls = [];
 
     // Field name -> input kind, matching acquisizione/schema.py's field types.
     // Everything not listed here renders as a plain text input.
@@ -867,7 +876,6 @@
       transcript = "";
       itemDeltaText = {};
       renderTranscript();
-      clearPhotos();
     }
 
     // ── Wake Lock (+ fallback) ────────────────────────────────────────────
@@ -1295,16 +1303,15 @@
       return row;
     }
 
-    function clearPhotos() {
-      photoObjectUrls.forEach((url) => URL.revokeObjectURL(url));
-      photoObjectUrls = [];
-      photosList.innerHTML = "";
-    }
-
     function photoCardEl(file) {
       const s = S();
       const card = document.createElement("div");
       card.className = "acq-photo-card";
+      // This card's own object URLs (before + whichever "after" is current),
+      // revoked on removal or replaced on re-enhance — not tracked globally,
+      // since this tool's cards now live and die independently of each other
+      // and of the acquisizione meeting flow.
+      let afterUrl = null;
 
       const top = document.createElement("div");
       top.className = "acq-photo-card-top";
@@ -1328,7 +1335,11 @@
       removeBtn.type = "button";
       removeBtn.className = "acq-photo-remove";
       removeBtn.textContent = "× " + s.acq_photo_remove;
-      removeBtn.addEventListener("click", () => card.remove());
+      removeBtn.addEventListener("click", () => {
+        URL.revokeObjectURL(beforeUrl);
+        if (afterUrl) URL.revokeObjectURL(afterUrl);
+        card.remove();
+      });
       top.appendChild(removeBtn);
       card.appendChild(top);
 
@@ -1336,7 +1347,6 @@
       images.className = "acq-photo-images";
 
       const beforeUrl = URL.createObjectURL(file);
-      photoObjectUrls.push(beforeUrl);
       const beforeFig = document.createElement("figure");
       const beforeImg = document.createElement("img");
       beforeImg.src = beforeUrl;
@@ -1352,7 +1362,7 @@
       card.appendChild(err);
 
       // Isolated failure: an enhancement error only affects this photo card,
-      // never the listing fields/text/tasks above it.
+      // never the acquisizione meeting tool above it.
       enhanceBtn.addEventListener("click", async () => {
         err.textContent = "";
         enhanceBtn.disabled = true;
@@ -1365,8 +1375,8 @@
           const resp = await api("/acquisizione/photos/enhance", { method: "POST", body: formData });
           if (!resp.ok) throw new Error("enhance " + resp.status);
           const blob = await resp.blob();
-          const afterUrl = URL.createObjectURL(blob);
-          photoObjectUrls.push(afterUrl);
+          if (afterUrl) URL.revokeObjectURL(afterUrl); // replacing a previous enhance of this same photo
+          afterUrl = URL.createObjectURL(blob);
 
           const existingAfter = images.querySelector(".acq-photo-after-figure");
           if (existingAfter) existingAfter.remove();
@@ -1404,7 +1414,6 @@
     });
 
     function renderReview(record) {
-      clearPhotos();
       currentMissing = record.missing_required || [];
       fieldsGrid.innerHTML = "";
       const fields = record.listing_fields || {};
