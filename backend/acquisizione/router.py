@@ -20,7 +20,7 @@ import logging
 from typing import Any, Literal
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -191,16 +191,15 @@ _MAX_PHOTO_BYTES = 50 * 1024 * 1024  # OpenAI's own per-image limit
 
 @router.post("/photos/enhance")
 async def enhance_photo(
-    preset: str = Form(...),
     image: UploadFile = File(...),
     tenant: dict = Depends(current_tenant),
 ):
-    """Enhance one uploaded photo (declutter/relight/straighten) and stream
-    the result straight back. Not tied to any intake record and nothing is
-    persisted (see acquisizione/photos.py) — the agent downloads whatever
-    they want to keep. Isolated failure: never touches a listing record."""
-    if preset not in photos.PRESETS:
-        raise HTTPException(status_code=400, detail="Unknown preset")
+    """Enhance one uploaded photo and stream the result straight back — the
+    model decides what the photo needs (lighting, perspective, clutter)
+    rather than the agent picking a preset. Not tied to any intake record and
+    nothing is persisted (see acquisizione/photos.py) — the agent downloads
+    whatever they want to keep. Isolated failure: never touches a listing
+    record."""
     raw = await image.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Empty file")
@@ -209,7 +208,7 @@ async def enhance_photo(
 
     try:
         edited = await photos.enhance(
-            raw, image.filename or "photo.png", image.content_type or "image/png", preset,
+            raw, image.filename or "photo.png", image.content_type or "image/png",
         )
     except photos.PhotoEnhanceError as exc:
         logger.error("Photo enhancement failed: %s", exc)

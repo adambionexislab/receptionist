@@ -26,28 +26,24 @@ _IMAGES_EDIT_URL = "https://api.openai.com/v1/images/edits"
 # Complex edits can take up to ~2 minutes per OpenAI's docs (images_openai.md).
 _TIMEOUT = 150
 
-_PRESET_PROMPTS: dict[str, str] = {
-    "declutter": (
-        "Remove clutter, personal items, and loose objects from this real "
-        "estate listing photo. Keep the room's architecture, furniture "
-        "layout, walls, flooring, and lighting exactly as they are — only "
-        "remove clutter."
-    ),
-    "relight": (
-        "Improve the lighting of this real estate listing photo: brighten "
-        "and balance exposure, correct color cast, make it look naturally "
-        "well-lit. Do not change the room's layout, furniture, or any "
-        "objects in it."
-    ),
-    "straighten": (
-        "Correct the perspective and straighten the vertical and horizontal "
-        "lines in this real estate listing photo (walls, door frames, "
-        "furniture edges), as if shot with a level camera. Do not change "
-        "the room's layout, furniture, or any objects in it."
-    ),
-}
-
-PRESETS = tuple(_PRESET_PROMPTS)
+_ENHANCE_PROMPT = (
+    "This is a photo of a property for a real estate listing. Enhance it so "
+    "it looks like it was taken by a professional real estate photographer: "
+    "look at what the photo actually needs and fix that — correct and "
+    "balance the lighting (brighten, fix exposure and color cast, make it "
+    "look naturally and evenly lit), and correct the camera perspective "
+    "(straighten vertical and horizontal lines — walls, door frames, window "
+    "frames — as if shot level, on a tripod, with a wide-angle real-estate "
+    "lens). If the room looks cluttered or messy, clean it up so it looks "
+    "tidy and presentable.\n"
+    "\n"
+    "Strict constraints: do not change the room's dimensions, layout, or "
+    "vantage point beyond leveling the perspective. Do not remove, add, "
+    "move, resize, or otherwise alter any furniture, windows, doors, or "
+    "other fixtures — every important object that is in the photo must "
+    "still be in the photo afterward, unchanged apart from being clean and "
+    "well lit. Only tidy loose clutter and mess; never redesign the room."
+)
 
 
 class PhotoEnhanceError(Exception):
@@ -56,11 +52,11 @@ class PhotoEnhanceError(Exception):
     there is nothing to roll back."""
 
 
-async def enhance(image_bytes: bytes, filename: str, content_type: str, preset: str) -> bytes:
-    """Send one photo through the configured image-edit model with a preset
-    prompt. Returns the edited image's raw bytes (PNG)."""
-    if preset not in _PRESET_PROMPTS:
-        raise PhotoEnhanceError(f"Unknown preset: {preset}")
+async def enhance(image_bytes: bytes, filename: str, content_type: str) -> bytes:
+    """Send one photo through the configured image-edit model. The model
+    decides what the photo actually needs (lighting, perspective, clutter)
+    rather than the agent picking a preset. Returns the edited image's raw
+    bytes (PNG)."""
     if not settings.OPENAI_API_KEY:
         raise PhotoEnhanceError("OPENAI_API_KEY not configured")
 
@@ -69,7 +65,18 @@ async def enhance(image_bytes: bytes, filename: str, content_type: str, preset: 
             resp = await client.post(
                 _IMAGES_EDIT_URL,
                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
-                data={"model": settings.IMAGE_EDIT_MODEL, "prompt": _PRESET_PROMPTS[preset]},
+                data={
+                    "model": settings.IMAGE_EDIT_MODEL,
+                    "prompt": _ENHANCE_PROMPT,
+                    # This is a same-composition touch-up, not from-scratch
+                    # generation — "auto" quality tends to resolve to "high"
+                    # for a photographic edit like this, which is the main
+                    # driver of the ~1-2 minute latency. "medium" is a big
+                    # latency win for a modest quality trade-off; leave size
+                    # on auto so a landscape-oriented room photo isn't
+                    # forced/cropped into a square.
+                    "quality": "medium",
+                },
                 files={"image": (filename, image_bytes, content_type)},
             )
             if resp.status_code >= 400:

@@ -173,16 +173,13 @@
   }
   .acq-task-quote { color: var(--text-dim); font-size: .78rem; margin-top: 6px; font-style: italic; }
   .acq-task-remove { background: none; border: none; color: var(--red); cursor: pointer; font-size: .8rem; padding: 4px 8px; }
-  .acq-photos-toolbar { margin-bottom: 12px; }
+  .acq-photos-toolbar { margin-bottom: 8px; }
+  .acq-photo-hint { color: var(--text-dim); font-size: .8rem; margin: 0 0 16px; }
   .acq-photo-card {
     background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
     padding: 12px; margin-bottom: 10px;
   }
   .acq-photo-card-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
-  .acq-photo-card select {
-    background: var(--bg); border: 1px solid var(--border); color: var(--text);
-    padding: 7px 9px; border-radius: 8px; font-size: .85rem;
-  }
   .acq-photo-images { display: flex; gap: 12px; flex-wrap: wrap; }
   .acq-photo-images figure { margin: 0; flex: 1; min-width: 160px; }
   .acq-photo-images img { width: 100%; border-radius: 6px; display: block; }
@@ -353,6 +350,7 @@
             <button class="btn ghost" id="acq-photo-add-btn"></button>
             <input type="file" id="acq-photo-input" accept="image/png,image/jpeg,image/webp" multiple class="hidden" />
           </div>
+          <p class="acq-photo-hint" id="acq-photo-hint"></p>
           <div id="acq-photos-list" class="acq-photos-list"></div>
         </div>
       </div>
@@ -432,15 +430,13 @@
       acq_photos_tool_title: "Foto",
       acq_photo_add_btn: "+ Aggiungi foto",
       acq_photo_enhance_btn: "Migliora",
-      acq_photo_enhancing: "Elaborazione…",
+      acq_photo_enhancing: "Elaborazione (può richiedere fino a 1-2 minuti)…",
+      acq_photo_hint: "Ogni foto può richiedere fino a 1-2 minuti per essere elaborata.",
       acq_photo_remove: "Rimuovi",
       acq_photo_download: "Scarica",
       acq_photo_err: "Elaborazione non riuscita.",
       acq_photo_before: "Originale",
       acq_photo_after: "Migliorata",
-      acq_presets: {
-        declutter: "Elimina disordine", relight: "Migliora luce", straighten: "Raddrizza",
-      },
       acq_fields: {
         tipologia: "Tipologia", indirizzo_o_zona: "Indirizzo / zona",
         superficie_mq: "Superficie (m²)", locali: "Locali", camere: "Camere da letto",
@@ -515,15 +511,13 @@
       acq_photos_tool_title: "Fotografie",
       acq_photo_add_btn: "+ Pridať fotografiu",
       acq_photo_enhance_btn: "Vylepšiť",
-      acq_photo_enhancing: "Spracúva sa…",
+      acq_photo_enhancing: "Spracúva sa (môže trvať 1-2 minúty)…",
+      acq_photo_hint: "Spracovanie jednej fotografie môže trvať 1-2 minúty.",
       acq_photo_remove: "Odstrániť",
       acq_photo_download: "Stiahnuť",
       acq_photo_err: "Spracovanie zlyhalo.",
       acq_photo_before: "Pôvodná",
       acq_photo_after: "Vylepšená",
-      acq_presets: {
-        declutter: "Odstrániť neporiadok", relight: "Vylepšiť osvetlenie", straighten: "Vyrovnať",
-      },
       acq_fields: {
         tipologia: "Typ nehnuteľnosti", indirizzo_o_zona: "Adresa / lokalita",
         superficie_mq: "Úžitková plocha (m²)", locali: "Počet izieb", camere: "Spálne",
@@ -574,7 +568,7 @@
     "acq-confirmed-text": "acq_confirmed_text",
     "acq-meeting-title": "acq_meeting_title",
     "acq-photos-tool-title": "acq_photos_tool_title",
-    "acq-photo-add-btn": "acq_photo_add_btn",
+    "acq-photo-add-btn": "acq_photo_add_btn", "acq-photo-hint": "acq_photo_hint",
   };
 
   function applyStrings() {
@@ -810,7 +804,6 @@
     const photoAddBtn = $("acq-photo-add-btn");
     const photoInput = $("acq-photo-input");
     const photosList = $("acq-photos-list");
-    const PHOTO_PRESETS = ["declutter", "relight", "straighten"];
 
     // Field name -> input kind, matching acquisizione/schema.py's field types.
     // Everything not listed here renders as a plain text input.
@@ -1316,15 +1309,6 @@
       const top = document.createElement("div");
       top.className = "acq-photo-card-top";
 
-      const presetSelect = document.createElement("select");
-      PHOTO_PRESETS.forEach((p) => {
-        const opt = document.createElement("option");
-        opt.value = p;
-        opt.textContent = (s.acq_presets && s.acq_presets[p]) || p;
-        presetSelect.appendChild(opt);
-      });
-      top.appendChild(presetSelect);
-
       const enhanceBtn = document.createElement("button");
       enhanceBtn.type = "button";
       enhanceBtn.className = "btn ghost";
@@ -1370,7 +1354,6 @@
         enhanceBtn.textContent = S().acq_photo_enhancing;
         try {
           const formData = new FormData();
-          formData.append("preset", presetSelect.value);
           formData.append("image", file);
           const resp = await api("/acquisizione/photos/enhance", { method: "POST", body: formData });
           if (!resp.ok) throw new Error("enhance " + resp.status);
