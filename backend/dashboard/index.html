@@ -911,12 +911,18 @@
     }
 
     function commitBuffer() {
-      if (!dc || dc.readyState !== "open") return;
+      if (!dc || dc.readyState !== "open") {
+        console.log("Acquisizione: commit skipped, data channel state =", dc && dc.readyState);
+        return;
+      }
       try {
         dc.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+        console.log("Acquisizione: commit sent");
         hasPendingAudio = false;
         lastCommitAt = Date.now();
-      } catch (_) {}
+      } catch (err) {
+        console.error("Acquisizione: commit send failed", err);
+      }
     }
 
     // ── Transcript autosave (defensive — a crash mid-meeting shouldn't lose it) ─
@@ -946,6 +952,7 @@
       const newDc = newPc.createDataChannel("oai-events");
 
       newDc.addEventListener("open", () => {
+        console.log("Acquisizione: data channel open");
         lastCommitAt = Date.now();
         if (commitSafetyTimer) clearInterval(commitSafetyTimer);
         // Unconditional heartbeat commit — the PRIMARY mechanism, not just a
@@ -989,14 +996,20 @@
           // Temporary while this feature is dark-launched: log anything we
           // don't explicitly handle, so an unexpected event shape shows up
           // in the console instead of silently vanishing.
-          console.debug("Acquisizione event", evt.type, evt);
+          console.log("Acquisizione event", evt.type, evt);
         }
       });
+      newDc.addEventListener("close", () => console.log("Acquisizione: data channel closed"));
+      newDc.addEventListener("error", (e) => console.error("Acquisizione: data channel error", e));
 
       const connected = new Promise((resolve, reject) => {
         newPc.onconnectionstatechange = () => {
+          console.log("Acquisizione: connection state =", newPc.connectionState);
           if (newPc.connectionState === "connected") resolve();
           else if (newPc.connectionState === "failed") reject(new Error("connection failed"));
+        };
+        newPc.oniceconnectionstatechange = () => {
+          console.log("Acquisizione: ICE connection state =", newPc.iceConnectionState);
         };
       });
 
