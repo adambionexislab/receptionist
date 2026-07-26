@@ -1111,6 +1111,7 @@
         renderTranscript();
         updateLiveLabels();
       } catch (err) {
+        console.error("Acquisizione: start failed", err);
         cleanupConnection();
         releaseWakeLock();
         recordId = null;
