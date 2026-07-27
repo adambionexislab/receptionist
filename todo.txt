@@ -49,3 +49,4 @@ fix faq, pricing and all the info on the landing page
 
 build the meeting summary and image editing in dashboard
 
+photo editing: check box to redesign  the room.

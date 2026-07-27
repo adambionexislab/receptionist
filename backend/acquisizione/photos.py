@@ -64,6 +64,38 @@ _ENHANCE_PROMPT = (
     "place should be removed as clutter."
 )
 
+# Virtual staging: for a room that's old/damaged, has worn-out furniture, or
+# is still under construction — design it as if newly renovated and
+# professionally staged, instead of just cleaning up what's already there.
+_MODERNIZE_PROMPT = (
+    "This is a photo of a property for a real estate listing. The room may "
+    "be old, damaged, unfinished, or still under construction. Transform "
+    "it into a professional virtual-staging image: show what the room "
+    "would look like fully finished and furnished, freshly renovated and "
+    "staged for sale, in a modern, minimalist style.\n"
+    "\n"
+    "Repair and finish any damaged, unfinished, or under-construction "
+    "surfaces (walls, ceiling, flooring) so they look freshly and neatly "
+    "finished, in a clean, neutral, modern palette. Replace any old, worn, "
+    "or damaged furniture with new, modern, minimalist furniture and decor "
+    "appropriate for the room's function (e.g. bed and nightstands for a "
+    "bedroom, sofa and coffee table for a living room, table and chairs "
+    "for a dining room or kitchen). If the room is empty or bare, furnish "
+    "it the same way. Add appropriate modern lighting fixtures if none are "
+    "visible, and correct the camera perspective (straighten vertical and "
+    "horizontal lines, as if shot level on a tripod with a wide-angle "
+    "real-estate lens).\n"
+    "\n"
+    "Strict constraints: do not change the room's dimensions, proportions, "
+    "or vantage point. Every window, door, and structural element (walls, "
+    "columns, built-in niches) must stay in exactly the same place, size, "
+    "and shape — only their surface finish may be refreshed. Do not add "
+    "walls, remove walls, or otherwise change the room's layout or shape."
+)
+
+_PROMPTS = {"enhance": _ENHANCE_PROMPT, "modernize": _MODERNIZE_PROMPT}
+MODES = tuple(_PROMPTS)
+
 
 class PhotoEnhanceError(Exception):
     """Raised when the enhancement call fails. Callers should surface a
@@ -71,11 +103,15 @@ class PhotoEnhanceError(Exception):
     there is nothing to roll back."""
 
 
-async def enhance(image_bytes: bytes, filename: str, content_type: str) -> bytes:
-    """Send one photo through the configured image-edit model. The model
-    decides what the photo actually needs (lighting, perspective, clutter)
-    rather than the agent picking a preset. Returns the edited image's raw
-    bytes (PNG)."""
+async def enhance(image_bytes: bytes, filename: str, content_type: str, mode: str = "enhance") -> bytes:
+    """Send one photo through the configured image-edit model. In 'enhance'
+    mode (default) the model decides what the photo needs — lighting,
+    perspective, clutter — without redesigning anything. In 'modernize' mode
+    it virtually stages the room: repairs/refreshes finishes and designs in
+    modern furniture, for a room that's old, damaged, or under construction.
+    Returns the edited image's raw bytes (PNG)."""
+    if mode not in _PROMPTS:
+        raise PhotoEnhanceError(f"Unknown mode: {mode}")
     if not settings.OPENAI_API_KEY:
         raise PhotoEnhanceError("OPENAI_API_KEY not configured")
 
@@ -86,7 +122,7 @@ async def enhance(image_bytes: bytes, filename: str, content_type: str) -> bytes
                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
                 data={
                     "model": settings.IMAGE_EDIT_MODEL,
-                    "prompt": _ENHANCE_PROMPT,
+                    "prompt": _PROMPTS[mode],
                     # This is a same-composition touch-up, not from-scratch
                     # generation — "auto" quality tends to resolve to "high"
                     # for a photographic edit like this, which is the main

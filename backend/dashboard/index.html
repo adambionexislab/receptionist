@@ -46,18 +46,19 @@
     padding: 11px 12px; border-radius: 8px; font-size: .95rem; width: 100%;
   }
   input:focus { outline: none; border-color: var(--accent); }
-  button.btn {
+  button.btn, a.btn {
     background: var(--accent-2); color: #fff; border: none;
     padding: 11px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;
     font-size: .95rem; width: 100%; margin-top: 16px;
+    text-decoration: none; display: inline-block; text-align: center; box-sizing: border-box;
   }
-  button.btn:hover { background: var(--accent); }
+  button.btn:hover, a.btn:hover { background: var(--accent); }
   button.btn:disabled { opacity: .5; cursor: default; }
-  button.btn.ghost {
+  button.btn.ghost, a.btn.ghost {
     background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
     width: auto; padding: 8px 14px; margin: 0; font-size: .85rem;
   }
-  button.btn.ghost:hover { border-color: var(--accent); }
+  button.btn.ghost:hover, a.btn.ghost:hover { border-color: var(--accent); }
   .err { color: var(--red); font-size: .85rem; margin-top: 12px; min-height: 1.1em; }
 
   /* ── app shell ──────────────────────────────────────── */
@@ -173,26 +174,76 @@
   }
   .acq-task-quote { color: var(--text-dim); font-size: .78rem; margin-top: 6px; font-style: italic; }
   .acq-task-remove { background: none; border: none; color: var(--red); cursor: pointer; font-size: .8rem; padding: 4px 8px; }
-  .acq-photos-toolbar { margin-bottom: 8px; }
   .acq-photo-hint { color: var(--text-dim); font-size: .8rem; margin: 0 0 16px; }
-  .acq-photo-card {
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
-    padding: 12px; margin-bottom: 10px;
+  .acq-photo-panels { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  .acq-photo-panel-wrap { flex: 1; min-width: 240px; }
+  .acq-photo-panel-label {
+    font-size: .72rem; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: .4px; margin-bottom: 6px;
   }
-  .acq-photo-card-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
-  .acq-photo-images { display: flex; gap: 12px; flex-wrap: wrap; }
-  .acq-photo-images figure { margin: 0; flex: 1; min-width: 160px; }
-  .acq-photo-images img { width: 100%; border-radius: 6px; display: block; }
-  .acq-photo-images figcaption {
-    font-size: .72rem; color: var(--text-dim); margin-top: 4px; text-align: center;
-    text-transform: uppercase; letter-spacing: .4px;
+  .acq-photo-panel {
+    position: relative; aspect-ratio: 4 / 3; overflow: hidden;
+    background: var(--bg); border: 1px dashed var(--border); border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
   }
-  .acq-photo-remove { background: none; border: none; color: var(--red); cursor: pointer; font-size: .8rem; padding: 4px 8px; margin-left: auto; }
-  .acq-photo-err { color: var(--red); font-size: .78rem; margin-top: 8px; }
-  .acq-photo-download {
-    display: inline-block; margin-top: 8px; font-size: .82rem; color: var(--accent); text-decoration: none;
+  .acq-photo-panel-upload { cursor: pointer; }
+  .acq-photo-panel-upload:hover { border-color: var(--accent); }
+  .acq-photo-panel-empty { color: var(--text-dim); font-size: .85rem; text-align: center; padding: 20px; }
+  .acq-photo-panel-img { width: 100%; height: 100%; object-fit: contain; }
+  .acq-photo-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .acq-photo-modernize {
+    display: flex; align-items: center; gap: 7px; cursor: pointer;
+    font-size: .83rem; color: var(--text-dim); text-transform: none;
   }
-  .acq-photo-download:hover { text-decoration: underline; }
+  .acq-photo-modernize input { width: auto; }
+  .acq-photo-err { color: var(--red); font-size: .78rem; margin-top: 10px; }
+
+  /* Loader (right panel, while waiting on the model) */
+  .acq-loader {
+    position: relative; width: 120px; height: 120px;
+    display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+    gap: 1px;
+  }
+  .acq-loader-letter {
+    display: inline-block; color: var(--text); opacity: .4; font-weight: 600;
+    font-size: .95rem; animation: acqLoaderLetter 3s infinite;
+  }
+  .acq-loader-ring { position: absolute; inset: 0; border-radius: 50%; animation: acqLoaderCircle 5s linear infinite; }
+
+  @keyframes acqLoaderCircle {
+    0% {
+      transform: rotate(90deg);
+      box-shadow:
+        0 6px 12px 0 #38bdf8 inset,
+        0 12px 18px 0 #005dff inset,
+        0 36px 36px 0 #1e40af inset,
+        0 0 3px 1.2px rgba(56, 189, 248, .3),
+        0 0 6px 1.8px rgba(0, 93, 255, .2);
+    }
+    50% {
+      transform: rotate(270deg);
+      box-shadow:
+        0 6px 12px 0 #60a5fa inset,
+        0 12px 6px 0 #0284c7 inset,
+        0 24px 36px 0 #005dff inset,
+        0 0 3px 1.2px rgba(56, 189, 248, .3),
+        0 0 6px 1.8px rgba(0, 93, 255, .2);
+    }
+    100% {
+      transform: rotate(450deg);
+      box-shadow:
+        0 6px 12px 0 #4dc8fd inset,
+        0 12px 18px 0 #005dff inset,
+        0 36px 36px 0 #1e40af inset,
+        0 0 3px 1.2px rgba(56, 189, 248, .3),
+        0 0 6px 1.8px rgba(0, 93, 255, .2);
+    }
+  }
+  @keyframes acqLoaderLetter {
+    0%, 100% { opacity: .4; transform: translateY(0); }
+    20% { opacity: 1; transform: scale(1.15); }
+    40% { opacity: .7; transform: translateY(0); }
+  }
 </style>
 </head>
 <body>
@@ -226,23 +277,22 @@
     <button class="btn ghost" id="logout-btn">Esci</button>
   </header>
   <main>
-    <div class="stats">
-      <div class="stat">
-        <div class="num" id="stat-minutes">—</div>
-        <div class="lbl" id="stat-minutes-lbl">Minuti questo mese</div>
-      </div>
-      <div class="stat">
-        <div class="num" id="stat-calls">—</div>
-        <div class="lbl" id="stat-calls-lbl">Chiamate questo mese</div>
-      </div>
-      <div class="stat">
-        <div class="num" id="stat-contacts">—</div>
-        <div class="lbl" id="stat-contacts-lbl">Contatti questo mese</div>
-      </div>
-    </div>
-
     <section id="view-contacts" class="view active">
       <h2 id="contacts-title">Contatti</h2>
+      <div class="stats">
+        <div class="stat">
+          <div class="num" id="stat-minutes">—</div>
+          <div class="lbl" id="stat-minutes-lbl">Minuti questo mese</div>
+        </div>
+        <div class="stat">
+          <div class="num" id="stat-calls">—</div>
+          <div class="lbl" id="stat-calls-lbl">Chiamate questo mese</div>
+        </div>
+        <div class="stat">
+          <div class="num" id="stat-contacts">—</div>
+          <div class="lbl" id="stat-contacts-lbl">Contatti questo mese</div>
+        </div>
+      </div>
       <div class="card">
         <div class="table-wrap">
           <table id="contacts-table">
@@ -346,12 +396,38 @@
       <h3 id="acq-photos-tool-title" class="acq-tool-title">Foto</h3>
       <div id="acq-photos-tool" class="card">
         <div class="acq-pad">
-          <div class="acq-photos-toolbar">
-            <button class="btn ghost" id="acq-photo-add-btn"></button>
-            <input type="file" id="acq-photo-input" accept="image/png,image/jpeg,image/webp" multiple class="hidden" />
-          </div>
           <p class="acq-photo-hint" id="acq-photo-hint"></p>
-          <div id="acq-photos-list" class="acq-photos-list"></div>
+
+          <div class="acq-photo-panels">
+            <div class="acq-photo-panel-wrap">
+              <div class="acq-photo-panel-label" id="acq-photo-before-label"></div>
+              <div id="acq-photo-before-panel" class="acq-photo-panel acq-photo-panel-upload">
+                <input type="file" id="acq-photo-input" accept="image/png,image/jpeg,image/webp" class="hidden" />
+                <div class="acq-photo-panel-empty" id="acq-photo-before-empty"></div>
+                <img id="acq-photo-before-img" class="acq-photo-panel-img hidden" alt="" />
+              </div>
+            </div>
+            <div class="acq-photo-panel-wrap">
+              <div class="acq-photo-panel-label" id="acq-photo-after-label"></div>
+              <div id="acq-photo-after-panel" class="acq-photo-panel">
+                <div class="acq-photo-panel-empty" id="acq-photo-after-empty"></div>
+                <div id="acq-photo-loader" class="acq-loader hidden"></div>
+                <img id="acq-photo-after-img" class="acq-photo-panel-img hidden" alt="" />
+              </div>
+            </div>
+          </div>
+
+          <div class="acq-photo-controls">
+            <label class="acq-photo-modernize">
+              <input type="checkbox" id="acq-photo-modernize-check" />
+              <span id="acq-photo-modernize-label"></span>
+            </label>
+            <div class="spacer"></div>
+            <button class="btn ghost hidden" id="acq-photo-clear-btn"></button>
+            <a class="btn ghost hidden" id="acq-photo-download-link" download></a>
+            <button class="btn" id="acq-photo-enhance-btn" disabled></button>
+          </div>
+          <div class="err" id="acq-photo-err"></div>
         </div>
       </div>
     </section>
@@ -377,7 +453,7 @@
       login_btn: "Accedi",
       err_invalid: "Codice non valido.",
       err_conn: "Errore di connessione. Riprova.",
-      contacts: "Contatti",
+      contacts: "Panoramica",
       listings: "Immobili",
       logout: "Esci",
       stat_minutes: "Minuti questo mese",
@@ -428,11 +504,13 @@
       acq_task_remove: "Rimuovi",
       acq_confirmed_text: "Immobile confermato e salvato.",
       acq_photos_tool_title: "Foto",
-      acq_photo_add_btn: "+ Aggiungi foto",
+      acq_photo_upload_label: "Clicca per caricare una foto",
+      acq_photo_result_placeholder: "Il risultato apparirà qui",
+      acq_photo_modernize_label: "Modernizza e arreda (ambiente vuoto/danneggiato/in ristrutturazione)",
       acq_photo_enhance_btn: "Migliora",
-      acq_photo_enhancing: "Elaborazione (può richiedere fino a 1-2 minuti)…",
+      acq_photo_clear_btn: "Cambia foto",
+      acq_loader_text: "Elaborazione",
       acq_photo_hint: "Ogni foto può richiedere fino a 1-2 minuti per essere elaborata.",
-      acq_photo_remove: "Rimuovi",
       acq_photo_download: "Scarica",
       acq_photo_err: "Elaborazione non riuscita.",
       acq_photo_before: "Originale",
@@ -458,7 +536,7 @@
       login_btn: "Prihlásiť sa",
       err_invalid: "Neplatný kód.",
       err_conn: "Chyba pripojenia. Skúste znova.",
-      contacts: "Kontakty",
+      contacts: "Prehľad",
       listings: "Nehnuteľnosti",
       logout: "Odhlásiť sa",
       stat_minutes: "Minúty tento mesiac",
@@ -509,11 +587,13 @@
       acq_task_remove: "Odstrániť",
       acq_confirmed_text: "Nehnuteľnosť potvrdená a uložená.",
       acq_photos_tool_title: "Fotografie",
-      acq_photo_add_btn: "+ Pridať fotografiu",
+      acq_photo_upload_label: "Kliknite pre nahratie fotografie",
+      acq_photo_result_placeholder: "Výsledok sa tu zobrazí",
+      acq_photo_modernize_label: "Modernizovať a zariadiť (prázdny/poškodený/rozostavaný priestor)",
       acq_photo_enhance_btn: "Vylepšiť",
-      acq_photo_enhancing: "Spracúva sa (môže trvať 1-2 minúty)…",
+      acq_photo_clear_btn: "Zmeniť fotografiu",
+      acq_loader_text: "Spracovanie",
       acq_photo_hint: "Spracovanie jednej fotografie môže trvať 1-2 minúty.",
-      acq_photo_remove: "Odstrániť",
       acq_photo_download: "Stiahnuť",
       acq_photo_err: "Spracovanie zlyhalo.",
       acq_photo_before: "Pôvodná",
@@ -568,7 +648,11 @@
     "acq-confirmed-text": "acq_confirmed_text",
     "acq-meeting-title": "acq_meeting_title",
     "acq-photos-tool-title": "acq_photos_tool_title",
-    "acq-photo-add-btn": "acq_photo_add_btn", "acq-photo-hint": "acq_photo_hint",
+    "acq-photo-hint": "acq_photo_hint",
+    "acq-photo-before-label": "acq_photo_before", "acq-photo-after-label": "acq_photo_after",
+    "acq-photo-before-empty": "acq_photo_upload_label", "acq-photo-after-empty": "acq_photo_result_placeholder",
+    "acq-photo-modernize-label": "acq_photo_modernize_label",
+    "acq-photo-clear-btn": "acq_photo_clear_btn", "acq-photo-enhance-btn": "acq_photo_enhance_btn",
   };
 
   function applyStrings() {
@@ -801,9 +885,18 @@
     const confirmBtn = $("acq-confirm-btn");
     const reviewErr = $("acq-review-err");
     const confirmedText = $("acq-confirmed-text");
-    const photoAddBtn = $("acq-photo-add-btn");
     const photoInput = $("acq-photo-input");
-    const photosList = $("acq-photos-list");
+    const photoBeforePanel = $("acq-photo-before-panel");
+    const photoBeforeEmpty = $("acq-photo-before-empty");
+    const photoBeforeImg = $("acq-photo-before-img");
+    const photoAfterEmpty = $("acq-photo-after-empty");
+    const photoLoader = $("acq-photo-loader");
+    const photoAfterImg = $("acq-photo-after-img");
+    const photoModernizeCheck = $("acq-photo-modernize-check");
+    const photoClearBtn = $("acq-photo-clear-btn");
+    const photoDownloadLink = $("acq-photo-download-link");
+    const photoEnhanceBtn = $("acq-photo-enhance-btn");
+    const photoErr = $("acq-photo-err");
 
     // Field name -> input kind, matching acquisizione/schema.py's field types.
     // Everything not listed here renders as a plain text input.
@@ -1296,104 +1389,111 @@
       return row;
     }
 
-    function photoCardEl(file) {
-      const s = S();
-      const card = document.createElement("div");
-      card.className = "acq-photo-card";
-      // This card's own object URLs (before + whichever "after" is current),
-      // revoked on removal or replaced on re-enhance — not tracked globally,
-      // since this tool's cards now live and die independently of each other
-      // and of the acquisizione meeting flow.
-      let afterUrl = null;
+    // Single before/after pair (not a list): uploading a new photo replaces
+    // whatever was there. Object URLs are tracked so they can be revoked
+    // instead of leaking as the agent tries several photos in a session.
+    let photoFile = null;
+    let photoBeforeUrl = null;
+    let photoAfterUrl = null;
+    let photoEnhancing = false;
 
-      const top = document.createElement("div");
-      top.className = "acq-photo-card-top";
-
-      const enhanceBtn = document.createElement("button");
-      enhanceBtn.type = "button";
-      enhanceBtn.className = "btn ghost";
-      enhanceBtn.textContent = s.acq_photo_enhance_btn;
-      top.appendChild(enhanceBtn);
-
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "acq-photo-remove";
-      removeBtn.textContent = "× " + s.acq_photo_remove;
-      removeBtn.addEventListener("click", () => {
-        URL.revokeObjectURL(beforeUrl);
-        if (afterUrl) URL.revokeObjectURL(afterUrl);
-        card.remove();
+    function buildLoader() {
+      photoLoader.innerHTML = "";
+      const text = S().acq_loader_text || "…";
+      Array.from(text).forEach((ch, i) => {
+        const span = document.createElement("span");
+        span.className = "acq-loader-letter";
+        span.style.animationDelay = (i * 0.1) + "s";
+        span.textContent = ch;
+        photoLoader.appendChild(span);
       });
-      top.appendChild(removeBtn);
-      card.appendChild(top);
-
-      const images = document.createElement("div");
-      images.className = "acq-photo-images";
-
-      const beforeUrl = URL.createObjectURL(file);
-      const beforeFig = document.createElement("figure");
-      const beforeImg = document.createElement("img");
-      beforeImg.src = beforeUrl;
-      const beforeCaption = document.createElement("figcaption");
-      beforeCaption.textContent = s.acq_photo_before;
-      beforeFig.appendChild(beforeImg);
-      beforeFig.appendChild(beforeCaption);
-      images.appendChild(beforeFig);
-      card.appendChild(images);
-
-      const err = document.createElement("div");
-      err.className = "acq-photo-err";
-      card.appendChild(err);
-
-      // Isolated failure: an enhancement error only affects this photo card,
-      // never the acquisizione meeting tool above it.
-      enhanceBtn.addEventListener("click", async () => {
-        err.textContent = "";
-        enhanceBtn.disabled = true;
-        const originalLabel = enhanceBtn.textContent;
-        enhanceBtn.textContent = S().acq_photo_enhancing;
-        try {
-          const formData = new FormData();
-          formData.append("image", file);
-          const resp = await api("/acquisizione/photos/enhance", { method: "POST", body: formData });
-          if (!resp.ok) throw new Error("enhance " + resp.status);
-          const blob = await resp.blob();
-          if (afterUrl) URL.revokeObjectURL(afterUrl); // replacing a previous enhance of this same photo
-          afterUrl = URL.createObjectURL(blob);
-
-          const existingAfter = images.querySelector(".acq-photo-after-figure");
-          if (existingAfter) existingAfter.remove();
-
-          const afterFig = document.createElement("figure");
-          afterFig.className = "acq-photo-after-figure";
-          const afterImg = document.createElement("img");
-          afterImg.src = afterUrl;
-          const afterCaption = document.createElement("figcaption");
-          afterCaption.textContent = S().acq_photo_after;
-          afterFig.appendChild(afterImg);
-          afterFig.appendChild(afterCaption);
-          const downloadLink = document.createElement("a");
-          downloadLink.className = "acq-photo-download";
-          downloadLink.href = afterUrl;
-          downloadLink.download = "enhanced-" + (file.name || "photo.png");
-          downloadLink.textContent = "↓ " + S().acq_photo_download;
-          afterFig.appendChild(downloadLink);
-          images.appendChild(afterFig);
-        } catch (_) {
-          err.textContent = S().acq_photo_err;
-        } finally {
-          enhanceBtn.disabled = false;
-          enhanceBtn.textContent = originalLabel;
-        }
-      });
-
-      return card;
+      const ring = document.createElement("div");
+      ring.className = "acq-loader-ring";
+      photoLoader.appendChild(ring);
     }
 
-    photoAddBtn.addEventListener("click", () => photoInput.click());
+    function resetPhotoAfter() {
+      if (photoAfterUrl) { URL.revokeObjectURL(photoAfterUrl); photoAfterUrl = null; }
+      photoAfterImg.src = "";
+      photoAfterImg.classList.add("hidden");
+      photoLoader.classList.add("hidden");
+      photoAfterEmpty.classList.remove("hidden");
+      photoDownloadLink.classList.add("hidden");
+    }
+
+    function resetPhotoTool() {
+      if (photoBeforeUrl) { URL.revokeObjectURL(photoBeforeUrl); photoBeforeUrl = null; }
+      photoFile = null;
+      photoBeforeImg.src = "";
+      photoBeforeImg.classList.add("hidden");
+      photoBeforeEmpty.classList.remove("hidden");
+      photoClearBtn.classList.add("hidden");
+      photoEnhanceBtn.disabled = true;
+      photoErr.textContent = "";
+      resetPhotoAfter();
+    }
+
+    photoBeforePanel.addEventListener("click", () => {
+      if (!photoEnhancing) photoInput.click();
+    });
     photoInput.addEventListener("change", () => {
-      Array.from(photoInput.files || []).forEach((file) => photosList.appendChild(photoCardEl(file)));
+      const file = (photoInput.files || [])[0];
       photoInput.value = ""; // allow re-selecting the same file later
+      if (!file) return;
+      if (photoBeforeUrl) URL.revokeObjectURL(photoBeforeUrl);
+      photoFile = file;
+      photoBeforeUrl = URL.createObjectURL(file);
+      photoBeforeImg.src = photoBeforeUrl;
+      photoBeforeImg.classList.remove("hidden");
+      photoBeforeEmpty.classList.add("hidden");
+      photoClearBtn.classList.remove("hidden");
+      photoEnhanceBtn.disabled = false;
+      photoErr.textContent = "";
+      resetPhotoAfter();
+    });
+
+    photoClearBtn.addEventListener("click", resetPhotoTool);
+
+    // Isolated failure: an enhancement error only affects this tool, never
+    // the acquisizione meeting flow above it.
+    photoEnhanceBtn.addEventListener("click", async () => {
+      if (!photoFile) return;
+      photoErr.textContent = "";
+      photoEnhancing = true;
+      photoEnhanceBtn.disabled = true;
+      photoModernizeCheck.disabled = true;
+      photoClearBtn.disabled = true;
+      photoAfterEmpty.classList.add("hidden");
+      photoAfterImg.classList.add("hidden");
+      photoDownloadLink.classList.add("hidden");
+      buildLoader();
+      photoLoader.classList.remove("hidden");
+      try {
+        const formData = new FormData();
+        formData.append("image", photoFile);
+        formData.append("mode", photoModernizeCheck.checked ? "modernize" : "enhance");
+        const resp = await api("/acquisizione/photos/enhance", { method: "POST", body: formData });
+        if (!resp.ok) throw new Error("enhance " + resp.status);
+        const blob = await resp.blob();
+        if (photoAfterUrl) URL.revokeObjectURL(photoAfterUrl);
+        photoAfterUrl = URL.createObjectURL(blob);
+        photoAfterImg.src = photoAfterUrl;
+        photoLoader.classList.add("hidden");
+        photoAfterImg.classList.remove("hidden");
+        photoDownloadLink.href = photoAfterUrl;
+        photoDownloadLink.download = "enhanced-" + (photoFile.name || "photo.png");
+        photoDownloadLink.textContent = "↓ " + S().acq_photo_download;
+        photoDownloadLink.classList.remove("hidden");
+      } catch (_) {
+        photoLoader.classList.add("hidden");
+        photoAfterEmpty.classList.remove("hidden");
+        photoErr.textContent = S().acq_photo_err;
+      } finally {
+        photoEnhancing = false;
+        photoEnhanceBtn.disabled = false;
+        photoModernizeCheck.disabled = false;
+        photoClearBtn.disabled = false;
+      }
     });
 
     function renderReview(record) {
