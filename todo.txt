@@ -50,3 +50,5 @@ fix faq, pricing and all the info on the landing page
 build the meeting summary and image editing in dashboard
 
 photo editing: check box to redesign  the room.
+photo editing_ for now one at a time later with higher openai tier i can do bulk
+landing page: add ai tools section and credits included in plans

@@ -6,21 +6,45 @@
 <meta name="robots" content="noindex" />
 <title>ApollonIA · Area clienti</title>
 <style>
+  /* Black + gold, matching landingpage/index.html's palette (--bg/--fg/
+     --accent there). Light mode (white + gold) follows the OS preference —
+     see the prefers-color-scheme override below; dark is the default to
+     match the landing page's own default look. */
   :root {
-    --bg:        #0e1116;
-    --surface:   #171b22;
-    --surface-2: #1f242d;
-    --border:    #2a313c;
-    --text:      #e7ebf0;
-    --text-dim:  #9aa4b2;
-    --accent:    #5b8cff;
-    --accent-2:  #3a6bf0;
+    --bg:        #0c0c0d;
+    --surface:   #17171a;
+    --surface-2: #201f1a;
+    --border:    #2a2822;
+    --text:      #f4f4f5;
+    --text-dim:  #a1a1aa;
+    --accent:    #c9a227;
+    --accent-2:  #8b6914;
+    --on-accent: #0c0c0d;
     --green:     #3ecf8e;
     --amber:     #f0b429;
     --red:       #f4675b;
     --radius:    10px;
     --shadow:    0 6px 24px rgba(0,0,0,.35);
+    color-scheme: dark;
     font-size: 15px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --bg:        #faf8f3;
+      --surface:   #ffffff;
+      --surface-2: #f3ede0;
+      --border:    #e6dfc8;
+      --text:      #1c1a14;
+      --text-dim:  #77705c;
+      --accent:    #6b5010;
+      --accent-2:  #8b6914;
+      --on-accent: #0c0c0d;
+      --green:     #1a9d6c;
+      --amber:     #b45309;
+      --red:       #c9372b;
+      --shadow:    0 6px 24px rgba(0,0,0,.08);
+    }
   }
   * { box-sizing: border-box; }
   body {
@@ -47,7 +71,7 @@
   }
   input:focus { outline: none; border-color: var(--accent); }
   button.btn, a.btn {
-    background: var(--accent-2); color: #fff; border: none;
+    background: var(--accent-2); color: var(--on-accent); border: none;
     padding: 11px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;
     font-size: .95rem; width: 100%; margin-top: 16px;
     text-decoration: none; display: inline-block; text-align: center; box-sizing: border-box;
@@ -101,9 +125,9 @@
     font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
     white-space: nowrap;
   }
-  .b-lead    { background: rgba(91,140,255,.16); color: var(--accent); }
+  .b-lead    { background: rgba(139,105,20,.18); color: var(--accent); }
   .b-message { background: rgba(240,180,41,.16); color: var(--amber); }
-  .b-call    { background: #2a313c; color: var(--text-dim); }
+  .b-call    { background: var(--surface-2); color: var(--text-dim); }
 
   nav.tabs { display: flex; gap: 4px; }
   .tab {
@@ -214,29 +238,29 @@
     0% {
       transform: rotate(90deg);
       box-shadow:
-        0 6px 12px 0 #38bdf8 inset,
-        0 12px 18px 0 #005dff inset,
-        0 36px 36px 0 #1e40af inset,
-        0 0 3px 1.2px rgba(56, 189, 248, .3),
-        0 0 6px 1.8px rgba(0, 93, 255, .2);
+        0 6px 12px 0 #f5cf6b inset,
+        0 12px 18px 0 #c9a227 inset,
+        0 36px 36px 0 #8b6914 inset,
+        0 0 3px 1.2px rgba(212, 175, 55, .3),
+        0 0 6px 1.8px rgba(139, 105, 20, .25);
     }
     50% {
       transform: rotate(270deg);
       box-shadow:
-        0 6px 12px 0 #60a5fa inset,
-        0 12px 6px 0 #0284c7 inset,
-        0 24px 36px 0 #005dff inset,
-        0 0 3px 1.2px rgba(56, 189, 248, .3),
-        0 0 6px 1.8px rgba(0, 93, 255, .2);
+        0 6px 12px 0 #f0d78c inset,
+        0 12px 6px 0 #a3791a inset,
+        0 24px 36px 0 #c9a227 inset,
+        0 0 3px 1.2px rgba(212, 175, 55, .3),
+        0 0 6px 1.8px rgba(139, 105, 20, .25);
     }
     100% {
       transform: rotate(450deg);
       box-shadow:
-        0 6px 12px 0 #4dc8fd inset,
-        0 12px 18px 0 #005dff inset,
-        0 36px 36px 0 #1e40af inset,
-        0 0 3px 1.2px rgba(56, 189, 248, .3),
-        0 0 6px 1.8px rgba(0, 93, 255, .2);
+        0 6px 12px 0 #f5cf6b inset,
+        0 12px 18px 0 #c9a227 inset,
+        0 36px 36px 0 #8b6914 inset,
+        0 0 3px 1.2px rgba(212, 175, 55, .3),
+        0 0 6px 1.8px rgba(139, 105, 20, .25);
     }
   }
   @keyframes acqLoaderLetter {
