@@ -337,7 +337,29 @@
     .acq-pad { padding: 16px; }
     .acq-tool-title { margin: 24px 0 12px; }
 
-    th, td { padding: 10px; font-size: .85rem; }
+    .empty { padding: 32px 16px; }
+
+    /* Tables → cards: thead disappears, each row becomes a bordered card
+       and each cell becomes a label/value line (label from data-label, set
+       in renderContacts/renderListings — reuses the same localized header
+       strings as the desktop <th>s, so no separate translation to keep in
+       sync). */
+    table, tbody, tr, td { display: block; width: 100%; }
+    thead { display: none; }
+    tbody tr {
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 4px 12px; margin-bottom: 10px; background: var(--surface-2);
+    }
+    tbody tr:last-child { margin-bottom: 0; }
+    td {
+      display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      padding: 8px 0; font-size: .88rem; text-align: right; white-space: normal;
+    }
+    td:not(:last-child) { border-bottom: 1px dashed var(--border); }
+    td::before {
+      content: attr(data-label); font-size: .68rem; color: var(--text-dim);
+      text-transform: uppercase; letter-spacing: .4px; text-align: left; flex-shrink: 0;
+    }
 
     .acq-live-header { flex-wrap: wrap; padding: 12px 16px; }
     .acq-live-header .spacer,
@@ -907,10 +929,14 @@
     });
   }
 
-  function el(tag, cls, text) {
+  function el(tag, cls, text, label) {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
     if (text != null) n.textContent = text;
+    // Column label, only used by <td>s: picked up by the mobile card layout
+    // (content: attr(data-label) in a ::before) so each stacked row still
+    // shows which field is which once the table collapses to cards.
+    if (label != null) n.dataset.label = label;
     return n;
   }
 
@@ -926,15 +952,16 @@
     }
     empty.classList.add("hidden");
     table.classList.remove("hidden");
+    const s = S();
     for (const c of rows) {
       const tr = document.createElement("tr");
-      tr.appendChild(el("td", "nowrap dim", fmtDate(c.created_at)));
-      tr.appendChild(el("td", null, c.name || "—"));
-      tr.appendChild(el("td", "nowrap", c.phone || "—"));
-      tr.appendChild(el("td", null, c.summary || c.interest || "—"));
+      tr.appendChild(el("td", "nowrap dim", fmtDate(c.created_at), s.th_date));
+      tr.appendChild(el("td", null, c.name || "—", s.th_name));
+      tr.appendChild(el("td", "nowrap", c.phone || "—", s.th_phone));
+      tr.appendChild(el("td", null, c.summary || c.interest || "—", s.th_summary));
       const outcome = c.outcome || "call";
-      const badge = el("span", "badge b-" + outcome, S().outcomes[outcome] || outcome);
-      const td = el("td"); td.appendChild(badge);
+      const badge = el("span", "badge b-" + outcome, s.outcomes[outcome] || outcome);
+      const td = el("td", null, null, s.th_outcome); td.appendChild(badge);
       tr.appendChild(td);
       body.appendChild(tr);
     }
@@ -975,15 +1002,16 @@
     }
     empty.classList.add("hidden");
     table.classList.remove("hidden");
+    const s = S();
     for (const l of rows) {
       const tr = document.createElement("tr");
-      tr.appendChild(el("td", null, l.address || "—"));
-      tr.appendChild(el("td", "dim", l.zone || "—"));
+      tr.appendChild(el("td", null, l.address || "—", s.th_address));
+      tr.appendChild(el("td", "dim", l.zone || "—", s.th_zone));
       const type = (l.type || "").toLowerCase();
-      tr.appendChild(el("td", null, S().types[type] || l.type || "—"));
-      tr.appendChild(el("td", "num", fmtNum(l.rooms)));
-      tr.appendChild(el("td", "num", fmtNum(l.size_sqm)));
-      tr.appendChild(el("td", "num", fmtPrice(l.price, l.currency)));
+      tr.appendChild(el("td", null, s.types[type] || l.type || "—", s.th_type));
+      tr.appendChild(el("td", "num", fmtNum(l.rooms), s.th_rooms));
+      tr.appendChild(el("td", "num", fmtNum(l.size_sqm), s.th_size));
+      tr.appendChild(el("td", "num", fmtPrice(l.price, l.currency), s.th_price));
       body.appendChild(tr);
     }
   }
