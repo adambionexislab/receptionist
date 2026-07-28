@@ -7,9 +7,13 @@
 <title>ApollonIA · Area clienti</title>
 <style>
   /* Black + gold, matching landingpage/index.html's palette (--bg/--fg/
-     --accent there). Light mode (white + gold) follows the OS preference —
-     see the prefers-color-scheme override below; dark is the default to
-     match the landing page's own default look. */
+     --accent there). Dark is the default (matching the landing page); light
+     mode (white + gold) applies automatically from the OS preference, and
+     can be overridden manually via the theme-switch toggle, which stamps
+     data-theme="light"/"dark" on <html> and wins over the OS setting either
+     direction. The light values are defined once as --*-light below and
+     just referenced (var(...)) from both the auto and manual paths, so a
+     color only ever needs to change in one place. */
   :root {
     --bg:        #0c0c0d;
     --surface:   #17171a;
@@ -27,25 +31,41 @@
     --shadow:    0 6px 24px rgba(0,0,0,.35);
     color-scheme: dark;
     font-size: 15px;
+
+    --bg-light:        #faf8f3;
+    --surface-light:   #ffffff;
+    --surface-2-light: #f3ede0;
+    --border-light:    #e6dfc8;
+    --text-light:      #1c1a14;
+    --text-dim-light:  #77705c;
+    --accent-light:    #6b5010;
+    --accent-2-light:  #8b6914;
+    --green-light:     #1a9d6c;
+    --amber-light:     #b45309;
+    --red-light:       #c9372b;
+    --shadow-light:    0 6px 24px rgba(0,0,0,.08);
   }
   @media (prefers-color-scheme: light) {
-    :root {
+    /* Only auto-apply light when the user hasn't made an explicit choice —
+       once data-theme is stamped, the block below takes over instead. */
+    :root:not([data-theme]) {
       color-scheme: light;
-      --bg:        #faf8f3;
-      --surface:   #ffffff;
-      --surface-2: #f3ede0;
-      --border:    #e6dfc8;
-      --text:      #1c1a14;
-      --text-dim:  #77705c;
-      --accent:    #6b5010;
-      --accent-2:  #8b6914;
-      --on-accent: #0c0c0d;
-      --green:     #1a9d6c;
-      --amber:     #b45309;
-      --red:       #c9372b;
-      --shadow:    0 6px 24px rgba(0,0,0,.08);
+      --bg: var(--bg-light); --surface: var(--surface-light); --surface-2: var(--surface-2-light);
+      --border: var(--border-light); --text: var(--text-light); --text-dim: var(--text-dim-light);
+      --accent: var(--accent-light); --accent-2: var(--accent-2-light);
+      --green: var(--green-light); --amber: var(--amber-light); --red: var(--red-light);
+      --shadow: var(--shadow-light);
     }
   }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: var(--bg-light); --surface: var(--surface-light); --surface-2: var(--surface-2-light);
+    --border: var(--border-light); --text: var(--text-light); --text-dim: var(--text-dim-light);
+    --accent: var(--accent-light); --accent-2: var(--accent-2-light);
+    --green: var(--green-light); --amber: var(--amber-light); --red: var(--red-light);
+    --shadow: var(--shadow-light);
+  }
+  /* No :root[data-theme="dark"] block needed — that's just the base :root. */
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
@@ -143,6 +163,28 @@
   th.num { text-align: right; }
 
   .hidden { display: none !important; }
+
+  /* ── theme switch (light/dark), same pill pattern as the landing page's
+     IT/SK language switch (see landingpage/index.html's .lang-switch) ──── */
+  .theme-switch {
+    position: relative; display: inline-flex; align-items: center;
+    border-radius: 9999px; background: var(--surface-2); border: 1px solid var(--border); padding: 3px;
+  }
+  .theme-switch-pill {
+    position: absolute; left: 3px; top: 3px; bottom: 3px; width: calc(50% - 3px);
+    border-radius: 9999px; background: var(--accent-2);
+    transition: transform .45s cubic-bezier(.16,1,.3,1);
+  }
+  .theme-switch.is-dark .theme-switch-pill { transform: translateX(100%); }
+  .theme-switch-opt {
+    position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; padding: 6px 0; background: transparent; border: none; cursor: pointer;
+    color: var(--text-dim); transition: color .3s ease;
+  }
+  .theme-switch-opt.is-active { color: var(--on-accent); }
+  .theme-switch-opt:not(.is-active):hover { color: var(--text); }
+  .theme-switch-opt svg { width: 14px; height: 14px; display: block; }
+  #theme-switch-standalone { position: fixed; top: 18px; right: 20px; z-index: 60; }
 
   /* ── acquisizione (seller-meeting capture) ─────────────────────────── */
   .acq-pad { padding: 24px; }
@@ -272,6 +314,30 @@
 </head>
 <body>
 
+<!-- Theme toggle, visible pre-login (position: fixed) — hidden once the app
+     shell shows, which has its own inline instance in the header instead. -->
+<span class="theme-switch" id="theme-switch-standalone" role="group" aria-label="Tema">
+  <span class="theme-switch-pill" aria-hidden="true"></span>
+  <button type="button" class="theme-switch-opt" data-theme-opt="light" aria-label="Chiaro">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="4"></circle>
+      <line x1="12" y1="2" x2="12" y2="4"></line>
+      <line x1="12" y1="20" x2="12" y2="22"></line>
+      <line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line>
+      <line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line>
+      <line x1="2" y1="12" x2="4" y2="12"></line>
+      <line x1="20" y1="12" x2="22" y2="12"></line>
+      <line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line>
+      <line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line>
+    </svg>
+  </button>
+  <button type="button" class="theme-switch-opt" data-theme-opt="dark" aria-label="Scuro">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+  </button>
+</span>
+
 <!-- LOGIN VIEW -->
 <div id="login" class="login-wrap hidden">
   <div class="login-card">
@@ -297,6 +363,27 @@
       <button class="tab hidden" id="tab-acquisizione" data-view="acquisizione">Acquisizione</button>
     </nav>
     <div class="spacer"></div>
+    <span class="theme-switch" id="theme-switch-header" role="group" aria-label="Tema">
+      <span class="theme-switch-pill" aria-hidden="true"></span>
+      <button type="button" class="theme-switch-opt" data-theme-opt="light" aria-label="Chiaro">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="4"></circle>
+          <line x1="12" y1="2" x2="12" y2="4"></line>
+          <line x1="12" y1="20" x2="12" y2="22"></line>
+          <line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line>
+          <line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line>
+          <line x1="2" y1="12" x2="4" y2="12"></line>
+          <line x1="20" y1="12" x2="22" y2="12"></line>
+          <line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line>
+          <line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line>
+        </svg>
+      </button>
+      <button type="button" class="theme-switch-opt" data-theme-opt="dark" aria-label="Scuro">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
+    </span>
     <span class="agency" id="agency-name"></span>
     <button class="btn ghost" id="logout-btn">Esci</button>
   </header>
@@ -460,6 +547,54 @@
 
 <script>
   const $ = (id) => document.getElementById(id);
+
+  // ── Theme (dark/light) toggle ─────────────────────────────────────────
+  // Two instances share this logic (#theme-switch-standalone, pre-login;
+  // #theme-switch-header, once logged in) — only one is ever visible at a
+  // time, but both stay in sync so whichever becomes visible next already
+  // reflects the current theme.
+  const THEME_KEY = "apollonia_theme";
+  const prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)");
+
+  function effectiveTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored === "light" || stored === "dark") return stored;
+    return prefersLight && prefersLight.matches ? "light" : "dark";
+  }
+
+  function applyThemeUI(theme) {
+    document.querySelectorAll(".theme-switch").forEach((el) => {
+      el.classList.toggle("is-dark", theme === "dark");
+      el.querySelectorAll(".theme-switch-opt").forEach((btn) => {
+        btn.classList.toggle("is-active", btn.dataset.themeOpt === theme);
+      });
+    });
+  }
+
+  function setTheme(theme, persist) {
+    if (persist) localStorage.setItem(THEME_KEY, theme);
+    document.documentElement.setAttribute("data-theme", theme);
+    applyThemeUI(theme);
+  }
+
+  // On load: an explicit stored choice wins outright. Otherwise, leave the
+  // data-theme attribute unset entirely so the prefers-color-scheme media
+  // query keeps driving it live (including if the OS theme changes later).
+  (function initTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored === "light" || stored === "dark") {
+      document.documentElement.setAttribute("data-theme", stored);
+    }
+    applyThemeUI(effectiveTheme());
+    document.querySelectorAll(".theme-switch-opt").forEach((btn) => {
+      btn.addEventListener("click", () => setTheme(btn.dataset.themeOpt, true));
+    });
+    if (prefersLight) {
+      prefersLight.addEventListener("change", () => {
+        if (!localStorage.getItem(THEME_KEY)) applyThemeUI(effectiveTheme());
+      });
+    }
+  })();
 
   async function api(path, opts) {
     return fetch(path, Object.assign({ credentials: "same-origin" }, opts || {}));
@@ -695,6 +830,7 @@
   function showApp(me) {
     $("login").classList.add("hidden");
     $("app").classList.remove("hidden");
+    $("theme-switch-standalone").classList.add("hidden");
     $("agency-name").textContent = me.agency_name || "";
     LOCALE = me.locale || "it";
     applyStrings();
@@ -826,6 +962,7 @@
   function showLogin() {
     $("app").classList.add("hidden");
     $("login").classList.remove("hidden");
+    $("theme-switch-standalone").classList.remove("hidden");
     $("code").focus();
   }
 
