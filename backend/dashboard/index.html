@@ -310,6 +310,44 @@
     20% { opacity: 1; transform: scale(1.15); }
     40% { opacity: .7; transform: translateY(0); }
   }
+
+  /* These two sit alongside other controls in a flex row (.acq-live-header,
+     .acq-photo-controls) rather than standalone like the other plain .btn
+     buttons (login/start/confirm/new) — override the base rule's
+     width:100%, which is meant for those standalone CTAs, not these. */
+  #acq-finish-btn, #acq-photo-enhance-btn { width: auto; margin-top: 0; }
+
+  /* ── mobile ─────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    body { font-size: 14px; }
+    .login-wrap { padding: 16px; }
+    .login-card { padding: 24px 20px; }
+
+    header { flex-wrap: wrap; height: auto; min-height: 56px; padding: 10px 16px; gap: 10px; }
+    header .brand { order: 1; }
+    header .spacer { order: 2; }
+    header .theme-switch { order: 3; }
+    header .agency { display: none; }
+    header #logout-btn { order: 4; }
+    nav.tabs { order: 5; flex-basis: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tab { padding: 8px 12px; font-size: .88rem; white-space: nowrap; }
+
+    main { padding: 16px 14px 60px; }
+    main h2 { font-size: 1.1rem; }
+    .acq-pad { padding: 16px; }
+    .acq-tool-title { margin: 24px 0 12px; }
+
+    th, td { padding: 10px; font-size: .85rem; }
+
+    .acq-live-header { flex-wrap: wrap; padding: 12px 16px; }
+    .acq-live-header .spacer,
+    .acq-photo-controls .spacer { flex-basis: 100%; height: 0; }
+
+    .acq-photo-panels { flex-direction: column; }
+    .acq-photo-panel-wrap { min-width: 100%; }
+
+    #theme-switch-standalone { top: 12px; right: 14px; }
+  }
 </style>
 </head>
 <body>
