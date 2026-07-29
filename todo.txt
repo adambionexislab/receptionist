@@ -49,11 +49,12 @@ fix faq, pricing and all the info on the landing page
 
 build the meeting summary and image editing in dashboard
 
-photo editing: check box to redesign  the room.
+
 photo editing: for now one at a time later with higher openai tier i can do bulk
 photo editing: drag and drop
 
 landing page: add ai tools section and credits included in plans
-Landing page: funzionalita should explan that she checkces vavailabiliy, answers questions, takes messages an so on . ad these as new cards
+Landing page: funzionalita should explan that she checkes availabiliy, answers questions, takes messages an so on . ad these as new cards
+landing page: access to the tools for non subscribed
 
 the counter cards in dashboard are for calendar month and should be for the subscribtion month

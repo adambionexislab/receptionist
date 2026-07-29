@@ -102,6 +102,12 @@ async def create_checkout_session(data: CheckoutRequest):
             cancel_url=f"{base}{cancel_path}",
             metadata=metadata,
             subscription_data={"metadata": metadata},
+            # Collect company billing details for invoicing: full billing address
+            # (incl. company name field) and an optional VAT/tax ID.
+            # NOTE: customer_creation is a payment-mode-only param — subscription
+            # mode always creates a Customer, so it's omitted here.
+            billing_address_collection="required",
+            tax_id_collection={"enabled": True},
         )
     except stripe.error.StripeError as exc:
         logger.error("Stripe checkout session creation failed: %s", exc)
