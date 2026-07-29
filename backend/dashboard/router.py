@@ -12,6 +12,7 @@ logged-in tenant's `locale`, not the URL, so there is no separate Slovak page.
 
 import logging
 from pathlib import Path
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -20,7 +21,7 @@ from pydantic import BaseModel
 from calls import db as calls_db
 from config import settings
 from dashboard import session as sess
-from listings.store import tenant_stores
+from listings import db as listings_db
 from tenants import db
 
 logger = logging.getLogger(__name__)
@@ -104,11 +105,46 @@ def summary(tenant: dict = Depends(current_tenant)):
 
 @router.get("/dashboard/api/listings")
 def listings(tenant: dict = Depends(current_tenant)):
-    """The tenant's current listings, read straight from its in-memory store
-    (the same per-tenant store the phone agent searches). Keyed by tenant id, so
-    a tenant only ever sees its own inventory."""
-    store = tenant_stores.get_or_create(tenant["id"])
-    return {"listings": store.search()}
+    """The tenant's current listings — the same rows the phone agent searches
+    (listings/db.py), so what the agency edits here is what Apollonia says on
+    the phone. Strictly scoped to the logged-in tenant's id."""
+    return {"listings": listings_db.list_for_tenant(tenant["id"])}
+
+
+class ListingUpdate(BaseModel):
+    """Agent-editable listing fields. All optional — a PATCH may send only
+    what changed. Unknown fields are ignored by listings_db.update."""
+    address: Optional[str] = None
+    zone: Optional[str] = None
+    type: Optional[Literal["vendita", "affitto"]] = None
+    rooms: Optional[int] = None
+    size_sqm: Optional[int] = None
+    price: Optional[int] = None
+    currency: Optional[str] = None
+    available: Optional[bool] = None
+    text: Optional[str] = None
+
+
+@router.patch("/dashboard/api/listings/{listing_id}")
+def update_listing(
+    listing_id: str, data: ListingUpdate, tenant: dict = Depends(current_tenant)
+):
+    """Edit one listing. Marks it agent-owned so a later Immobiliare.it scrape
+    won't revert the change (see listings/db.py)."""
+    fields = data.model_dump(exclude_unset=True, exclude_none=True)
+    updated = listings_db.update(listing_id, tenant["id"], fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return updated
+
+
+@router.delete("/dashboard/api/listings/{listing_id}")
+def delete_listing(listing_id: str, tenant: dict = Depends(current_tenant)):
+    """Remove one listing so the phone agent stops offering it. Soft-deleted,
+    so a later scrape can't resurrect it (see listings/db.py)."""
+    if not listings_db.delete(listing_id, tenant["id"]):
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"ok": True}
 
 
 # ── page (served before the catch-all StaticFiles mount in main.py) ──────────

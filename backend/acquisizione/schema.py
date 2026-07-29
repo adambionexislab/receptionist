@@ -18,6 +18,12 @@ from pydantic import BaseModel
 
 # name -> (json_type, description_it, description_sk)
 _COMMON_FIELDS: dict[str, tuple[str, str, str]] = {
+    # Drives the `type` of the listing this record becomes once confirmed
+    # (see acquisizione/router.py's confirm → listings/db.create_manual), which
+    # is what the phone agent filters on when a caller asks to buy vs. rent.
+    # The vendita/affitto tokens stay untranslated in both markets — they're
+    # internal identifiers, same convention as call/locales.py.
+    "tipo_annuncio": ("string", "Se l'immobile è in vendita o in affitto: rispondi esattamente 'vendita' o 'affitto'", "Či je nehnuteľnosť na predaj alebo na prenájom: odpovedzte presne 'vendita' (predaj) alebo 'affitto' (prenájom)"),
     "tipologia": ("string", "Tipo di immobile (es. appartamento, villa, attico)", "Typ nehnuteľnosti (napr. byt, dom, mezonet)"),
     "indirizzo_o_zona": ("string", "Indirizzo esatto o zona/quartiere dell'immobile", "Presná adresa alebo lokalita/štvrť nehnuteľnosti"),
     "superficie_mq": ("number", "Superficie in metri quadrati", "Úžitková plocha v metroch štvorcových"),
@@ -57,8 +63,8 @@ _SK_EXTENSION: dict[str, tuple[str, str]] = {
 # Per-market required fields — drives "missing_required" / blocking. Confirmed
 # with the operator as-specified; see prompt_realtor_tool.md.
 REQUIRED_FIELDS: dict[str, list[str]] = {
-    "it": ["superficie_mq", "prezzo_richiesto", "classe_energetica", "indirizzo_o_zona", "spese_condominiali"],
-    "sk": ["superficie_mq", "prezzo_richiesto", "energeticka_trieda", "indirizzo_o_zona", "druh_vlastnictva"],
+    "it": ["tipo_annuncio", "superficie_mq", "prezzo_richiesto", "classe_energetica", "indirizzo_o_zona", "spese_condominiali"],
+    "sk": ["tipo_annuncio", "superficie_mq", "prezzo_richiesto", "energeticka_trieda", "indirizzo_o_zona", "druh_vlastnictva"],
 }
 
 
@@ -142,3 +148,30 @@ def _is_missing(value: Any) -> bool:
 def missing_required(market: str, listing_fields: dict[str, Any]) -> list[str]:
     """Required fields for `market` that are null/absent in listing_fields."""
     return [f for f in REQUIRED_FIELDS.get(market, []) if _is_missing(listing_fields.get(f))]
+
+
+def _as_int(value: Any) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def to_listing(listing_fields: dict[str, Any], listing_text: str) -> dict[str, Any]:
+    """Map a confirmed intake record onto the listing shape the phone agent
+    searches (see listings/db.py). `zone` is left empty when the seller only
+    gave a full address — the agent's zone matching already falls back to the
+    city part of the address, so a wrong guess here would be worse than none.
+    """
+    tipo = (listing_fields.get("tipo_annuncio") or "").strip().lower()
+    return {
+        "address": listing_fields.get("indirizzo_o_zona") or "",
+        "zone": "",
+        "type": tipo if tipo in ("vendita", "affitto") else "vendita",
+        "rooms": _as_int(listing_fields.get("locali")),
+        "size_sqm": _as_int(listing_fields.get("superficie_mq")),
+        "price": _as_int(listing_fields.get("prezzo_richiesto")),
+        "currency": "EUR",
+        "available": True,
+        "text": listing_text or "",
+    }

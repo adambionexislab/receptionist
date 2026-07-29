@@ -1130,10 +1130,6 @@ ApollonIA riceve un proprio numero di telefono dedicato — non usa il tuo numer
                 <label class="modal-label" for="f-studio">Nome dello studio</label>
                 <input id="f-studio" class="modal-input" type="text" name="studio_name" placeholder="Es. Agenzia Roma Centro" required />
               </div>
-              <div>
-                <label class="modal-label" for="f-url">Link ai tuoi annunci</label>
-                <input id="f-url" class="modal-input" type="text" name="immobiliare_url" placeholder="https://www.tuaagenzia.it/annunci" required />
-              </div>
 
               <!-- phone + email side by side -->
               <div class="grid grid-cols-2 gap-3">
@@ -1164,14 +1160,6 @@ ApollonIA riceve un proprio numero di telefono dedicato — non usa il tuo numer
                     <option value="Annuale">Annuale −15%</option>
                   </select>
                 </div>
-              </div>
-
-              <div>
-                <label class="modal-label" for="f-modalita">Modalità di gestione</label>
-                <select id="f-modalita" class="modal-input" name="modalita" required>
-                  <option value="Tutte le chiamate">Tutte le chiamate</option>
-                  <option value="Solo chiamate perse/cancellate">Solo chiamate perse / cancellate</option>
-                </select>
               </div>
 
             </div>
@@ -1783,14 +1771,12 @@ ApollonIA riceve un proprio numero di telefono dedicato — non usa il tuo numer
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         var studio    = document.getElementById('f-studio').value.trim();
-        var url       = document.getElementById('f-url').value.trim();
         var phone     = document.getElementById('f-phone').value.trim();
         var email     = document.getElementById('f-email').value.trim();
         var plan      = planSel.value;
         var pagamento = document.getElementById('f-pagamento').value;
-        var modalita  = document.getElementById('f-modalita').value;
 
-        if (!studio || !url || !phone || !email) {
+        if (!studio || !phone || !email) {
           errorEl.textContent   = 'Compila tutti i campi obbligatori.';
           errorEl.style.display = '';
           return;
@@ -1816,11 +1802,9 @@ ApollonIA riceve un proprio numero di telefono dedicato — non usa il tuo numer
             customer_email: email,
             locale: 'it',
             studio_name: studio,
-            immobiliare_url: url,
             phone: phone,
             plan: plan,
-            pagamento: pagamento,
-            modalita: modalita
+            pagamento: pagamento
           })
         })
         .then(function (r) {

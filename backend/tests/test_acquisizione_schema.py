@@ -21,6 +21,7 @@ def test_missing_required_flags_null_and_absent_fields():
 
 def test_missing_required_treats_zero_and_false_as_present():
     fields = {
+        "tipo_annuncio": "vendita",
         "superficie_mq": 80, "prezzo_richiesto": 0, "classe_energetica": "G",
         "indirizzo_o_zona": "Via Roma 5", "spese_condominiali": 0,
     }
@@ -76,6 +77,39 @@ def test_extraction_result_validates_a_well_formed_response():
         }],
     })
     assert result.tasks[0].owner == "agente"
+
+
+def test_to_listing_maps_fields_onto_the_phone_agent_shape():
+    listing = schema.to_listing({
+        "tipo_annuncio": "affitto",
+        "indirizzo_o_zona": "Via Roma 5, Lodi",
+        "locali": 3, "superficie_mq": 85, "prezzo_richiesto": 1200,
+    }, "Bell'appartamento in centro.")
+    assert listing["type"] == "affitto"
+    assert listing["address"] == "Via Roma 5, Lodi"
+    assert listing["rooms"] == 3
+    assert listing["size_sqm"] == 85
+    assert listing["price"] == 1200
+    assert listing["text"] == "Bell'appartamento in centro."
+    assert listing["available"] is True
+
+
+def test_to_listing_defaults_unknown_type_to_vendita():
+    """An unrecognised/missing tipo_annuncio must still yield a searchable
+    listing — the phone agent filters on exactly vendita/affitto."""
+    assert schema.to_listing({}, "")["type"] == "vendita"
+    assert schema.to_listing({"tipo_annuncio": "boh"}, "")["type"] == "vendita"
+
+
+def test_to_listing_coerces_non_numeric_values():
+    """The model can return a float, a numeric string, or null for numbers —
+    none of which may blow up the listing insert."""
+    listing = schema.to_listing(
+        {"superficie_mq": "85.5", "prezzo_richiesto": None, "locali": 3.0}, ""
+    )
+    assert listing["size_sqm"] == 85
+    assert listing["price"] == 0
+    assert listing["rooms"] == 3
 
 
 def test_extraction_result_rejects_invalid_owner():

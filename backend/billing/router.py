@@ -54,11 +54,9 @@ class CheckoutRequest(BaseModel):
     # Optional context captured by the form. Forwarded to Stripe as metadata so
     # the team has everything needed to provision the number after payment.
     studio_name: Optional[str] = None
-    immobiliare_url: Optional[str] = None
     phone: Optional[str] = None
     plan: Optional[str] = None
     pagamento: Optional[str] = None
-    modalita: Optional[str] = None
     # Originating market ("it" homepage or "sk" /sk/ page). Sets the Stripe
     # Checkout UI language and the cancel-return page; validated server-side.
     locale: Optional[str] = "it"
@@ -83,11 +81,12 @@ async def create_checkout_session(data: CheckoutRequest):
     metadata = {
         "plan_label": _PRICE_TO_PLAN[data.price_id],
         "studio_name": data.studio_name or "",
-        "immobiliare_url": data.immobiliare_url or "",
         "phone": data.phone or "",
         "plan": data.plan or "",
         "pagamento": data.pagamento or "",
-        "modalita": data.modalita or "",
+        # Carried through to the webhook so the customer confirmation email
+        # can be sent in the same language as the checkout page.
+        "locale": checkout_locale,
     }
 
     try:
@@ -121,16 +120,22 @@ async def _send_email(to: str, subject: str, body: str) -> None:
     if not settings.RESEND_API_KEY:
         logger.warning("RESEND_API_KEY not configured — email to %s skipped", to)
         return
+    payload = {
+        "from": settings.RESEND_FROM,
+        "to": [to],
+        "subject": subject,
+        "text": body,
+    }
+    # Route replies to a real inbox (e.g. info@apollon-ia.com) when configured,
+    # so customers replying to a payment email reach a human, not RESEND_FROM
+    # (which may be an unmonitored sending address).
+    if settings.OUTREACH_REPLY_TO:
+        payload["reply_to"] = settings.OUTREACH_REPLY_TO
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
-            json={
-                "from": settings.RESEND_FROM,
-                "to": [to],
-                "subject": subject,
-                "text": body,
-            },
+            json=payload,
         )
         resp.raise_for_status()
 
@@ -149,8 +154,6 @@ async def _send_signup_notification(session: dict, meta: dict, email: Optional[s
         f"Email cliente:      {email or '—'}",
         f"Studio:             {studio}",
         f"Telefono:           {meta.get('phone') or '—'}",
-        f"URL immobiliare.it: {meta.get('immobiliare_url') or '—'}",
-        f"Modalità:           {meta.get('modalita') or '—'}",
         f"Stripe session:     {session.get('id')}",
         f"Stripe customer:    {session.get('customer') or '—'}",
         f"Subscription:       {session.get('subscription') or '—'}",
@@ -168,33 +171,70 @@ async def _send_signup_notification(session: dict, meta: dict, email: Optional[s
         logger.error("Failed to send payment notification: %s", exc)
 
 
+_CONFIRMATION_COPY = {
+    "it": {
+        "subject": "ApollonIA — pagamento confermato",
+        "greeting_named": "Ciao {studio},",
+        "greeting_default": "Ciao,",
+        "thanks_with_plan": "grazie! Abbiamo ricevuto il tuo pagamento per il piano {plan}.",
+        "thanks_no_plan": "grazie! Abbiamo ricevuto il tuo pagamento.",
+        "followup": (
+            "Il nostro team ti contatterà entro 24 ore per configurare il "
+            "numero Apollonia e attivare l'inoltro delle chiamate."
+        ),
+        "reply": "Per qualsiasi domanda, rispondi pure a questa email.",
+        "signoff": "A presto,",
+        "team": "Il team ApollonIA",
+    },
+    "sk": {
+        "subject": "ApollonIA — platba potvrdená",
+        "greeting_named": "Dobrý deň, {studio},",
+        "greeting_default": "Dobrý deň,",
+        "thanks_with_plan": "ďakujeme! Prijali sme vašu platbu za program {plan}.",
+        "thanks_no_plan": "ďakujeme! Prijali sme vašu platbu.",
+        "followup": (
+            "Náš tím vás bude do 24 hodín kontaktovať, aby nastavil vaše "
+            "číslo Apollonia a aktivoval presmerovanie hovorov."
+        ),
+        "reply": "Ak máte akékoľvek otázky, jednoducho odpovedzte na tento e-mail.",
+        "signoff": "S pozdravom,",
+        "team": "Tím ApollonIA",
+    },
+}
+
+
 async def _send_customer_confirmation(meta: dict, email: Optional[str]) -> None:
-    """Confirm the payment to the customer who just checked out."""
+    """Confirm the payment to the customer who just checked out, in the
+    language of the checkout page they used (falls back to Italian for
+    older sessions created before locale was stored in metadata)."""
     if not email:
         logger.warning("No customer email on session — confirmation skipped")
         return
 
+    locale = meta.get("locale")
+    copy = _CONFIRMATION_COPY.get(locale, _CONFIRMATION_COPY["it"])
+
     studio = meta.get("studio_name")
-    greeting = f"Dear {studio}," if studio else "Hello,"
+    greeting = copy["greeting_named"].format(studio=studio) if studio else copy["greeting_default"]
     # Use the language-neutral plan tier ("Base"/"Pro"/"Max"), not the Italian
-    # plan_label, so this English email doesn't embed "(Mensile)".
+    # plan_label, so this email doesn't embed "(Mensile)"/"(Annuale)".
     plan = meta.get("plan") or ""
+    thanks = copy["thanks_with_plan"].format(plan=plan) if plan else copy["thanks_no_plan"]
     body = "\n".join([
         greeting,
         "",
-        "thank you! We've received your payment" + (f" for the {plan} plan." if plan else "."),
+        thanks,
         "",
-        "Our team will contact you within 24 hours to set up your Apollonia "
-        "number and activate call forwarding.",
+        copy["followup"],
         "",
-        "If you have any questions, just reply to this email.",
+        copy["reply"],
         "",
-        "Best regards,",
-        "The ApollonIA team",
+        copy["signoff"],
+        copy["team"],
     ])
     try:
-        await _send_email(email, "ApollonIA — payment confirmed", body)
-        logger.info("Customer confirmation sent to %s", email)
+        await _send_email(email, copy["subject"], body)
+        logger.info("Customer confirmation sent to %s (locale=%s)", email, locale)
     except Exception as exc:
         logger.error("Failed to send customer confirmation to %s: %s", email, exc)
 

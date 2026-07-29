@@ -164,6 +164,41 @@
 
   .hidden { display: none !important; }
 
+  /* ── listings cards ─────────────────────────────────────────────────── */
+  .listings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+  .listing-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .listing-card-head { display: flex; align-items: flex-start; gap: 10px; }
+  .listing-title-wrap { flex: 1; min-width: 0; }
+  .listing-address { font-weight: 600; font-size: 1rem; word-break: break-word; }
+  .listing-zone { color: var(--text-dim); font-size: .82rem; margin-top: 2px; }
+  .listing-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: .85rem; color: var(--text-dim); }
+  .listing-meta b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .listing-price { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .listing-text {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; font-size: .85rem; line-height: 1.6; color: var(--text-dim);
+    white-space: pre-wrap; max-height: 150px; overflow-y: auto;
+  }
+  .listing-text-wrap { position: relative; }
+  .listing-text-empty { font-style: italic; opacity: .7; }
+  .listing-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .listing-actions .spacer { flex: 1; }
+  .b-manual { background: rgba(139,105,20,.18); color: var(--accent); }
+  .b-source { background: var(--surface-2); color: var(--text-dim); }
+  .listing-edit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+  .listing-edit-grid label { margin-bottom: 4px; }
+  .listing-edit-grid input, .listing-edit-grid select {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 8px; font-size: .85rem; width: 100%;
+  }
+  .listing-edit-full { grid-column: 1 / -1; }
+  .listing-danger { color: var(--red); }
+  .listing-confirm { font-size: .82rem; color: var(--red); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
   /* ── theme switch (light/dark), same pill pattern as the landing page's
      IT/SK language switch (see landingpage/index.html's .lang-switch) ──── */
   .theme-switch {
@@ -368,6 +403,9 @@
     .acq-photo-panels { flex-direction: column; }
     .acq-photo-panel-wrap { min-width: 100%; }
 
+    .listings-grid { grid-template-columns: 1fr; }
+    .listing-card { padding: 14px; }
+
     #theme-switch-standalone { top: 12px; right: 14px; }
   }
 </style>
@@ -485,22 +523,8 @@
 
     <section id="view-listings" class="view">
       <h2 id="listings-title">Immobili</h2>
+      <div id="listings-grid" class="listings-grid"></div>
       <div class="card">
-        <div class="table-wrap">
-          <table id="listings-table">
-            <thead>
-              <tr>
-                <th id="th-address">Indirizzo</th>
-                <th id="th-zone">Zona</th>
-                <th id="th-type">Tipo</th>
-                <th id="th-rooms" class="num">Locali</th>
-                <th id="th-size" class="num">m²</th>
-                <th id="th-price" class="num">Prezzo</th>
-              </tr>
-            </thead>
-            <tbody id="listings-body"></tbody>
-          </table>
-        </div>
         <div class="empty hidden" id="listings-empty">Nessun immobile disponibile.</div>
       </div>
     </section>
@@ -684,6 +708,18 @@
       th_address: "Indirizzo", th_zone: "Zona", th_type: "Tipo",
       th_rooms: "Locali", th_size: "m²", th_price: "Prezzo",
       listings_empty: "Nessun immobile disponibile.",
+      listing_no_text: "Nessuna descrizione.",
+      listing_description: "Descrizione",
+      listing_copy: "Copia descrizione",
+      listing_copied: "Copiato ✓",
+      listing_edit: "Modifica",
+      listing_save: "Salva",
+      listing_cancel: "Annulla",
+      listing_delete: "Elimina",
+      listing_delete_confirm: "Eliminare questo immobile?",
+      listing_delete_yes: "Sì, elimina",
+      listing_save_err: "Operazione non riuscita.",
+      listing_own: "Acquisizione",
       outcomes: { lead: "Lead", message: "Messaggio", call: "Chiamata" },
       types: { vendita: "Vendita", affitto: "Affitto" },
       acq_tab: "Strumenti AI",
@@ -767,6 +803,18 @@
       th_address: "Adresa", th_zone: "Lokalita", th_type: "Typ",
       th_rooms: "Izby", th_size: "m²", th_price: "Cena",
       listings_empty: "Žiadne dostupné nehnuteľnosti.",
+      listing_no_text: "Žiadny opis.",
+      listing_description: "Opis",
+      listing_copy: "Kopírovať opis",
+      listing_copied: "Skopírované ✓",
+      listing_edit: "Upraviť",
+      listing_save: "Uložiť",
+      listing_cancel: "Zrušiť",
+      listing_delete: "Odstrániť",
+      listing_delete_confirm: "Odstrániť túto nehnuteľnosť?",
+      listing_delete_yes: "Áno, odstrániť",
+      listing_save_err: "Operácia zlyhala.",
+      listing_own: "Získanie",
       outcomes: { lead: "Záujemca", message: "Odkaz", call: "Hovor" },
       types: { vendita: "Predaj", affitto: "Prenájom" },
       acq_tab: "Nástroje AI",
@@ -852,8 +900,8 @@
     "th-summary": "th_summary", "th-outcome": "th_outcome",
     "contacts-empty": "contacts_empty",
     "listings-title": "listings",
-    "th-address": "th_address", "th-zone": "th_zone", "th-type": "th_type",
-    "th-rooms": "th_rooms", "th-size": "th_size", "th-price": "th_price",
+    /* The listings table's <th>s are gone (it's a card grid now), but the
+       th_* strings live on as the card field labels — see listingReadCard. */
     "listings-empty": "listings_empty",
     "tab-acquisizione": "acq_tab", "acq-title": "acq_title",
     "acq-consent-text": "acq_consent_text", "acq-consent-label": "acq_consent_label",
@@ -990,30 +1038,210 @@
     return Number(value).toLocaleString(intlTag());
   }
 
-  function renderListings(rows) {
-    const body = $("listings-body");
-    const empty = $("listings-empty");
-    const table = $("listings-table");
-    body.innerHTML = "";
-    if (!rows.length) {
-      table.classList.add("hidden");
-      empty.classList.remove("hidden");
-      return;
-    }
-    empty.classList.add("hidden");
-    table.classList.remove("hidden");
+  // ── Listings cards ──────────────────────────────────────────────────────
+  // Each listing renders as a card in one of two modes — read (default) or
+  // edit — swapped in place by re-rendering just that card. These are the
+  // same rows the phone agent searches, so an edit here changes what
+  // Apollonia tells callers.
+  const LISTING_NUM_FIELDS = ["rooms", "size_sqm", "price"];
+
+  function listingReadCard(l) {
     const s = S();
-    for (const l of rows) {
-      const tr = document.createElement("tr");
-      tr.appendChild(el("td", null, l.address || "—", s.th_address));
-      tr.appendChild(el("td", "dim", l.zone || "—", s.th_zone));
-      const type = (l.type || "").toLowerCase();
-      tr.appendChild(el("td", null, s.types[type] || l.type || "—", s.th_type));
-      tr.appendChild(el("td", "num", fmtNum(l.rooms), s.th_rooms));
-      tr.appendChild(el("td", "num", fmtNum(l.size_sqm), s.th_size));
-      tr.appendChild(el("td", "num", fmtPrice(l.price, l.currency), s.th_price));
-      body.appendChild(tr);
-    }
+    const card = el("div", "listing-card");
+
+    const head = el("div", "listing-card-head");
+    const titleWrap = el("div", "listing-title-wrap");
+    titleWrap.appendChild(el("div", "listing-address", l.address || "—"));
+    if (l.zone) titleWrap.appendChild(el("div", "listing-zone", l.zone));
+    head.appendChild(titleWrap);
+    const type = (l.type || "").toLowerCase();
+    head.appendChild(el("span", "badge b-" + (type === "affitto" ? "message" : "lead"),
+      s.types[type] || l.type || "—"));
+    card.appendChild(head);
+
+    card.appendChild(el("div", "listing-price", fmtPrice(l.price, l.currency)));
+
+    const meta = el("div", "listing-meta");
+    const addMeta = (label, value) => {
+      const span = el("span", null, label + " ");
+      span.appendChild(el("b", null, value));
+      meta.appendChild(span);
+    };
+    addMeta(s.th_rooms, fmtNum(l.rooms));
+    addMeta(s.th_size, fmtNum(l.size_sqm));
+    card.appendChild(meta);
+
+    const textBox = el("div", "listing-text" + (l.text ? "" : " listing-text-empty"),
+      l.text || s.listing_no_text);
+    card.appendChild(textBox);
+
+    const actions = el("div", "listing-actions");
+    const copyBtn = el("button", "btn ghost", s.listing_copy);
+    copyBtn.type = "button";
+    copyBtn.disabled = !l.text;
+    copyBtn.addEventListener("click", async () => {
+      const done = () => {
+        copyBtn.textContent = S().listing_copied;
+        setTimeout(() => { copyBtn.textContent = S().listing_copy; }, 1600);
+      };
+      try {
+        await navigator.clipboard.writeText(l.text || "");
+        done();
+      } catch (_) {
+        // Clipboard API needs a secure context and can be blocked outright;
+        // fall back to a hidden textarea + execCommand so the button still
+        // works on http:// and older mobile browsers.
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = l.text || "";
+          ta.style.cssText = "position:fixed;opacity:0;";
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+          done();
+        } catch (_e) { /* nothing more we can do; leave the label unchanged */ }
+      }
+    });
+    actions.appendChild(copyBtn);
+
+    const editBtn = el("button", "btn ghost", s.listing_edit);
+    editBtn.type = "button";
+    editBtn.addEventListener("click", () => card.replaceWith(listingEditCard(l)));
+    actions.appendChild(editBtn);
+
+    actions.appendChild(el("div", "spacer"));
+    if (l.source === "manual") actions.appendChild(el("span", "badge b-manual", s.listing_own));
+
+    const delBtn = el("button", "btn ghost listing-danger", s.listing_delete);
+    delBtn.type = "button";
+    delBtn.addEventListener("click", () => {
+      // Inline confirm rather than window.confirm() — deleting takes the
+      // property off the phone agent immediately, so it's worth a deliberate
+      // second click, but a modal here would be heavier than the action.
+      actions.replaceWith(listingDeleteConfirm(l, card));
+    });
+    actions.appendChild(delBtn);
+    card.appendChild(actions);
+    return card;
+  }
+
+  function listingDeleteConfirm(l, card) {
+    const s = S();
+    const row = el("div", "listing-actions listing-confirm");
+    const msg = el("span", null, s.listing_delete_confirm);
+    row.appendChild(msg);
+    const yes = el("button", "btn ghost listing-danger", s.listing_delete_yes);
+    yes.type = "button";
+    yes.addEventListener("click", async () => {
+      yes.disabled = true;
+      try {
+        const resp = await api("/dashboard/api/listings/" + l.id, { method: "DELETE" });
+        if (!resp.ok) throw new Error("delete " + resp.status);
+        card.remove();
+        if (!$("listings-grid").children.length) $("listings-empty").classList.remove("hidden");
+      } catch (_) {
+        yes.disabled = false;
+        msg.textContent = S().listing_save_err;
+      }
+    });
+    const no = el("button", "btn ghost", s.listing_cancel);
+    no.type = "button";
+    // Re-render the whole card, not just the actions row: rebuilding only the
+    // row would leave its handlers closed over a detached card element.
+    no.addEventListener("click", () => card.replaceWith(listingReadCard(l)));
+    row.appendChild(yes);
+    row.appendChild(no);
+    return row;
+  }
+
+  function listingEditCard(l) {
+    const s = S();
+    const card = el("div", "listing-card");
+    const grid = el("div", "listing-edit-grid");
+    const inputs = {};
+
+    const addField = (name, label, full) => {
+      const wrap = el("div", full ? "listing-edit-full" : null);
+      wrap.appendChild(el("label", null, label));
+      const input = document.createElement("input");
+      input.type = LISTING_NUM_FIELDS.includes(name) ? "number" : "text";
+      input.value = l[name] != null ? l[name] : "";
+      wrap.appendChild(input);
+      grid.appendChild(wrap);
+      inputs[name] = input;
+    };
+
+    addField("address", s.th_address, true);
+    addField("zone", s.th_zone, true);
+
+    const typeWrap = el("div");
+    typeWrap.appendChild(el("label", null, s.th_type));
+    const typeSelect = document.createElement("select");
+    [["vendita", s.types.vendita], ["affitto", s.types.affitto]].forEach(([val, text]) => {
+      const opt = document.createElement("option");
+      opt.value = val; opt.textContent = text;
+      if ((l.type || "").toLowerCase() === val) opt.selected = true;
+      typeSelect.appendChild(opt);
+    });
+    typeWrap.appendChild(typeSelect);
+    grid.appendChild(typeWrap);
+    inputs.type = typeSelect;
+
+    addField("rooms", s.th_rooms);
+    addField("size_sqm", s.th_size);
+    addField("price", s.th_price);
+    card.appendChild(grid);
+
+    card.appendChild(el("label", null, s.listing_description));
+    const textArea = document.createElement("textarea");
+    textArea.className = "acq-textarea";
+    textArea.value = l.text || "";
+    card.appendChild(textArea);
+
+    const err = el("div", "err");
+    card.appendChild(err);
+
+    const actions = el("div", "listing-actions");
+    const saveBtn = el("button", "btn ghost", s.listing_save);
+    saveBtn.type = "button";
+    saveBtn.addEventListener("click", async () => {
+      err.textContent = "";
+      saveBtn.disabled = true;
+      const payload = { text: textArea.value, type: inputs.type.value };
+      ["address", "zone"].forEach((k) => { payload[k] = inputs[k].value; });
+      LISTING_NUM_FIELDS.forEach((k) => {
+        payload[k] = inputs[k].value === "" ? 0 : Number(inputs[k].value);
+      });
+      try {
+        const resp = await api("/dashboard/api/listings/" + l.id, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok) throw new Error("save " + resp.status);
+        card.replaceWith(listingReadCard(await resp.json()));
+      } catch (_) {
+        err.textContent = S().listing_save_err;
+        saveBtn.disabled = false;
+      }
+    });
+    actions.appendChild(saveBtn);
+
+    const cancelBtn = el("button", "btn ghost", s.listing_cancel);
+    cancelBtn.type = "button";
+    cancelBtn.addEventListener("click", () => card.replaceWith(listingReadCard(l)));
+    actions.appendChild(cancelBtn);
+    card.appendChild(actions);
+    return card;
+  }
+
+  function renderListings(rows) {
+    const grid = $("listings-grid");
+    const empty = $("listings-empty");
+    grid.innerHTML = "";
+    empty.classList.toggle("hidden", rows.length > 0);
+    for (const l of rows) grid.appendChild(listingReadCard(l));
   }
 
   async function loadListings() {
@@ -1022,7 +1250,7 @@
       if (!resp.ok) return;
       const data = await resp.json();
       renderListings(data.listings || []);
-    } catch (_) { /* leave the table empty on a transient error */ }
+    } catch (_) { /* leave the grid empty on a transient error */ }
   }
 
   function showLogin() {

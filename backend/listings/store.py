@@ -10,6 +10,7 @@ from typing import Optional
 import httpx
 
 from config import settings
+from listings import db as listings_db
 from listings.seed import get_seed_listings
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,7 @@ class ListingsStore:
         immobiliare_url: Optional[str] = None,
         use_github_csv: bool = False,
         locale: str = "it",
+        tenant_id: Optional[str] = None,
     ) -> None:
         self._listings: list[dict] = []
         self.immobiliare_url = immobiliare_url
@@ -123,6 +125,28 @@ class ListingsStore:
         # Which seed set to fall back to (it / sk). Lets a seed-only tenant (e.g.
         # the Slovak demo) serve listings in its own locale.
         self.locale = locale
+        # When set, listings are persisted per-tenant in SQLite (listings/db.py)
+        # rather than living only in this object: that's what lets the agency
+        # edit/delete them and lets the Acquisizione tool add new ones without
+        # the next scrape reverting the change. Unset (tests, the env-var demo
+        # fallback) keeps the original pure in-memory behaviour.
+        self.tenant_id = tenant_id
+
+    def _all(self) -> list[dict]:
+        """Current listings — from the DB when this store is tenant-scoped,
+        otherwise the in-memory list."""
+        if self.tenant_id:
+            return listings_db.list_for_tenant(self.tenant_id)
+        return self._listings
+
+    def _publish(self, listings: list[dict]) -> None:
+        """Store freshly-loaded listings. Tenant-scoped stores merge them into
+        the DB (respecting agent edits/deletions — see listings/db.py); others
+        just hold them in memory."""
+        if self.tenant_id:
+            listings_db.replace_scraped(self.tenant_id, listings)
+        else:
+            self._listings = listings
 
     async def load(self) -> None:
         """Two loading strategies:
@@ -138,9 +162,10 @@ class ListingsStore:
         """
         if self.use_github_csv:
             loaded = await self._load_from_github()
-            if not loaded:
-                self._listings = get_seed_listings(self.locale)
-                logger.info("Loaded %d seed listings as fallback", len(self._listings))
+            if not loaded and not self._all():
+                seed = get_seed_listings(self.locale)
+                self._publish(seed)
+                logger.info("Loaded %d seed listings as fallback", len(seed))
 
             if _APIFY_SYNC_PAUSED:
                 logger.info("Apify sync is paused (_APIFY_SYNC_PAUSED=True) — skipping background scrape")
@@ -155,9 +180,10 @@ class ListingsStore:
             return
 
         if not self.immobiliare_url:
-            if not self._listings:
-                self._listings = get_seed_listings(self.locale)
-                logger.info("Tenant has no immobiliare_url — loaded %d seed listings", len(self._listings))
+            if not self._all():
+                seed = get_seed_listings(self.locale)
+                self._publish(seed)
+                logger.info("Tenant has no immobiliare_url — loaded %d seed listings", len(seed))
             return
 
         if not settings.APIFY_TOKEN:
@@ -165,9 +191,10 @@ class ListingsStore:
         else:
             await self._apify_scrape(self.immobiliare_url, write_github=False)
 
-        if not self._listings:
-            self._listings = get_seed_listings(self.locale)
-            logger.info("Scrape yielded nothing — loaded %d seed listings as fallback", len(self._listings))
+        if not self._all():
+            seed = get_seed_listings(self.locale)
+            self._publish(seed)
+            logger.info("Scrape yielded nothing — loaded %d seed listings as fallback", len(seed))
 
     async def _load_from_github(self) -> bool:
         """Load listings from the GitHub CSV cache. Returns True if at least one listing loaded."""
@@ -217,8 +244,8 @@ class ListingsStore:
                 logger.warning("GitHub CSV loaded but contained no available listings")
                 return False
 
-            self._listings = listings
-            logger.info("Loaded %d listings from GitHub CSV", len(self._listings))
+            self._publish(listings)
+            logger.info("Loaded %d listings from GitHub CSV", len(listings))
             return True
 
         except Exception as exc:
@@ -287,8 +314,8 @@ class ListingsStore:
                 logger.warning("Apify scrape returned no listings — keeping current listings")
                 return
 
-            self._listings = listings
-            logger.info("Updated %d listings in memory from Apify/Immobiliare.it", len(self._listings))
+            self._publish(listings)
+            logger.info("Loaded %d listings from Apify/Immobiliare.it", len(listings))
 
             if write_github:
                 await self._write_github_csv(listings)
@@ -351,7 +378,7 @@ class ListingsStore:
         max_price: Optional[int] = None,
     ) -> list[dict]:
         results = []
-        for listing in self._listings:
+        for listing in self._all():
             if type is not None and listing["type"] != type.lower():
                 continue
             if zone is not None:
@@ -383,7 +410,7 @@ class ListingsStore:
         qn = _norm(query)
         words = [w for w in query.split() if len(w) > 3]
         return [
-            l for l in self._listings
+            l for l in self._all()
             if qn in _norm(l["address"])
             or qn in _norm(l["zone"])
             or any(
@@ -400,12 +427,14 @@ class TenantListingsStore:
         self._stores: dict[str, ListingsStore] = {}
 
     def attach(self, tenant_id: str, listings_store: "ListingsStore") -> None:
-        """Bind an existing store (the demo tenant's GitHub-CSV store) to a tenant id."""
+        """Bind an existing store (the demo tenant's GitHub-CSV store) to a
+        tenant id, and tell that store which tenant it now persists under."""
+        listings_store.tenant_id = tenant_id
         self._stores[tenant_id] = listings_store
 
     def get_or_create(self, tenant_id: str) -> ListingsStore:
         if tenant_id not in self._stores:
-            self._stores[tenant_id] = ListingsStore()
+            self._stores[tenant_id] = ListingsStore(tenant_id=tenant_id)
         return self._stores[tenant_id]
 
     async def load(self, tenant_id: str, immobiliare_url: Optional[str] = None) -> None:
@@ -415,7 +444,7 @@ class TenantListingsStore:
         await tenant_store.load()
 
     def counts(self) -> dict[str, int]:
-        return {tid: len(s._listings) for tid, s in self._stores.items()}
+        return {tid: len(s._all()) for tid, s in self._stores.items()}
 
 
 tenant_stores = TenantListingsStore()

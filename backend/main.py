@@ -23,6 +23,7 @@ from config import settings
 from dashboard.router import router as dashboard_router
 from demo.router import router as demo_router
 from leadgen import db as leadgen_db
+from listings import db as listings_db
 from listings.store import ListingsStore, store, tenant_stores
 from routers.leads import router as leads_router
 from signup.router import router as signup_router
@@ -133,6 +134,7 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(leadgen_db.init)
     await asyncio.to_thread(calls_db.init)
     await asyncio.to_thread(acquisizione_db.init)
+    await asyncio.to_thread(listings_db.init)
     await _load_all_tenant_listings()
     task = asyncio.create_task(_sync_loop())
     try:

@@ -1129,10 +1129,6 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
                 <label class="modal-label" for="f-studio">Názov kancelárie</label>
                 <input id="f-studio" class="modal-input" type="text" name="studio_name" placeholder="Napr. Reality Bratislava Centrum" required />
               </div>
-              <div>
-                <label class="modal-label" for="f-url">URL nehnutelnosti.sk</label>
-                <input id="f-url" class="modal-input" type="text" name="immobiliare_url" placeholder="https://www.nehnutelnosti.sk/..." required />
-              </div>
 
               <!-- phone + email side by side -->
               <div class="grid grid-cols-2 gap-3">
@@ -1163,14 +1159,6 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
                     <option value="Annuale">Ročne −15%</option>
                   </select>
                 </div>
-              </div>
-
-              <div>
-                <label class="modal-label" for="f-modalita">Režim spravovania</label>
-                <select id="f-modalita" class="modal-input" name="modalita" required>
-                  <option value="Tutte le chiamate">Všetky hovory</option>
-                  <option value="Solo chiamate perse/cancellate">Len zmeškané / odmietnuté hovory</option>
-                </select>
               </div>
 
             </div>
@@ -1783,14 +1771,12 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         var studio    = document.getElementById('f-studio').value.trim();
-        var url       = document.getElementById('f-url').value.trim();
         var phone     = document.getElementById('f-phone').value.trim();
         var email     = document.getElementById('f-email').value.trim();
         var plan      = planSel.value;
         var pagamento = document.getElementById('f-pagamento').value;
-        var modalita  = document.getElementById('f-modalita').value;
 
-        if (!studio || !url || !phone || !email) {
+        if (!studio || !phone || !email) {
           errorEl.textContent   = 'Vyplňte všetky povinné polia.';
           errorEl.style.display = '';
           return;
@@ -1816,11 +1802,9 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
             customer_email: email,
             locale: 'sk',
             studio_name: studio,
-            immobiliare_url: url,
             phone: phone,
             plan: plan,
-            pagamento: pagamento,
-            modalita: modalita
+            pagamento: pagamento
           })
         })
         .then(function (r) {

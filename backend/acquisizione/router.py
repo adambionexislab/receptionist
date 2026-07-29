@@ -24,9 +24,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from acquisizione import db, extraction, photos
+from acquisizione import db, extraction, photos, schema
 from config import settings
 from dashboard.router import current_tenant
+from listings import db as listings_db
 
 logger = logging.getLogger(__name__)
 
@@ -175,15 +176,35 @@ class ConfirmRequest(BaseModel):
 async def confirm_record(
     record_id: str, data: ConfirmRequest, tenant: dict = Depends(current_tenant)
 ):
-    """Save the agent's edited fields/text/tasks and mark the record final.
-    Nothing about the listing is persisted as confirmed before this call."""
+    """Save the agent's edited fields/text/tasks, mark the record final, and
+    publish it as a live listing so the phone agent can find it.
+
+    The listing is created as source='manual' (see listings/db.py), which is
+    what keeps a later Immobiliare.it scrape from wiping it — this property
+    was captured in a meeting, it isn't on the portal."""
     ok = await asyncio.to_thread(
         db.confirm, record_id, tenant["id"],
         data.listing_fields, data.listing_text, data.tasks,
     )
     if not ok:
         raise HTTPException(status_code=409, detail="Record is not awaiting confirmation")
-    return await asyncio.to_thread(db.get, record_id, tenant["id"])
+
+    # Publishing must not lose an otherwise-successful confirmation: the
+    # intake record is already saved above, so a failure here is logged and
+    # surfaced in the response rather than raised.
+    published = True
+    try:
+        await asyncio.to_thread(
+            listings_db.create_manual,
+            tenant["id"],
+            schema.to_listing(data.listing_fields, data.listing_text),
+        )
+    except Exception:
+        logger.exception("Failed to publish listing for intake record %s", record_id)
+        published = False
+
+    record = await asyncio.to_thread(db.get, record_id, tenant["id"])
+    return {**record, "published": published}
 
 
 _MAX_PHOTO_BYTES = 50 * 1024 * 1024  # OpenAI's own per-image limit
