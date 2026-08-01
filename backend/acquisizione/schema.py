@@ -27,7 +27,11 @@ _COMMON_FIELDS: dict[str, tuple[str, str, str]] = {
     "tipologia": ("string", "Tipo di immobile (es. appartamento, villa, attico)", "Typ nehnuteľnosti (napr. byt, dom, mezonet)"),
     "indirizzo_o_zona": ("string", "Indirizzo esatto o zona/quartiere dell'immobile", "Presná adresa alebo lokalita/štvrť nehnuteľnosti"),
     "superficie_mq": ("number", "Superficie in metri quadrati", "Úžitková plocha v metroch štvorcových"),
-    "locali": ("number", "Numero di locali", "Počet izieb (napr. 3-izbový)"),
+    "locali": (
+        "number",
+        "Numero di locali (vani abitabili). Se il venditore non dice un totale ma elenca le stanze, CONTALE tu",
+        "Počet izieb (napr. 3-izbový). Ak predávajúci neuvedie celkový počet, ale vymenuje jednotlivé miestnosti, SPOČÍTAJTE ich",
+    ),
     "camere": ("number", "Numero di camere da letto", "Počet spální"),
     "bagni": ("number", "Numero di bagni", "Počet kúpeľní"),
     "piano": ("string", "Piano dell'immobile (es. 2, terra, attico)", "Poschodie nehnuteľnosti (napr. 2., prízemie, posledné)"),
@@ -63,9 +67,17 @@ _SK_EXTENSION: dict[str, tuple[str, str]] = {
 # Per-market required fields — drives "missing_required" / blocking. Confirmed
 # with the operator as-specified; see prompt_realtor_tool.md.
 REQUIRED_FIELDS: dict[str, list[str]] = {
-    "it": ["tipo_annuncio", "superficie_mq", "prezzo_richiesto", "classe_energetica", "indirizzo_o_zona", "spese_condominiali"],
-    "sk": ["tipo_annuncio", "superficie_mq", "prezzo_richiesto", "energeticka_trieda", "indirizzo_o_zona", "druh_vlastnictva"],
+    "it": ["tipo_annuncio", "locali", "superficie_mq", "prezzo_richiesto", "classe_energetica", "indirizzo_o_zona", "spese_condominiali"],
+    "sk": ["tipo_annuncio", "locali", "superficie_mq", "prezzo_richiesto", "energeticka_trieda", "indirizzo_o_zona", "druh_vlastnictva"],
 }
+
+
+def field_names(market: str) -> list[str]:
+    """Every listing field for `market`, in a stable presentation order
+    (common fields, then that market's extension). Used to lay out the
+    meeting-summary email (acquisizione/notify.py)."""
+    ext = _SK_EXTENSION if market == "sk" else _IT_EXTENSION
+    return list(_COMMON_FIELDS) + list(ext)
 
 
 def _prop(json_type: str, description: str) -> dict[str, Any]:

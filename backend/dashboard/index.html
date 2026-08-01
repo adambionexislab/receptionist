@@ -238,6 +238,8 @@
   .acq-tool-title { font-size: 1.05rem; margin: 32px 0 14px; }
   .acq-tool-title:first-of-type { margin-top: 0; }
   .acq-fields-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .acq-fields-none { color: var(--text-dim); font-size: .88rem; grid-column: 1 / -1; }
+  .acq-fields-toggle { margin-top: 12px; }
   .acq-field { display: flex; flex-direction: column; gap: 5px; }
   .acq-field label { margin: 0; }
   .acq-field input[type="text"], .acq-field input[type="number"] {
@@ -568,6 +570,7 @@
         <div class="acq-pad">
           <h3 id="acq-review-fields-title"></h3>
           <div id="acq-fields-grid" class="acq-fields-grid"></div>
+          <button type="button" class="btn ghost acq-fields-toggle" id="acq-fields-toggle"></button>
 
           <h3 id="acq-review-text-title"></h3>
           <textarea id="acq-listing-text" class="acq-textarea"></textarea>
@@ -745,7 +748,10 @@
       acq_processing_text: "Elaborazione della trascrizione in corso…",
       acq_err_finish: "Elaborazione non riuscita.",
       acq_retry_btn: "Riprova",
-      acq_review_fields_title: "Dati immobile",
+      acq_review_fields_title: "Dati da completare",
+      acq_fields_none: "Tutti i dati sono stati raccolti durante la riunione.",
+      acq_fields_show_all: "Mostra tutti i dati",
+      acq_fields_show_empty: "Mostra solo i dati mancanti",
       acq_review_text_title: "Descrizione annuncio",
       acq_review_tasks_title: "Attività",
       acq_add_task_btn: "+ Aggiungi attività",
@@ -757,7 +763,9 @@
       acq_task_blocking: "Blocca pubblicazione",
       acq_task_due_placeholder: "Scadenza",
       acq_task_remove: "Rimuovi",
-      acq_confirmed_text: "Immobile confermato e salvato.",
+      acq_confirmed_text: "Immobile confermato, pubblicato tra gli immobili e inviato via email.",
+      acq_confirmed_no_email: "⚠ Invio dell'email non riuscito.",
+      acq_confirmed_no_publish: "⚠ Pubblicazione tra gli immobili non riuscita.",
       acq_photos_tool_title: "Foto",
       acq_photo_upload_label: "Clicca per caricare una foto",
       acq_photo_result_placeholder: "Il risultato apparirà qui",
@@ -840,7 +848,10 @@
       acq_processing_text: "Spracúva sa prepis…",
       acq_err_finish: "Spracovanie zlyhalo.",
       acq_retry_btn: "Skúsiť znova",
-      acq_review_fields_title: "Údaje o nehnuteľnosti",
+      acq_review_fields_title: "Údaje na doplnenie",
+      acq_fields_none: "Všetky údaje boli získané počas stretnutia.",
+      acq_fields_show_all: "Zobraziť všetky údaje",
+      acq_fields_show_empty: "Zobraziť len chýbajúce údaje",
       acq_review_text_title: "Opis inzerátu",
       acq_review_tasks_title: "Úlohy",
       acq_add_task_btn: "+ Pridať úlohu",
@@ -852,7 +863,9 @@
       acq_task_blocking: "Blokuje zverejnenie",
       acq_task_due_placeholder: "Termín",
       acq_task_remove: "Odstrániť",
-      acq_confirmed_text: "Nehnuteľnosť potvrdená a uložená.",
+      acq_confirmed_text: "Nehnuteľnosť potvrdená, zverejnená medzi nehnuteľnosťami a odoslaná e-mailom.",
+      acq_confirmed_no_email: "⚠ E-mail sa nepodarilo odoslať.",
+      acq_confirmed_no_publish: "⚠ Zverejnenie medzi nehnuteľnosťami zlyhalo.",
       acq_photos_tool_title: "Fotografie",
       acq_photo_upload_label: "Kliknite pre nahratie fotografie",
       acq_photo_result_placeholder: "Výsledok sa tu zobrazí",
@@ -1334,6 +1347,7 @@
     const finishErr = $("acq-finish-err");
     const finishRetryBtn = $("acq-finish-retry-btn");
     const fieldsGrid = $("acq-fields-grid");
+    const fieldsToggleBtn = $("acq-fields-toggle");
     const listingTextArea = $("acq-listing-text");
     const tasksList = $("acq-tasks-list");
     const addTaskBtn = $("acq-add-task-btn");
@@ -1387,6 +1401,8 @@
     let commitSafetyTimer = null, autosaveTimer = null, reconnectTimer = null;
     let wakeLock = null, noSleepVideo = null, noSleepCanvasTimer = null;
     let currentMissing = [];
+    let currentFields = {};   // the full extracted set, incl. fields not rendered
+    let showAllFields = false;
     let itemDeltaText = {}; // item_id -> delta text seen so far, for the completed-event fallback
 
     function updateLiveLabels() {
@@ -1951,11 +1967,32 @@
       }
     });
 
+    // Booleans are always "answered" (false is a real answer, not a blank),
+    // so only null/""/undefined count as needing the agent's attention.
+    function isEmptyFieldValue(value) {
+      return value === null || value === undefined || value === "";
+    }
+
+    function renderFieldsGrid() {
+      fieldsGrid.innerHTML = "";
+      const names = Object.keys(currentFields).filter(
+        (name) => showAllFields || isEmptyFieldValue(currentFields[name])
+      );
+      names.forEach((name) => fieldsGrid.appendChild(fieldEl(name, currentFields[name])));
+      if (!names.length) fieldsGrid.appendChild(el("div", "acq-fields-none", S().acq_fields_none));
+      fieldsToggleBtn.textContent = showAllFields
+        ? S().acq_fields_show_empty : S().acq_fields_show_all;
+    }
+
     function renderReview(record) {
       currentMissing = record.missing_required || [];
-      fieldsGrid.innerHTML = "";
-      const fields = record.listing_fields || {};
-      Object.keys(fields).forEach((name) => fieldsGrid.appendChild(fieldEl(name, fields[name])));
+      // Full extracted set is kept in state, not just in the DOM: the grid
+      // only renders the blanks by default, and collectFieldsPayload merges
+      // over this — otherwise confirming would submit only the visible
+      // fields and wipe everything the model did extract.
+      currentFields = record.listing_fields || {};
+      showAllFields = false;
+      renderFieldsGrid();
       listingTextArea.value = record.listing_text || "";
       tasksList.innerHTML = "";
       (record.tasks || []).forEach((t) => tasksList.appendChild(taskRowEl(t)));
@@ -1964,7 +2001,14 @@
       reviewStep.classList.remove("hidden");
     }
 
-    function collectFieldsPayload() {
+    fieldsToggleBtn.addEventListener("click", () => {
+      // Keep whatever the agent has typed so far when swapping views.
+      Object.assign(currentFields, readVisibleFields());
+      showAllFields = !showAllFields;
+      renderFieldsGrid();
+    });
+
+    function readVisibleFields() {
       const out = {};
       fieldsGrid.querySelectorAll(".acq-field").forEach((wrap) => {
         const name = wrap.dataset.field;
@@ -1974,6 +2018,11 @@
         else out[name] = input.value === "" ? null : input.value;
       });
       return out;
+    }
+
+    function collectFieldsPayload() {
+      // Everything the model extracted, with the agent's edits laid over it.
+      return { ...currentFields, ...readVisibleFields() };
     }
 
     function collectTasksPayload() {
@@ -2043,9 +2092,18 @@
           body: JSON.stringify(payload),
         });
         if (!resp.ok) throw new Error("confirm " + resp.status);
+        const saved = await resp.json();
         reviewStep.classList.add("hidden");
-        confirmedText.textContent = S().acq_confirmed_text;
+        // The record is saved either way; publishing to the listings the
+        // phone agent searches, and emailing the agency its copy of the
+        // meeting, are both best-effort — say so rather than claiming
+        // success the agent can't verify.
+        const notes = [S().acq_confirmed_text];
+        if (saved.emailed === false) notes.push(S().acq_confirmed_no_email);
+        if (saved.published === false) notes.push(S().acq_confirmed_no_publish);
+        confirmedText.textContent = notes.join(" ");
         confirmedStep.classList.remove("hidden");
+        loadListings();  // the new listing should show up on the Immobili tab
       } catch (_) {
         reviewErr.textContent = S().acq_err_confirm;
       } finally {

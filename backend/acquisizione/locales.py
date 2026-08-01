@@ -31,8 +31,69 @@ _SK_INSTRUCTIONS = (
     "  ktorý danú úlohu odôvodňuje (alebo null, ak sa neuplatňuje).\n"
     "- listing_text a opisy úloh musia byť napísané celé po slovensky, aj\n"
     "  keď prepis obsahuje výrazy v inom jazyku.\n"
+    "\n"
+    "Počítanie izieb (pole 'locali') — JEDINÁ výnimka z pravidla neodvodzovať:\n"
+    "spočítať nie je vymyslieť.\n"
+    "- Ak predávajúci výslovne uvedie celkový počet ('je to trojizbový byt'),\n"
+    "  použite tento počet.\n"
+    "- Ak však celkový počet neuvedie, ale počas stretnutia vymenuje\n"
+    "  jednotlivé miestnosti ('je tam obývačka, potom spálňa a detská izba'),\n"
+    "  SPOČÍTAJTE vymenované obytné miestnosti a uveďte číslo. Nenechávajte\n"
+    "  null len preto, že celkový počet nebol vyslovený.\n"
+    "- Čo počítať: obývačka, spálne, detské izby, pracovňa, jedáleň.\n"
+    "- Čo NEPOČÍTAŤ: kuchyňa (na Slovensku sa kuchyňa do počtu izieb\n"
+    "  nezapočítava — trojizbový byt = 3 izby + kuchyňa), kúpeľne a WC,\n"
+    "  chodby a predsiene, komory a šatníky, špajza, balkóny, lodžie a\n"
+    "  terasy, pivnica, garáž.\n"
+    "- Každú miestnosť započítajte iba raz, aj keď je spomenutá viackrát\n"
+    "  počas stretnutia.\n"
+    "- Iba ak z vymenovaných miestností nie je jasné, koľko ich je, uveďte\n"
+    "  null.\n"
 )
 
-SK: dict[str, str] = {
+SK: dict = {
     "extraction_instructions": _SK_INSTRUCTIONS,
+    # ── meeting-summary email (see acquisizione/notify.py) ────────────────────
+    "email_subject": "Získanie — {address}",
+    "email_intro": "Zhrnutie stretnutia s predávajúcim.",
+    "email_section_missing": "=== Chýbajúce údaje (na doplnenie) ===",
+    "email_none_missing": "Žiadne: všetky povinné údaje sú vyplnené.",
+    "email_section_tasks": "=== Úlohy ===",
+    "email_no_tasks": "Počas stretnutia neboli zaznamenané žiadne záväzky.",
+    "email_owner_agente": "Maklér",
+    "email_owner_venditore": "Predávajúci",
+    "email_task_blocking": "BLOKUJE ZVEREJNENIE",
+    "email_task_due": "termín",
+    "email_section_listing_text": "=== Opis inzerátu ===",
+    "email_section_fields": "=== Údaje o nehnuteľnosti ===",
+    "email_section_transcript": "=== Prepis stretnutia ===",
+    "email_no_text": "(žiadny opis)",
+    "email_yes": "áno",
+    "email_no": "nie",
+    "field_labels": {
+        "tipo_annuncio": "Typ inzerátu",
+        "tipologia": "Typ nehnuteľnosti",
+        "indirizzo_o_zona": "Adresa / lokalita",
+        "superficie_mq": "Úžitková plocha (m²)",
+        "locali": "Počet izieb",
+        "camere": "Spálne",
+        "bagni": "Kúpeľne",
+        "piano": "Poschodie",
+        "piani_totali": "Celkový počet poschodí",
+        "ascensore": "Výťah",
+        "riscaldamento": "Kúrenie",
+        "stato_immobile": "Stav nehnuteľnosti",
+        "anno_costruzione": "Rok výstavby",
+        "esposizione": "Orientácia",
+        "spazi_esterni": "Vonkajšie priestory",
+        "posto_auto": "Parkovanie",
+        "cantina": "Pivnica",
+        "arredato": "Zariadenie",
+        "prezzo_richiesto": "Požadovaná cena (€)",
+        "note_venditore": "Poznámky predávajúceho",
+        "energeticka_trieda": "Energetická trieda",
+        "energeticky_certifikat_esiste": "Energetický certifikát existuje",
+        "mesacne_poplatky": "Mesačné poplatky (€)",
+        "druh_vlastnictva": "Druh vlastníctva",
+    },
 }

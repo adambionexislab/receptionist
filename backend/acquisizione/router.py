@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from acquisizione import db, extraction, photos, schema
+from acquisizione import db, extraction, notify, photos, schema
 from config import settings
 from dashboard.router import current_tenant
 from listings import db as listings_db
@@ -204,7 +204,11 @@ async def confirm_record(
         published = False
 
     record = await asyncio.to_thread(db.get, record_id, tenant["id"])
-    return {**record, "published": published}
+    # Email the agency its copy of the meeting (tasks, missing data, listing
+    # text, transcript) — same recipient as the phone agent's lead summaries.
+    # Also best-effort: the record is already saved either way.
+    emailed = await notify.send_meeting_summary(tenant, record)
+    return {**record, "published": published, "emailed": emailed}
 
 
 _MAX_PHOTO_BYTES = 50 * 1024 * 1024  # OpenAI's own per-image limit

@@ -21,11 +21,20 @@ def test_missing_required_flags_null_and_absent_fields():
 
 def test_missing_required_treats_zero_and_false_as_present():
     fields = {
-        "tipo_annuncio": "vendita",
+        "tipo_annuncio": "vendita", "locali": 3,
         "superficie_mq": 80, "prezzo_richiesto": 0, "classe_energetica": "G",
         "indirizzo_o_zona": "Via Roma 5", "spese_condominiali": 0,
     }
     assert schema.missing_required("it", fields) == []
+
+
+@pytest.mark.parametrize("market", ["it", "sk"])
+def test_room_count_is_required_in_both_markets(market):
+    """rooms:0 would exclude a listing from every room-based search the phone
+    agent runs, so a missing count has to be surfaced to the agent instead of
+    silently shipping a listing nobody can find."""
+    assert "locali" in schema.REQUIRED_FIELDS[market]
+    assert "locali" in schema.missing_required(market, {})
 
 
 def test_missing_required_treats_empty_string_as_missing():
@@ -62,6 +71,21 @@ def test_envelope_schema_omits_missing_required_from_model_output():
     env = schema.envelope_schema("it")
     assert "missing_required" not in env["properties"]
     assert set(env["required"]) == {"listing_fields", "listing_text", "tasks"}
+
+
+@pytest.mark.parametrize("market", ["it", "sk"])
+def test_extraction_prompt_tells_the_model_to_count_enumerated_rooms(market):
+    """Sellers routinely name each room without ever stating a total, so the
+    prompt has to carve out counting as an explicit exception to the
+    otherwise-strict 'never derive a value' rule."""
+    from acquisizione import extraction
+    instructions = extraction._content_for(market)["extraction_instructions"]
+    # The exclusion list is what keeps the count matching portal convention.
+    excluded = ["bagni", "corridoi"] if market == "it" else ["kúpeľne", "chodby"]
+    for term in excluded:
+        assert term in instructions
+    counting_verb = "CONTA" if market == "it" else "SPOČÍTAJTE"
+    assert counting_verb in instructions
 
 
 def test_extraction_result_validates_a_well_formed_response():

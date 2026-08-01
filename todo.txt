@@ -58,3 +58,5 @@ Landing page: funzionalita should explan that she checkes availabiliy, answers q
 landing page: access to the tools for non subscribed
 
 the counter cards in dashboard are for calendar month and should be for the subscribtion month
+
+video generation using runway gen-4.5
