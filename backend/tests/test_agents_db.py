@@ -10,6 +10,7 @@ import sqlite3
 import pytest
 
 from agents import db as agents_db
+from listings import db as listings_db
 from tenants import db as tenants_db
 
 TENANT = "tenant-a"
@@ -19,12 +20,18 @@ OTHER_TENANT = "tenant-b"
 @pytest.fixture(autouse=True)
 def in_memory_db(monkeypatch):
     """Point the shared tenants connection at a throwaway in-memory DB, so
-    these tests never touch the real data on disk."""
+    these tests never touch the real data on disk.
+
+    Listings are set up here too: deleting an agent has to unassign their
+    listings, so that path spans both tables.
+    """
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     monkeypatch.setattr(tenants_db, "get_connection", lambda: conn)
     monkeypatch.setattr(agents_db, "_initialized", False)
+    monkeypatch.setattr(listings_db, "_initialized", False)
     agents_db.init()
+    listings_db.init()
     yield conn
     conn.close()
 
@@ -68,6 +75,51 @@ def test_update_changes_name_and_email_but_never_the_number():
     assert updated["name"] == "Mario Rossi Jr"
     assert updated["email"] == "mr@studio.it"
     assert updated["number"] == agent["number"]
+
+
+def test_get_many_resolves_ids_and_ignores_other_tenants():
+    mario = agents_db.create(TENANT, "Mario Rossi", "mario@studio.it")
+    lucia = agents_db.create(TENANT, "Lucia Bianchi", "lucia@studio.it")
+    outsider = agents_db.create(OTHER_TENANT, "Ján Novák", "jan@studio.sk")
+
+    found = agents_db.get_many([mario["id"], lucia["id"], outsider["id"], "ghost"], TENANT)
+
+    # An id from another agency resolves to nothing, so a stale agent_id can
+    # never route one tenant's lead to another tenant's agent.
+    assert set(found) == {mario["id"], lucia["id"]}
+    assert found[mario["id"]]["email"] == "mario@studio.it"
+    assert agents_db.get_many([], TENANT) == {}
+
+
+def test_deleting_an_agent_unassigns_their_listings():
+    mario = agents_db.create(TENANT, "Mario Rossi", "mario@studio.it")
+    lucia = agents_db.create(TENANT, "Lucia Bianchi", "lucia@studio.it")
+    his = listings_db.create_manual(TENANT, {"address": "Via Roma 1"}, agent_id=mario["id"])
+    hers = listings_db.create_manual(TENANT, {"address": "Via Po 2"}, agent_id=lucia["id"])
+
+    assert agents_db.delete(mario["id"], TENANT) is True
+
+    # His listing survives but is unassigned, so its leads fall back to the
+    # agency inbox rather than pointing at a row that no longer exists.
+    assert listings_db.get(his["id"], TENANT)["agent_id"] is None
+    # Nobody else's assignment is disturbed.
+    assert listings_db.get(hers["id"], TENANT)["agent_id"] == lucia["id"]
+
+
+def test_a_recycled_number_does_not_inherit_the_old_agents_listings():
+    """The reason listings store agent_id and not the number: #2 is handed to
+    the next hire, and their predecessor's properties must not follow it."""
+    agents_db.create(TENANT, "Mario Rossi", "mario@studio.it")
+    lucia = agents_db.create(TENANT, "Lucia Bianchi", "lucia@studio.it")
+    listing = listings_db.create_manual(
+        TENANT, {"address": "Via Roma 1"}, agent_id=lucia["id"]
+    )
+
+    agents_db.delete(lucia["id"], TENANT)
+    replacement = agents_db.create(TENANT, "Anna Neri", "anna@studio.it")
+
+    assert replacement["number"] == 2  # same number Lucia had
+    assert listings_db.get(listing["id"], TENANT)["agent_id"] is None
 
 
 def test_reads_and_writes_are_scoped_to_one_tenant():

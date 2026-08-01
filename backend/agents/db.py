@@ -17,6 +17,7 @@ import logging
 import uuid
 from typing import Any, Optional
 
+from listings import db as listings_db
 from tenants import db as _tenants_db
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,23 @@ def get(agent_id: str, tenant_id: str) -> Optional[dict[str, Any]]:
     return dict(row) if row else None
 
 
+def get_many(agent_ids: list[str], tenant_id: str) -> dict[str, dict[str, Any]]:
+    """Resolve several agents at once, keyed by id — how the post-call lead
+    email turns the agent_ids on a caller's listings into names and addresses.
+    Ids belonging to another tenant (or already deleted) are simply absent from
+    the result, so a stale id can never leak another agency's agent.
+    """
+    ids = [a for a in dict.fromkeys(agent_ids) if a]
+    if not ids:
+        return {}
+    placeholders = ",".join("?" * len(ids))
+    rows = _conn().execute(
+        f"SELECT * FROM agency_agents WHERE tenant_id = ? AND id IN ({placeholders})",
+        (tenant_id, *ids),
+    ).fetchall()
+    return {row["id"]: dict(row) for row in rows}
+
+
 def create(tenant_id: str, name: str, email: str) -> dict[str, Any]:
     """Add an agent and hand them the lowest number this tenant isn't using.
 
@@ -149,14 +167,30 @@ def update(agent_id: str, tenant_id: str, fields: dict) -> Optional[dict[str, An
 
 def delete(agent_id: str, tenant_id: str) -> bool:
     """Remove an agent. A hard delete — unlike listings there is no scrape that
-    could resurrect the row, and the freed number is not reused."""
+    could resurrect the row, and the freed number is not reused.
+
+    Any listings this agent handled are unassigned in the SAME transaction, so
+    no listing is ever left pointing at a row that no longer exists: their leads
+    fall back to the agency inbox until someone is assigned again.
+    """
+    # Must run before the lock block: init() takes write_lock itself, which is
+    # not reentrant.
+    listings_db.init()
     conn = _conn()
     with _tenants_db.write_lock:
         cur = conn.execute(
             "DELETE FROM agency_agents WHERE id = ? AND tenant_id = ?",
             (agent_id, tenant_id),
         )
+        freed = (
+            listings_db.unassign_agent(tenant_id, agent_id, conn=conn)
+            if cur.rowcount
+            else 0
+        )
         conn.commit()
     if cur.rowcount:
-        logger.info("Agent %s deleted (tenant %s)", agent_id, tenant_id)
+        logger.info(
+            "Agent %s deleted (tenant %s) — %d listing(s) left unassigned",
+            agent_id, tenant_id, freed,
+        )
     return cur.rowcount > 0

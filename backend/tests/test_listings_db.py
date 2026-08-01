@@ -148,3 +148,93 @@ def test_update_coerces_numeric_strings_from_the_form():
     updated = listings_db.update(created["id"], TENANT, {"price": "1200", "rooms": ""})
     assert updated["price"] == 1200
     assert updated["rooms"] == 0
+
+
+# ── agent assignment ─────────────────────────────────────────────────────────
+# Which agent handles a listing decides where its phone leads are emailed
+# (call/router._resolve_lead_recipients), so the assignment has to survive the
+# scrape without freezing the row the way an agent edit does.
+
+def test_assigning_an_agent_does_not_freeze_the_row_against_the_scrape():
+    listings_db.replace_scraped(TENANT, [_scraped("Via Roma 5", price=100000)])
+    listing = listings_db.list_for_tenant(TENANT)[0]
+
+    assigned = listings_db.set_agent(listing["id"], TENANT, "agent-1")
+    assert assigned["agent_id"] == "agent-1"
+    # set_agent must not set edited=1: that would stop the portal from ever
+    # refreshing this listing's price and description again.
+    assert assigned["edited"] is False
+
+    listings_db.replace_scraped(TENANT, [_scraped("Via Roma 5", price=95000)])
+    after = listings_db.list_for_tenant(TENANT)[0]
+    assert after["price"] == 95000       # the scrape still owns portal data...
+    assert after["agent_id"] == "agent-1"  # ...but never touches the assignment
+
+
+def test_assignment_survives_an_agent_edit_and_a_later_scrape():
+    listings_db.replace_scraped(TENANT, [_scraped("Via Roma 5")])
+    listing = listings_db.list_for_tenant(TENANT)[0]
+    listings_db.set_agent(listing["id"], TENANT, "agent-1")
+    listings_db.update(listing["id"], TENANT, {"price": 123456})
+
+    listings_db.replace_scraped(TENANT, [_scraped("Via Roma 5", price=999)])
+
+    after = listings_db.list_for_tenant(TENANT)[0]
+    assert after["price"] == 123456       # agent edit still wins
+    assert after["agent_id"] == "agent-1"
+
+
+def test_set_agent_clears_the_assignment_and_is_tenant_scoped():
+    created = listings_db.create_manual(TENANT, {"address": "Via A 1"}, agent_id="agent-1")
+    assert created["agent_id"] == "agent-1"
+
+    assert listings_db.set_agent(created["id"], OTHER_TENANT, "agent-9") is None
+    assert listings_db.get(created["id"], TENANT)["agent_id"] == "agent-1"
+
+    assert listings_db.set_agent(created["id"], TENANT, None)["agent_id"] is None
+
+
+def test_unassign_agent_only_frees_that_agents_rows():
+    his = listings_db.create_manual(TENANT, {"address": "Via A 1"}, agent_id="agent-1")
+    hers = listings_db.create_manual(TENANT, {"address": "Via B 2"}, agent_id="agent-2")
+    theirs = listings_db.create_manual(OTHER_TENANT, {"address": "Via C 3"}, agent_id="agent-1")
+
+    assert listings_db.unassign_agent(TENANT, "agent-1") == 1
+
+    assert listings_db.get(his["id"], TENANT)["agent_id"] is None
+    assert listings_db.get(hers["id"], TENANT)["agent_id"] == "agent-2"
+    # Same agent id under another tenant is a different agent — leave it alone.
+    assert listings_db.get(theirs["id"], OTHER_TENANT)["agent_id"] == "agent-1"
+
+
+def test_count_for_agent_ignores_deleted_listings():
+    first = listings_db.create_manual(TENANT, {"address": "Via A 1"}, agent_id="agent-1")
+    listings_db.create_manual(TENANT, {"address": "Via B 2"}, agent_id="agent-1")
+    assert listings_db.count_for_agent(TENANT, "agent-1") == 2
+
+    listings_db.delete(first["id"], TENANT)
+    assert listings_db.count_for_agent(TENANT, "agent-1") == 1
+
+
+def test_migration_adds_agent_id_to_a_pre_existing_table(in_memory_db, monkeypatch):
+    """A listings table created before this column shipped (the deployed Render
+    disk) must gain agent_id on startup, not error on every read."""
+    conn = in_memory_db
+    conn.execute("DROP TABLE listings")
+    conn.execute(
+        "CREATE TABLE listings (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, "
+        " source TEXT NOT NULL DEFAULT 'scrape', source_key TEXT, "
+        " address TEXT NOT NULL DEFAULT '', zone TEXT NOT NULL DEFAULT '', "
+        " type TEXT NOT NULL DEFAULT 'vendita', rooms INTEGER DEFAULT 0, "
+        " size_sqm INTEGER DEFAULT 0, price INTEGER DEFAULT 0, "
+        " currency TEXT NOT NULL DEFAULT 'EUR', available INTEGER NOT NULL DEFAULT 1, "
+        " text TEXT NOT NULL DEFAULT '', edited INTEGER NOT NULL DEFAULT 0, "
+        " deleted INTEGER NOT NULL DEFAULT 0, created_at TEXT, updated_at TEXT)"
+    )
+    conn.commit()
+    monkeypatch.setattr(listings_db, "_initialized", False)
+
+    listings_db.init()
+
+    created = listings_db.create_manual(TENANT, {"address": "Via A 1"}, agent_id="agent-1")
+    assert listings_db.get(created["id"], TENANT)["agent_id"] == "agent-1"

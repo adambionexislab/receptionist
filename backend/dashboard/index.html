@@ -189,6 +189,14 @@
   .listing-actions .spacer { flex: 1; }
   .b-manual { background: rgba(139,105,20,.18); color: var(--accent); }
   .b-source { background: var(--surface-2); color: var(--text-dim); }
+  /* Who handles the property — and therefore who its phone leads are emailed
+     to. The unassigned state is deliberately visible rather than blank: those
+     leads go to the agency inbox, and that should look like a gap to fill. */
+  .b-agent   { background: var(--surface-2); color: var(--accent); text-transform: none; }
+  .b-agent-none {
+    background: transparent; border: 1px dashed var(--border); color: var(--text-dim);
+    text-transform: none; font-weight: 600;
+  }
   .listing-edit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
   .listing-edit-grid label { margin-bottom: 4px; }
   .listing-edit-grid input, .listing-edit-grid select {
@@ -220,6 +228,7 @@
   .agent-email a { color: var(--text-dim); text-decoration: none; }
   .agent-email a:hover { color: var(--accent); text-decoration: underline; }
   .agent-email-empty { color: var(--text-dim); font-style: italic; opacity: .7; }
+  .agent-listings { font-size: .8rem; color: var(--text-dim); margin-top: 6px; }
   .agent-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .agent-actions .spacer { flex: 1; }
   .agent-edit-grid { display: grid; gap: 10px; }
@@ -289,6 +298,17 @@
   .acq-field-missing-tag { color: var(--amber); font-size: .72rem; text-transform: none; letter-spacing: normal; }
   .acq-field-check { flex-direction: row; align-items: center; gap: 8px; }
   .acq-field-check input { width: auto; }
+  /* The handling agent. Deliberately outside .acq-fields-grid: that grid hides
+     anything already filled in, and this choice must be made every time. */
+  .acq-agent { display: flex; flex-direction: column; gap: 5px; max-width: 420px; margin-bottom: 18px; }
+  .acq-agent select {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 10px; border-radius: 8px; font-size: .88rem; width: 100%;
+    font-family: inherit;
+  }
+  .acq-agent.acq-agent-invalid select { border-color: var(--red); }
+  .acq-agent-req { color: var(--red); }
+  .acq-agent-hint { color: var(--amber); font-size: .8rem; }
   .acq-textarea {
     background: var(--bg); border: 1px solid var(--border); color: var(--text);
     padding: 12px; border-radius: 8px; font-size: .9rem; width: 100%; min-height: 140px;
@@ -555,6 +575,7 @@
                 <th id="th-name">Nome</th>
                 <th id="th-phone">Telefono</th>
                 <th id="th-summary">Riepilogo</th>
+                <th id="th-assigned">Inoltrato a</th>
                 <th id="th-outcome">Esito</th>
               </tr>
             </thead>
@@ -621,6 +642,13 @@
 
       <div id="acq-review" class="card hidden">
         <div class="acq-pad">
+          <h3 id="acq-review-agent-title"></h3>
+          <div id="acq-agent-wrap" class="acq-agent">
+            <label id="acq-agent-label" for="acq-agent"></label>
+            <select id="acq-agent"></select>
+            <div id="acq-agent-hint" class="acq-agent-hint hidden"></div>
+          </div>
+
           <h3 id="acq-review-fields-title"></h3>
           <div id="acq-fields-grid" class="acq-fields-grid"></div>
           <button type="button" class="btn ghost acq-fields-toggle" id="acq-fields-toggle"></button>
@@ -773,8 +801,9 @@
       stat_calls: "Chiamate questo mese",
       stat_contacts: "Contatti questo mese",
       th_date: "Data", th_name: "Nome", th_phone: "Telefono",
-      th_summary: "Riepilogo", th_outcome: "Esito",
+      th_summary: "Riepilogo", th_outcome: "Esito", th_assigned: "Inoltrato a",
       contacts_empty: "Nessun contatto ancora.",
+      contact_to_agency: "Agenzia",
       th_address: "Indirizzo", th_zone: "Zona", th_type: "Tipo",
       th_rooms: "Locali", th_size: "m²", th_price: "Prezzo",
       listings_empty: "Nessun immobile disponibile.",
@@ -790,6 +819,10 @@
       listing_delete_yes: "Sì, elimina",
       listing_save_err: "Operazione non riuscita.",
       listing_own: "Acquisizione",
+      listing_agent: "Agente",
+      listing_agent_none: "Nessun agente",
+      listing_agent_none_hint: "Senza agente assegnato",
+      listing_agent_unassigned_opt: "— Nessuno (all'agenzia) —",
       outcomes: { lead: "Lead", message: "Messaggio", call: "Chiamata" },
       types: { vendita: "Vendita", affitto: "Affitto" },
       agents: "Agenti",
@@ -799,6 +832,13 @@
       agent_no_email: "Email non indicata",
       agents_empty: "Nessun agente ancora.",
       agent_delete_confirm: "Rimuovere questo agente?",
+      agent_listings: "{n} immobili gestiti",
+      agent_listings_few: "{n} immobili gestiti",
+      agent_listings_one: "1 immobile gestito",
+      agent_listings_none: "Nessun immobile assegnato",
+      agent_delete_frees: "{n} immobili resteranno senza agente.",
+      agent_delete_frees_few: "{n} immobili resteranno senza agente.",
+      agent_delete_frees_one: "1 immobile resterà senza agente.",
       agent_name_required: "Inserisci il nome dell'agente.",
       agent_email_required: "Inserisci l'indirizzo email dell'agente.",
       agent_email_invalid: "Indirizzo email non valido.",
@@ -825,6 +865,11 @@
       acq_processing_text: "Elaborazione della trascrizione in corso…",
       acq_err_finish: "Elaborazione non riuscita.",
       acq_retry_btn: "Riprova",
+      acq_review_agent_title: "Agente incaricato",
+      acq_agent_label: "Chi gestisce questo immobile?",
+      acq_agent_placeholder: "— Seleziona un agente —",
+      acq_agent_required: "Seleziona l'agente che gestirà questo immobile.",
+      acq_agent_none: "Nessun agente in anagrafica: aggiungine uno nella scheda Agenti per poter confermare.",
       acq_review_fields_title: "Dati da completare",
       acq_fields_none: "Tutti i dati sono stati raccolti durante la riunione.",
       acq_fields_show_all: "Mostra tutti i dati",
@@ -888,8 +933,9 @@
       stat_calls: "Hovory tento mesiac",
       stat_contacts: "Kontakty tento mesiac",
       th_date: "Dátum", th_name: "Meno", th_phone: "Telefón",
-      th_summary: "Zhrnutie", th_outcome: "Výsledok",
+      th_summary: "Zhrnutie", th_outcome: "Výsledok", th_assigned: "Odoslané",
       contacts_empty: "Zatiaľ žiadne kontakty.",
+      contact_to_agency: "Kancelária",
       th_address: "Adresa", th_zone: "Lokalita", th_type: "Typ",
       th_rooms: "Izby", th_size: "m²", th_price: "Cena",
       listings_empty: "Žiadne dostupné nehnuteľnosti.",
@@ -905,6 +951,10 @@
       listing_delete_yes: "Áno, odstrániť",
       listing_save_err: "Operácia zlyhala.",
       listing_own: "Získanie",
+      listing_agent: "Maklér",
+      listing_agent_none: "Bez makléra",
+      listing_agent_none_hint: "Nie je priradený maklér",
+      listing_agent_unassigned_opt: "— Nikto (kancelárii) —",
       outcomes: { lead: "Záujemca", message: "Odkaz", call: "Hovor" },
       types: { vendita: "Predaj", affitto: "Prenájom" },
       agents: "Makléri",
@@ -914,6 +964,14 @@
       agent_no_email: "E-mail neuvedený",
       agents_empty: "Zatiaľ žiadni makléri.",
       agent_delete_confirm: "Odstrániť tohto makléra?",
+      // Slovak counts agree in three forms (1 / 2–4 / 5+) — see pluralize().
+      agent_listings: "Spravuje {n} nehnuteľností",
+      agent_listings_few: "Spravuje {n} nehnuteľnosti",
+      agent_listings_one: "Spravuje 1 nehnuteľnosť",
+      agent_listings_none: "Žiadne priradené nehnuteľnosti",
+      agent_delete_frees: "{n} nehnuteľností ostane bez makléra.",
+      agent_delete_frees_few: "{n} nehnuteľnosti ostanú bez makléra.",
+      agent_delete_frees_one: "1 nehnuteľnosť ostane bez makléra.",
       agent_name_required: "Zadajte meno makléra.",
       agent_email_required: "Zadajte e-mailovú adresu makléra.",
       agent_email_invalid: "Neplatná e-mailová adresa.",
@@ -940,6 +998,11 @@
       acq_processing_text: "Spracúva sa prepis…",
       acq_err_finish: "Spracovanie zlyhalo.",
       acq_retry_btn: "Skúsiť znova",
+      acq_review_agent_title: "Zodpovedný maklér",
+      acq_agent_label: "Kto bude túto nehnuteľnosť spravovať?",
+      acq_agent_placeholder: "— Vyberte makléra —",
+      acq_agent_required: "Vyberte makléra, ktorý bude túto nehnuteľnosť spravovať.",
+      acq_agent_none: "V zozname nie sú žiadni makléri: najprv jedného pridajte v záložke Makléri.",
       acq_review_fields_title: "Údaje na doplnenie",
       acq_fields_none: "Všetky údaje boli získané počas stretnutia.",
       acq_fields_show_all: "Zobraziť všetky údaje",
@@ -997,6 +1060,17 @@
   const S = () => STRINGS[LOCALE] || STRINGS.it;
   const intlTag = () => (LOCALE === "sk" ? "sk-SK" : "it-IT");
 
+  // Count-agreement for the "{n} listings" strings. Italian needs one/other;
+  // Slovak needs one / 2–4 / 5+, so every locale carries all three keys and the
+  // Italian few form simply repeats its plural.
+  function pluralize(base, n) {
+    const s = S();
+    if (n === 0 && s[base + "_none"]) return s[base + "_none"];
+    if (n === 1) return s[base + "_one"];
+    const key = n >= 2 && n <= 4 ? base + "_few" : base;
+    return (s[key] || s[base]).replace("{n}", n);
+  }
+
   // id → string key for every static text node; applied on load and re-applied
   // once the tenant's locale is known.
   const TEXT_IDS = {
@@ -1008,6 +1082,7 @@
     "contacts-title": "contacts",
     "th-date": "th_date", "th-name": "th_name", "th-phone": "th_phone",
     "th-summary": "th_summary", "th-outcome": "th_outcome",
+    "th-assigned": "th_assigned",
     "contacts-empty": "contacts_empty",
     "listings-title": "listings",
     /* The listings table's <th>s are gone (it's a card grid now), but the
@@ -1020,6 +1095,8 @@
     "acq-start-btn": "acq_start_btn", "acq-finish-btn": "acq_finish_btn",
     "acq-new-btn": "acq_new_btn", "acq-processing-text": "acq_processing_text",
     "acq-finish-retry-btn": "acq_retry_btn",
+    "acq-review-agent-title": "acq_review_agent_title",
+    "acq-agent-label": "acq_agent_label",
     "acq-review-fields-title": "acq_review_fields_title",
     "acq-review-text-title": "acq_review_text_title",
     "acq-review-tasks-title": "acq_review_tasks_title",
@@ -1058,8 +1135,9 @@
     $("tab-acquisizione").classList.toggle("hidden", !(me.features && me.features.acquisizione));
     loadSummary();
     loadContacts();
-    loadListings();
-    loadAgents();
+    // Agents first: every listing card names the agent handling it, so the
+    // roster has to be cached before the cards render.
+    loadAgents().then(loadListings);
   }
 
   function showView(name) {
@@ -1067,6 +1145,9 @@
       s.classList.toggle("active", s.id === "view-" + name);
     for (const t of document.querySelectorAll(".tab"))
       t.classList.toggle("active", t.dataset.view === name);
+    // Coming back from the Agenti tab may mean a new agent to pick from in a
+    // review that is still open.
+    if (name === "acquisizione") syncAcqAgentOptions();
   }
 
   async function loadSummary() {
@@ -1121,6 +1202,14 @@
       tr.appendChild(el("td", null, c.name || "—", s.th_name));
       tr.appendChild(el("td", "nowrap", c.phone || "—", s.th_phone));
       tr.appendChild(el("td", null, c.summary || c.interest || "—", s.th_summary));
+      // Where the lead email actually went: the agent handling the property the
+      // caller wanted, or the agency inbox when nothing was assigned.
+      tr.appendChild(el(
+        "td",
+        c.assigned_agent ? "nowrap" : "nowrap dim",
+        c.assigned_agent || s.contact_to_agency,
+        s.th_assigned,
+      ));
       const outcome = c.outcome || "call";
       const badge = el("span", "badge b-" + outcome, s.outcomes[outcome] || outcome);
       const td = el("td", null, null, s.th_outcome); td.appendChild(badge);
@@ -1225,6 +1314,18 @@
     actions.appendChild(editBtn);
 
     actions.appendChild(el("div", "spacer"));
+    // Who handles this property decides who its phone leads are emailed to, so
+    // the unassigned state is shown rather than left blank.
+    const handler = l.agent_id ? agentById(l.agent_id) : null;
+    if (handler) {
+      const chip = el("span", "badge b-agent", agentLabel(handler));
+      chip.title = handler.email || s.agent_no_email;
+      actions.appendChild(chip);
+    } else {
+      const chip = el("span", "badge b-agent-none", s.listing_agent_none);
+      chip.title = s.listing_agent_none_hint;
+      actions.appendChild(chip);
+    }
     if (l.source === "manual") actions.appendChild(el("span", "badge b-manual", s.listing_own));
 
     const delBtn = el("button", "btn ghost listing-danger", s.listing_delete);
@@ -1305,6 +1406,27 @@
     addField("rooms", s.th_rooms);
     addField("size_sqm", s.th_size);
     addField("price", s.th_price);
+
+    // The handling agent — this is what routes the property's phone leads.
+    // Full width: agent names are longer than the numeric fields above.
+    const agentWrap = el("div", "listing-edit-full");
+    agentWrap.appendChild(el("label", null, s.listing_agent));
+    const agentSelect = document.createElement("select");
+    const noneOpt = document.createElement("option");
+    noneOpt.value = "";
+    noneOpt.textContent = s.listing_agent_unassigned_opt;
+    agentSelect.appendChild(noneOpt);
+    for (const a of AGENTS) {
+      const opt = document.createElement("option");
+      opt.value = a.id;
+      opt.textContent = agentLabel(a);
+      if (l.agent_id === a.id) opt.selected = true;
+      agentSelect.appendChild(opt);
+    }
+    agentWrap.appendChild(agentSelect);
+    grid.appendChild(agentWrap);
+    inputs.agent_id = agentSelect;
+
     card.appendChild(grid);
 
     card.appendChild(el("label", null, s.listing_description));
@@ -1322,7 +1444,13 @@
     saveBtn.addEventListener("click", async () => {
       err.textContent = "";
       saveBtn.disabled = true;
-      const payload = { text: textArea.value, type: inputs.type.value };
+      const payload = {
+        text: textArea.value,
+        type: inputs.type.value,
+        // "" clears the assignment; the backend applies it via set_agent, which
+        // deliberately doesn't mark the listing as agent-edited.
+        agent_id: inputs.agent_id.value,
+      };
       ["address", "zone"].forEach((k) => { payload[k] = inputs[k].value; });
       LISTING_NUM_FIELDS.forEach((k) => {
         payload[k] = inputs[k].value === "" ? 0 : Number(inputs[k].value);
@@ -1367,6 +1495,17 @@
     } catch (_) { /* leave the grid empty on a transient error */ }
   }
 
+  // The agency's agents, cached so every listing card can name the one handling
+  // it without a request each. loadAgents() refills it; listings are rendered
+  // after it resolves (see showApp).
+  let AGENTS = [];
+  const agentById = (id) => AGENTS.find((a) => a.id === id) || null;
+  const agentLabel = (a) => "#" + a.number + " " + (a.name || "");
+  // Assigned by the Acquisizione IIFE below so the roster can be re-rendered
+  // into its confirm-step selector whenever AGENTS changes — an agent added
+  // mid-review (on the Agenti tab) has to become selectable without a reload.
+  let syncAcqAgentOptions = () => {};
+
   // ── Agents cards ────────────────────────────────────────────────────────
   // The agency's own people (Apollonia is the AI). Cards behave like the
   // listings cards above — read or edit mode, swapped in place — except the
@@ -1392,6 +1531,10 @@
       email.textContent = s.agent_no_email;
     }
     info.appendChild(email);
+    // How much of the agency's inventory routes its leads to this person.
+    info.appendChild(el(
+      "div", "agent-listings", pluralize("agent_listings", a.listing_count || 0)
+    ));
     head.appendChild(info);
     card.appendChild(head);
 
@@ -1415,7 +1558,12 @@
   function agentDeleteConfirm(a, card) {
     const s = S();
     const row = el("div", "agent-actions listing-confirm");
-    const msg = el("span", null, s.agent_delete_confirm);
+    // Deleting an agent leaves their listings unassigned — and those listings'
+    // leads going to the agency inbox — so say how many before confirming.
+    const count = a.listing_count || 0;
+    const msg = el("span", null, count
+      ? s.agent_delete_confirm + " " + pluralize("agent_delete_frees", count)
+      : s.agent_delete_confirm);
     row.appendChild(msg);
     const yes = el("button", "btn ghost listing-danger", s.listing_delete_yes);
     yes.type = "button";
@@ -1426,6 +1574,10 @@
         if (!resp.ok) throw new Error("delete " + resp.status);
         card.remove();
         refreshAgentsEmpty();
+        AGENTS = AGENTS.filter((x) => x.id !== a.id);
+        // Their listings are unassigned server-side; re-render so the cards
+        // show it.
+        loadListings();
       } catch (_) {
         yes.disabled = false;
         msg.textContent = S().listing_save_err;
@@ -1491,8 +1643,17 @@
           body: JSON.stringify(payload),
         });
         if (!resp.ok) throw new Error("save " + resp.status);
-        card.replaceWith(agentReadCard(await resp.json()));
+        const saved = await resp.json();
+        // A new agent has no listings yet; an edited one keeps the count the
+        // card was rendered with (the PATCH response doesn't carry it).
+        saved.listing_count = a ? (a.listing_count || 0) : 0;
+        card.replaceWith(agentReadCard(saved));
         refreshAgentsEmpty();
+        // Keep the cache (and so the listing cards' chips and the edit-mode
+        // selector) in step with the roster.
+        const at = AGENTS.findIndex((x) => x.id === saved.id);
+        if (at === -1) AGENTS.push(saved); else AGENTS[at] = saved;
+        if (a) loadListings();  // a rename shows on every listing card
       } catch (_) {
         err.textContent = S().listing_save_err;
         saveBtn.disabled = false;
@@ -1533,7 +1694,9 @@
       const resp = await api("/dashboard/api/agents");
       if (!resp.ok) return;
       const data = await resp.json();
-      renderAgents(data.agents || []);
+      AGENTS = data.agents || [];
+      renderAgents(AGENTS);
+      syncAcqAgentOptions();
     } catch (_) { /* leave the grid empty on a transient error */ }
   }
 
@@ -1632,6 +1795,9 @@
     const tasksList = $("acq-tasks-list");
     const addTaskBtn = $("acq-add-task-btn");
     const confirmBtn = $("acq-confirm-btn");
+    const agentWrap = $("acq-agent-wrap");
+    const agentSelect = $("acq-agent");
+    const agentHint = $("acq-agent-hint");
     const reviewErr = $("acq-review-err");
     const confirmedText = $("acq-confirmed-text");
     const photoInput = $("acq-photo-input");
@@ -2347,6 +2513,42 @@
         ? S().acq_fields_show_empty : S().acq_fields_show_all;
     }
 
+    // The handling agent is asked for on every confirmation, unlike the fields
+    // grid which only surfaces what the meeting left blank: the meeting is the
+    // moment this is known, and it decides where the listing's phone leads go.
+    // Re-runnable — the agency roster can change while a review sits open.
+    function renderAgentOptions() {
+      const s = S();
+      const chosen = agentSelect.value;
+      agentSelect.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = s.acq_agent_placeholder;
+      agentSelect.appendChild(placeholder);
+      for (const a of AGENTS) {
+        const opt = document.createElement("option");
+        opt.value = a.id;
+        opt.textContent = agentLabel(a);
+        agentSelect.appendChild(opt);
+      }
+      // Keep whatever was already picked; if that agent has since been removed,
+      // fall back to the placeholder so a stale id can't be submitted.
+      agentSelect.value =
+        chosen && AGENTS.some((a) => a.id === chosen) ? chosen : "";
+      // With nobody on the roster there is nothing to pick and confirming is
+      // blocked, so say where to fix it rather than showing an empty menu.
+      const none = AGENTS.length === 0;
+      agentHint.textContent = none ? s.acq_agent_none : "";
+      agentHint.classList.toggle("hidden", !none);
+      agentSelect.disabled = none;
+    }
+    syncAcqAgentOptions = renderAgentOptions;
+
+    agentSelect.addEventListener("change", () => {
+      agentWrap.classList.remove("acq-agent-invalid");
+      if (reviewErr.textContent === S().acq_agent_required) reviewErr.textContent = "";
+    });
+
     function renderReview(record) {
       currentMissing = record.missing_required || [];
       // Full extracted set is kept in state, not just in the DOM: the grid
@@ -2356,6 +2558,9 @@
       currentFields = record.listing_fields || {};
       showAllFields = false;
       renderFieldsGrid();
+      agentSelect.value = "";
+      agentWrap.classList.remove("acq-agent-invalid");
+      renderAgentOptions();
       listingTextArea.value = record.listing_text || "";
       tasksList.innerHTML = "";
       (record.tasks || []).forEach((t) => tasksList.appendChild(taskRowEl(t)));
@@ -2442,12 +2647,22 @@
 
     confirmBtn.addEventListener("click", async () => {
       reviewErr.textContent = "";
+      // Required: the backend rejects a confirm without a valid agent, and
+      // confirming is one-shot — better to catch it before spending it.
+      if (!agentSelect.value) {
+        agentWrap.classList.add("acq-agent-invalid");
+        reviewErr.textContent = AGENTS.length
+          ? S().acq_agent_required : S().acq_agent_none;
+        agentSelect.focus();
+        return;
+      }
       confirmBtn.disabled = true;
       try {
         const payload = {
           listing_fields: collectFieldsPayload(),
           listing_text: listingTextArea.value,
           tasks: collectTasksPayload(),
+          agent_id: agentSelect.value,
         };
         const resp = await api("/acquisizione/" + recordId + "/confirm", {
           method: "PATCH",

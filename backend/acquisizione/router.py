@@ -25,6 +25,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from acquisizione import db, extraction, notify, photos, schema
+from agents import db as agents_db
 from config import settings
 from dashboard.router import current_tenant
 from listings import db as listings_db
@@ -170,6 +171,10 @@ class ConfirmRequest(BaseModel):
     listing_fields: dict[str, Any]
     listing_text: str
     tasks: list[dict[str, Any]]
+    # Who will handle the property this meeting produced. Required: it decides
+    # where the phone agent emails leads for this listing, and a meeting is the
+    # one moment when the answer is known for certain.
+    agent_id: str
 
 
 @router.patch("/{record_id}/confirm")
@@ -181,7 +186,21 @@ async def confirm_record(
 
     The listing is created as source='manual' (see listings/db.py), which is
     what keeps a later Immobiliare.it scrape from wiping it — this property
-    was captured in a meeting, it isn't on the portal."""
+    was captured in a meeting, it isn't on the portal. It is published already
+    assigned to the chosen agent, so its first caller reaches the right person.
+    """
+    # Validated before anything is written: confirming is a one-shot state
+    # transition (the record leaves 'awaiting confirmation'), so a bad agent id
+    # must not get as far as consuming it.
+    agent_id = (data.agent_id or "").strip()
+    agent = (
+        await asyncio.to_thread(agents_db.get, agent_id, tenant["id"])
+        if agent_id
+        else None
+    )
+    if agent is None:
+        raise HTTPException(status_code=422, detail="Unknown agent")
+
     ok = await asyncio.to_thread(
         db.confirm, record_id, tenant["id"],
         data.listing_fields, data.listing_text, data.tasks,
@@ -198,6 +217,7 @@ async def confirm_record(
             listings_db.create_manual,
             tenant["id"],
             schema.to_listing(data.listing_fields, data.listing_text),
+            agent["id"],
         )
     except Exception:
         logger.exception("Failed to publish listing for intake record %s", record_id)

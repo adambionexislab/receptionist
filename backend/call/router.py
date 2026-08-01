@@ -14,6 +14,7 @@ import websockets
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
+from agents import db as agents_db
 from call import locales
 from calls import db as calls_db
 from config import settings
@@ -35,6 +36,24 @@ def _format_listing_brief(content: dict[str, Any], listing: dict[str, Any]) -> s
         f"{ltype} — {listing.get('rooms', '?')} {content['brief_rooms']} — "
         f"{listing.get('size_sqm', '?')}{content['brief_area']} — €{listing.get('price', '?')}"
     )
+
+
+# What the phone agent is allowed to see of a listing. The stored rows also
+# carry bookkeeping columns (row id, agent_id, source, edited) that are of no
+# use to Apollonia and that she could read out loud mid-call — "l'immobile
+# numero due dell'agente..." — so tool results are projected through this while
+# the session keeps the full rows for routing the lead email.
+_MODEL_LISTING_FIELDS = (
+    "address", "zone", "type", "rooms", "size_sqm", "price", "currency",
+    "available", "text",
+)
+
+
+def _for_model(listings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {k: v for k, v in listing.items() if k in _MODEL_LISTING_FIELDS}
+        for listing in listings
+    ]
 
 
 def _same_number(a: str | None, b: str | None) -> bool:
@@ -379,6 +398,11 @@ _IT_CONTENT: dict[str, Any] = {
     ),
     "unknown_caller": "sconosciuto",
     "email_caller_label": "Chiamante",
+    "email_agent_label": "Agente",
+    "email_agent_label_plural": "Agenti",
+    "email_agent_unassigned": "nessun agente assegnato all'immobile",
+    "email_agent_no_email": "nessun indirizzo email",
+    "email_agent_to_agency": "inoltrato all'agenzia",
     "email_section_collected": "=== Dati raccolti dal chiamante ===",
     "email_no_data": "Nessun dato raccolto.",
     "email_section_interested": "=== Immobile di interesse ===",
@@ -1116,6 +1140,9 @@ def _persist_call(session: dict[str, Any]) -> None:
         },
         ensure_ascii=False,
     )
+    # Who the lead email actually went to (set by _send_lead_email, which runs
+    # first). Empty when it went to the agency inbox.
+    routed_agents = session.get("routed_agents") or []
     calls_db.add_contact(
         tenant_id=tenant_id,
         call_session_id=call_session_id,
@@ -1125,13 +1152,104 @@ def _persist_call(session: dict[str, Any]) -> None:
         summary=summary,
         details=details,
         created_at=ended_iso,
+        assigned_agent=(
+            ", ".join(_agent_display(a) for a in routed_agents) or None
+        ),
     )
 
 
+def _interest_agents(session: dict[str, Any]) -> list[dict[str, Any]]:
+    """The agency agents who handle the listings this caller confirmed interest
+    in, in the order the caller showed interest, de-duplicated.
+
+    Empty for TYPE C (message) and TYPE D (seller) calls, which touch no
+    listing, and for callers who were shown properties but picked none — all of
+    those keep going to the agency inbox.
+    """
+    tenant_id = session.get("tenant_id")
+    if not tenant_id:
+        # Env-var demo fallback: no tenant row, so no agents to route to.
+        return []
+    ids = [
+        listing.get("agent_id")
+        for listing in session.get("interested_listings") or []
+        if listing.get("agent_id")
+    ]
+    if not ids:
+        return []
+    try:
+        by_id = agents_db.get_many(ids, tenant_id)
+    except Exception:
+        # Never lose a lead over a lookup failure — fall back to the inbox.
+        logger.exception("Failed to resolve listing agents — routing to the agency inbox")
+        return []
+    # dict.fromkeys keeps first-seen order; ids missing from by_id were deleted
+    # between the call and now, or belong to another tenant.
+    return [by_id[aid] for aid in dict.fromkeys(ids) if aid in by_id]
+
+
+def _resolve_lead_recipients(
+    session: dict[str, Any], agents: list[dict[str, Any]]
+) -> tuple[list[str], list[str], bool]:
+    """(to, cc, routed_to_agents) for this call's lead email.
+
+    Leads for a property go to the agent who handles it, with the agency inbox
+    in Cc so the agency keeps a complete record. Everything else — no interest
+    marked, an unassigned listing, an agent with no email address — falls back
+    to the agency inbox alone, so no routing gap can ever drop a lead.
+    """
+    inbox = session.get("lead_email") or settings.LEAD_EMAIL
+    to: list[str] = []
+    seen: set[str] = set()
+    for agent in agents:
+        email = (agent.get("email") or "").strip()
+        if email and email.lower() not in seen:
+            seen.add(email.lower())
+            to.append(email)
+    if not to:
+        return ([inbox] if inbox else []), [], False
+    # No Cc when the agency inbox is already one of the recipients.
+    cc = [inbox] if inbox and inbox.strip().lower() not in seen else []
+    return to, cc, True
+
+
+def _format_agent_line(
+    content: dict[str, Any], agents: list[dict[str, Any]], routed: bool
+) -> str:
+    """The 'Agente: #2 Marco Rossi' line at the top of the lead email — who this
+    lead was routed to, and when it wasn't, why it went to the agency instead."""
+    label = (
+        content["email_agent_label_plural"]
+        if len(agents) > 1
+        else content["email_agent_label"]
+    )
+    if not agents:
+        return (
+            f"{content['email_agent_label']}: {content['email_agent_unassigned']}"
+            f" — {content['email_agent_to_agency']}"
+        )
+    names = ", ".join(_agent_display(a) for a in agents)
+    if routed:
+        return f"{label}: {names}"
+    return (
+        f"{label}: {names} ({content['email_agent_no_email']})"
+        f" — {content['email_agent_to_agency']}"
+    )
+
+
+def _agent_display(agent: dict[str, Any]) -> str:
+    return f"#{agent.get('number', '?')} {agent.get('name', '')}".strip()
+
+
 async def _send_lead_email(session: dict[str, Any]) -> None:
-    recipient = session.get("lead_email") or settings.LEAD_EMAIL
     content = _content(session.get("locale"))
-    if not settings.RESEND_API_KEY or not recipient:
+    # Who handles the property the caller is interested in decides where this
+    # lead lands; see _resolve_lead_recipients for the fallbacks.
+    agents = _interest_agents(session)
+    recipients, cc, routed = _resolve_lead_recipients(session, agents)
+    # Stash for _persist_call, which records who the lead was routed to.
+    session["routed_agents"] = agents if routed else []
+    if not settings.RESEND_API_KEY or not recipients:
         logger.warning("RESEND_API_KEY/lead email not configured — lead email skipped")
         return
 
@@ -1151,8 +1269,12 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
     try:
         lines: list[str] = [
             f"{content['email_caller_label']}: {caller}",
-            "",
         ]
+        # Only say something about agent routing when a property was actually in
+        # play; on a message or a seller call there is nothing to assign.
+        if session.get("interested_listings"):
+            lines.append(_format_agent_line(content, agents, routed))
+        lines.append("")
 
         lines += [content["email_section_collected"]]
         caller_info = session.get("caller_info") or {}
@@ -1166,8 +1288,15 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
 
         lines += [content["email_section_interested"]]
         if session["interested_listings"]:
+            by_id = {a["id"]: a for a in agents}
             for listing in session["interested_listings"]:
-                lines.append(_format_listing_brief(content, listing))
+                brief = _format_listing_brief(content, listing)
+                # When one call spans several agents' properties they all
+                # receive it, so tag each listing with whose it is.
+                agent = by_id.get(listing.get("agent_id"))
+                if agent and len(agents) > 1:
+                    brief += f" [{_agent_display(agent)}]"
+                lines.append(brief)
         else:
             lines.append(content["email_none_specified"])
             lines.append("")
@@ -1208,14 +1337,20 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
     session["summary"] = summary
     body = f"{summary}\n\n{detail_body}"
 
+    payload: dict[str, Any] = {
+        "from": settings.RESEND_FROM,
+        "to": recipients,
+    }
+    if cc:
+        payload["cc"] = cc
+
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
                 "https://api.resend.com/emails",
                 headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
                 json={
-                    "from": settings.RESEND_FROM,
-                    "to": [recipient],
+                    **payload,
                     "subject": (
                         content["email_subject_lead"].format(caller=caller)
                         if session.get("listings_shown")
@@ -1227,7 +1362,13 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
                 },
             )
             response.raise_for_status()
-        logger.info("Lead email sent for caller %s", caller)
+        logger.info(
+            "Lead email sent for caller %s → %s%s (%s)",
+            caller,
+            ", ".join(recipients),
+            f" cc {', '.join(cc)}" if cc else "",
+            ", ".join(_agent_display(a) for a in agents) if routed else "agency inbox",
+        )
     except Exception as exc:
         logger.error("Failed to send lead email: %s", exc)
 
@@ -1315,7 +1456,7 @@ async def _run_call(
                                             "type": "function_call_output",
                                             "call_id": fc_id,
                                             "output": json.dumps(
-                                                results, ensure_ascii=False
+                                                _for_model(results), ensure_ascii=False
                                             ),
                                         },
                                     }
@@ -1339,7 +1480,9 @@ async def _run_call(
                                 "item": {
                                     "type": "function_call_output",
                                     "call_id": fc_id,
-                                    "output": json.dumps(results, ensure_ascii=False),
+                                    "output": json.dumps(
+                                        _for_model(results), ensure_ascii=False
+                                    ),
                                 },
                             }))
                             await ws.send(json.dumps({"type": "response.create"}))

@@ -55,12 +55,24 @@ CREATE TABLE IF NOT EXISTS contacts (
   interest        TEXT,                     -- interested listing address(es)
   summary         TEXT,                     -- one-line call summary
   details         TEXT,                     -- JSON snapshot for a detail view
+  assigned_agent  TEXT,                     -- agent(s) the lead was emailed to
   created_at      TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_call_sessions_tenant ON call_sessions(tenant_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_contacts_tenant ON contacts(tenant_id, created_at);
 """
+
+# Columns added after the tables first shipped; CREATE TABLE IF NOT EXISTS won't
+# alter an existing table, so each is applied with an idempotent ALTER on
+# startup (see _migrate) — same pattern as tenants/db.py.
+#
+# assigned_agent stores the display form ("#2 Marco Rossi"), not an id: it is a
+# record of where a lead was actually sent, and should keep reading true even
+# after that agent is renamed or removed.
+_ADDED_COLUMNS = {
+    "contacts": {"assigned_agent": "TEXT"},
+}
 
 _initialized = False
 
@@ -74,9 +86,21 @@ def init() -> None:
     with _tenants_db.write_lock:
         if not _initialized:
             conn.executescript(_SCHEMA)
+            _migrate(conn)
             conn.commit()
             _initialized = True
             logger.info("Call tables ready (call_sessions, contacts)")
+
+
+def _migrate(conn) -> None:
+    """Add columns introduced after the tables first shipped. Idempotent: each
+    column is added only if a pre-existing table is missing it."""
+    for table, columns in _ADDED_COLUMNS.items():
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for column, ddl in columns.items():
+            if column not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+                logger.info("Migrated %s table: added column %s", table, column)
 
 
 def _conn():
@@ -120,6 +144,7 @@ def add_contact(
     summary: Optional[str],
     details: Optional[str],
     created_at: Optional[str],
+    assigned_agent: Optional[str] = None,
 ) -> int:
     """Record one follow-up-worthy caller. Returns the new row id."""
     conn = _conn()
@@ -127,10 +152,10 @@ def add_contact(
         cur = conn.execute(
             "INSERT INTO contacts "
             "(tenant_id, call_session_id, name, phone, interest, summary, "
-            " details, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            " details, assigned_agent, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (tenant_id, call_session_id, name, phone, interest, summary,
-             details, created_at),
+             details, assigned_agent, created_at),
         )
         conn.commit()
         return cur.lastrowid
@@ -187,8 +212,8 @@ def list_contacts(tenant_id: str, limit: int = 200) -> list[dict[str, Any]]:
     duration. Strictly scoped by tenant_id — this is client data."""
     limit = max(1, min(limit, 500))
     rows = _conn().execute(
-        "SELECT c.id, c.name, c.phone, c.interest, c.summary, c.created_at, "
-        "       cs.outcome, cs.duration_seconds, cs.caller_number "
+        "SELECT c.id, c.name, c.phone, c.interest, c.summary, c.assigned_agent, "
+        "       c.created_at, cs.outcome, cs.duration_seconds, cs.caller_number "
         "FROM contacts c "
         "LEFT JOIN call_sessions cs ON cs.id = c.call_session_id "
         "WHERE c.tenant_id = ? "

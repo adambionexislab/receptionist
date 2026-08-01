@@ -125,6 +125,9 @@ class ListingUpdate(BaseModel):
     currency: Optional[str] = None
     available: Optional[bool] = None
     text: Optional[str] = None
+    # Which agent handles the property. Sent as "" to unassign, so this one is
+    # excluded from the exclude_none filtering below and handled separately.
+    agent_id: Optional[str] = None
 
 
 @router.patch("/dashboard/api/listings/{listing_id}")
@@ -132,9 +135,32 @@ def update_listing(
     listing_id: str, data: ListingUpdate, tenant: dict = Depends(current_tenant)
 ):
     """Edit one listing. Marks it agent-owned so a later Immobiliare.it scrape
-    won't revert the change (see listings/db.py)."""
-    fields = data.model_dump(exclude_unset=True, exclude_none=True)
-    updated = listings_db.update(listing_id, tenant["id"], fields)
+    won't revert the change (see listings/db.py).
+
+    The agent assignment is applied through listings_db.set_agent instead, which
+    deliberately does NOT mark the row edited: assigning an agent must not stop
+    the portal scrape from refreshing the listing's price and description.
+    """
+    sent = data.model_dump(exclude_unset=True)
+    fields = {
+        k: v for k, v in sent.items() if k != "agent_id" and v is not None
+    }
+
+    updated = None
+    if "agent_id" in sent:
+        agent_id = (sent["agent_id"] or "").strip() or None
+        # An id from another tenant would silently route that agency's leads to
+        # a stranger — resolve it against this tenant before storing it.
+        if agent_id and not agents_db.get(agent_id, tenant["id"]):
+            raise HTTPException(status_code=422, detail="Unknown agent")
+        updated = listings_db.set_agent(listing_id, tenant["id"], agent_id)
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Not found")
+
+    if fields:
+        updated = listings_db.update(listing_id, tenant["id"], fields)
+    elif updated is None:
+        updated = listings_db.get(listing_id, tenant["id"])
     if updated is None:
         raise HTTPException(status_code=404, detail="Not found")
     return updated
@@ -187,9 +213,15 @@ def _clean_agent_fields(fields: dict) -> dict:
 
 @router.get("/dashboard/api/agents")
 def agents(tenant: dict = Depends(current_tenant)):
-    """The agency's agents, in the order they were added. Strictly scoped to
-    the logged-in tenant's id."""
-    return {"agents": agents_db.list_for_tenant(tenant["id"])}
+    """The agency's agents, in the order they were added, each with how many
+    listings they handle — the dashboard shows that count before confirming a
+    deletion, since deleting an agent leaves their listings unassigned (and
+    their leads going to the agency inbox). Strictly scoped to the logged-in
+    tenant's id."""
+    rows = agents_db.list_for_tenant(tenant["id"])
+    for agent in rows:
+        agent["listing_count"] = listings_db.count_for_agent(tenant["id"], agent["id"])
+    return {"agents": rows}
 
 
 @router.post("/dashboard/api/agents")

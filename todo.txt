@@ -66,3 +66,9 @@ video generation using runway gen-4.5
 manage agents in dashboard, his name and number, phone number and email@adress, then each listing needs to have a number of the agent
 
 agency description window so apollonia can answer any questions about the agency.
+
+settings to add to the dashboard:
+    - seller request email send to: agency mail / rotate agents
+    - If the agency wants Cc of every email in agency mail
+
+Test: if caller is interested she starts qualifying questions and he interrupt her to ask if they have something else (he might be interesten in more listings)

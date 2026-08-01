@@ -26,6 +26,11 @@ from fighting the agent:
                      actually removed.
       · otherwise  — freely overwritten by the scrape, and removed when it no
                      longer appears in the portal results.
+
+`agent_id` (which of the agency's agents handles the property, and therefore
+who its phone leads are emailed to) sits outside all of that: it is written
+only by `set_agent`, and the scrape's UPDATE never lists the column, so an
+assignment survives every re-scrape without freezing the row's portal data.
 """
 
 import datetime
@@ -53,6 +58,7 @@ CREATE TABLE IF NOT EXISTS listings (
   currency    TEXT NOT NULL DEFAULT 'EUR',
   available   INTEGER NOT NULL DEFAULT 1,
   text        TEXT NOT NULL DEFAULT '',
+  agent_id    TEXT,                             -- agency_agents.id, NULL = unassigned
   edited      INTEGER NOT NULL DEFAULT 0,
   deleted     INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT,
@@ -63,6 +69,13 @@ CREATE INDEX IF NOT EXISTS idx_listings_tenant ON listings(tenant_id, deleted);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_listings_source_key
   ON listings(tenant_id, source_key) WHERE source_key IS NOT NULL;
 """
+
+# Columns added after the table first shipped. CREATE TABLE IF NOT EXISTS won't
+# alter the listings table on an already-deployed disk, so each is added with an
+# idempotent ALTER on startup (see _migrate) — same pattern as tenants/db.py.
+_ADDED_COLUMNS = {
+    "agent_id": "TEXT",
+}
 
 # Columns an agent may set from the dashboard. Anything else (id, tenant_id,
 # source, flags, timestamps) is owned by this module.
@@ -83,9 +96,20 @@ def init() -> None:
     with _tenants_db.write_lock:
         if not _initialized:
             conn.executescript(_SCHEMA)
+            _migrate(conn)
             conn.commit()
             _initialized = True
             logger.info("Listings table ready")
+
+
+def _migrate(conn) -> None:
+    """Add columns introduced after the table first shipped. Idempotent: each
+    column is added only if a pre-existing listings table is missing it."""
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(listings)")}
+    for column, ddl in _ADDED_COLUMNS.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE listings ADD COLUMN {column} {ddl}")
+            logger.info("Migrated listings table: added column %s", column)
 
 
 def _conn():
@@ -123,6 +147,10 @@ def _row_to_listing(row) -> dict[str, Any]:
         "text": row["text"],
         "source": row["source"],
         "edited": bool(row["edited"]),
+        # Which of the agency's agents handles this property (agency_agents.id),
+        # or None when nobody is assigned. Routes the post-call lead email — see
+        # call/router._resolve_lead_recipients.
+        "agent_id": row["agent_id"],
     }
 
 
@@ -144,9 +172,15 @@ def get(listing_id: str, tenant_id: str) -> Optional[dict[str, Any]]:
     return _row_to_listing(row) if row else None
 
 
-def create_manual(tenant_id: str, fields: dict[str, Any]) -> dict[str, Any]:
+def create_manual(
+    tenant_id: str, fields: dict[str, Any], agent_id: Optional[str] = None
+) -> dict[str, Any]:
     """Insert an agency-entered listing (e.g. from a confirmed Acquisizione).
-    Marked source='manual' so no scrape will ever overwrite or remove it."""
+    Marked source='manual' so no scrape will ever overwrite or remove it.
+
+    `agent_id` optionally assigns the handling agent up front; when omitted the
+    listing starts unassigned and its leads go to the agency inbox.
+    """
     now = _now()
     row = {
         "id": str(uuid.uuid4()),
@@ -162,6 +196,7 @@ def create_manual(tenant_id: str, fields: dict[str, Any]) -> dict[str, Any]:
         "currency": fields.get("currency") or "EUR",
         "available": 1 if fields.get("available", True) else 0,
         "text": fields.get("text") or "",
+        "agent_id": agent_id or None,
         "edited": 0,
         "deleted": 0,
         "created_at": now,
@@ -171,9 +206,9 @@ def create_manual(tenant_id: str, fields: dict[str, Any]) -> dict[str, Any]:
     with _tenants_db.write_lock:
         conn.execute(
             "INSERT INTO listings (id, tenant_id, source, source_key, address, zone, "
-            " type, rooms, size_sqm, price, currency, available, text, edited, deleted, "
-            " created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " type, rooms, size_sqm, price, currency, available, text, agent_id, "
+            " edited, deleted, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             tuple(row.values()),
         )
         conn.commit()
@@ -212,6 +247,62 @@ def update(listing_id: str, tenant_id: str, fields: dict[str, Any]) -> Optional[
     if cur.rowcount == 0:
         return None
     return get(listing_id, tenant_id)
+
+
+def set_agent(
+    listing_id: str, tenant_id: str, agent_id: Optional[str]
+) -> Optional[dict[str, Any]]:
+    """Assign (or clear, with agent_id=None) the agent who handles this listing.
+
+    Deliberately NOT part of `update`: that marks the row edited=1, which makes
+    a scraped listing immune to future scrapes (see the module docstring).
+    Assigning an agent is an ownership decision, not an edit to the portal's
+    data — the listing should keep receiving price/description updates. So this
+    writes agent_id alone and leaves `edited` untouched.
+    """
+    conn = _conn()
+    with _tenants_db.write_lock:
+        cur = conn.execute(
+            "UPDATE listings SET agent_id = ?, updated_at = ? "
+            "WHERE id = ? AND tenant_id = ? AND deleted = 0",
+            (agent_id or None, _now(), listing_id, tenant_id),
+        )
+        conn.commit()
+    if cur.rowcount == 0:
+        return None
+    return get(listing_id, tenant_id)
+
+
+def unassign_agent(tenant_id: str, agent_id: str, conn=None) -> int:
+    """Clear agent_id on every listing of `tenant_id` handled by `agent_id`, and
+    return how many rows were freed. Called when an agent is deleted, so their
+    listings fall back to the agency inbox instead of pointing at a gone row.
+
+    Pass `conn` when the caller already holds tenants.db.write_lock (it is a
+    plain, non-reentrant Lock): the UPDATE then runs inside the caller's
+    transaction and committing is the caller's job. Without it, this takes the
+    lock and commits on its own.
+    """
+    sql = "UPDATE listings SET agent_id = NULL, updated_at = ? WHERE tenant_id = ? AND agent_id = ?"
+    params = (_now(), tenant_id, agent_id)
+    if conn is not None:
+        return conn.execute(sql, params).rowcount
+    own = _conn()
+    with _tenants_db.write_lock:
+        cur = own.execute(sql, params)
+        own.commit()
+    return cur.rowcount
+
+
+def count_for_agent(tenant_id: str, agent_id: str) -> int:
+    """How many live listings this agent handles — shown in the dashboard before
+    confirming their deletion."""
+    row = _conn().execute(
+        "SELECT COUNT(*) AS c FROM listings "
+        "WHERE tenant_id = ? AND agent_id = ? AND deleted = 0",
+        (tenant_id, agent_id),
+    ).fetchone()
+    return int(row["c"] or 0)
 
 
 def delete(listing_id: str, tenant_id: str) -> bool:
