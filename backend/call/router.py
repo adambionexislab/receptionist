@@ -320,7 +320,7 @@ _SYSTEM_PROMPT_BODY = (
     "# Come chiudere la chiamata\n"
     "Subito dopo aver detto al chiamante che inoltrerai la sua richiesta a\n"
     "un agente immobiliare:\n"
-    "1. Chiedi se può aiutarlo con qualcos'altro.\n"
+    "1. Chiedi se puoi aiutarlo con qualcos'altro.\n"
     "2. Se dice di no: pronuncia le vere parole di saluto che il chiamante\n"
     "   deve sentire (es. 'Grazie della chiamata, buona giornata,\n"
     "   arrivederci.'). NON annunciare il saluto né la chiusura ('la saluto',\n"

@@ -64,3 +64,5 @@ video generation using runway gen-4.5
     walktrough from photos of the rooms
 
 manage agents in dashboard, his name and number, phone number and email@adress, then each listing needs to have a number of the agent
+
+agency description window so apollonia can answer any questions about the agency.

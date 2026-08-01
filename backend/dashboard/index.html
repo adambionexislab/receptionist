@@ -328,8 +328,13 @@
     background: var(--bg); border: 1px dashed var(--border); border-radius: 10px;
     display: flex; align-items: center; justify-content: center;
   }
-  .acq-photo-panel-upload { cursor: pointer; }
+  .acq-photo-panel-upload { cursor: pointer; transition: border-color .18s ease, background .18s ease; }
   .acq-photo-panel-upload:hover { border-color: var(--accent); }
+  .acq-photo-panel-upload.is-dragover {
+    border-color: var(--accent); background: var(--surface-2);
+  }
+  /* The drop target is the panel; children must not swallow the events. */
+  .acq-photo-panel-upload.is-dragover * { pointer-events: none; }
   .acq-photo-panel-empty { color: var(--text-dim); font-size: .85rem; text-align: center; padding: 20px; }
   .acq-photo-panel-img { width: 100%; height: 100%; object-fit: contain; }
   .acq-photo-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -839,7 +844,8 @@
       acq_confirmed_no_email: "⚠ Invio dell'email non riuscito.",
       acq_confirmed_no_publish: "⚠ Pubblicazione tra gli immobili non riuscita.",
       acq_photos_tool_title: "Foto",
-      acq_photo_upload_label: "Clicca per caricare una foto",
+      acq_photo_upload_label: "Trascina qui una foto o clicca per caricarla",
+      acq_photo_err_type: "Formato non supportato: usa JPG, PNG o WebP.",
       acq_photo_result_placeholder: "Il risultato apparirà qui",
       acq_photo_modernize_label: "Modernizza e arreda",
       acq_photo_mode_off: "Disattivato",
@@ -953,7 +959,8 @@
       acq_confirmed_no_email: "⚠ E-mail sa nepodarilo odoslať.",
       acq_confirmed_no_publish: "⚠ Zverejnenie medzi nehnuteľnosťami zlyhalo.",
       acq_photos_tool_title: "Fotografie",
-      acq_photo_upload_label: "Kliknite pre nahratie fotografie",
+      acq_photo_upload_label: "Presuňte sem fotografiu alebo kliknite pre nahratie",
+      acq_photo_err_type: "Nepodporovaný formát: použite JPG, PNG alebo WebP.",
       acq_photo_result_placeholder: "Výsledok sa tu zobrazí",
       acq_photo_modernize_label: "Modernizovať a zariadiť",
       acq_photo_mode_off: "Vypnuté",
@@ -2207,13 +2214,16 @@
       });
     });
 
-    photoBeforePanel.addEventListener("click", () => {
-      if (!photoEnhancing) photoInput.click();
-    });
-    photoInput.addEventListener("change", () => {
-      const file = (photoInput.files || [])[0];
-      photoInput.value = ""; // allow re-selecting the same file later
+    // Shared by the file picker and drag-and-drop so the two entry points
+    // can't drift apart.
+    const PHOTO_ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp"];
+
+    function acceptPhoto(file) {
       if (!file) return;
+      if (!PHOTO_ACCEPTED_TYPES.includes(file.type)) {
+        photoErr.textContent = S().acq_photo_err_type;
+        return;
+      }
       if (photoBeforeUrl) URL.revokeObjectURL(photoBeforeUrl);
       photoFile = file;
       photoBeforeUrl = URL.createObjectURL(file);
@@ -2224,6 +2234,56 @@
       photoEnhanceBtn.disabled = false;
       photoErr.textContent = "";
       resetPhotoAfter();
+    }
+
+    photoBeforePanel.addEventListener("click", () => {
+      if (!photoEnhancing) photoInput.click();
+    });
+    photoInput.addEventListener("change", () => {
+      const file = (photoInput.files || [])[0];
+      photoInput.value = ""; // allow re-selecting the same file later
+      acceptPhoto(file);
+    });
+
+    // ── Drag and drop ────────────────────────────────────────────────────
+    // dragover must be prevented on every tick or the browser reverts to its
+    // default "open the file in this tab" behaviour. dragenter/dragleave fire
+    // for child elements too, so the highlight is refcounted rather than
+    // toggled — otherwise dragging over the inner <img> clears it.
+    let dragDepth = 0;
+
+    function setDragging(on) {
+      photoBeforePanel.classList.toggle("is-dragover", on);
+    }
+
+    photoBeforePanel.addEventListener("dragenter", (e) => {
+      e.preventDefault();
+      if (photoEnhancing) return;
+      dragDepth += 1;
+      setDragging(true);
+    });
+    photoBeforePanel.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      if (!photoEnhancing) e.dataTransfer.dropEffect = "copy";
+    });
+    photoBeforePanel.addEventListener("dragleave", () => {
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (!dragDepth) setDragging(false);
+    });
+    photoBeforePanel.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dragDepth = 0;
+      setDragging(false);
+      if (photoEnhancing) return;
+      acceptPhoto((e.dataTransfer.files || [])[0]);
+    });
+
+    // A file dropped anywhere else would otherwise navigate away from the
+    // dashboard, losing an in-progress meeting.
+    ["dragover", "drop"].forEach((evt) => {
+      window.addEventListener(evt, (e) => {
+        if (!photoBeforePanel.contains(e.target)) e.preventDefault();
+      });
     });
 
     photoClearBtn.addEventListener("click", resetPhotoTool);
