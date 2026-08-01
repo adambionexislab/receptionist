@@ -2,7 +2,7 @@
 
 Until this shipped, confirming a record only wrote it to the database — the
 agent got no copy of the commitments they'd just made in the meeting. This
-emails the whole thing (missing data, tasks, listing text, property data, and
+emails the whole thing (missing data, meeting notes, listing text, data, and
 the transcript) to the same address the phone agent's lead summaries go to:
 the tenant's `lead_email`, falling back to the platform owner's LEAD_EMAIL.
 
@@ -39,27 +39,6 @@ def _format_value(value: Any, c: dict) -> str:
     return str(value)
 
 
-def _task_lines(tasks: list[dict], c: dict) -> list[str]:
-    """Tasks grouped by who owes them, since the agent's own to-dos and what
-    they're waiting on from the seller are acted on differently."""
-    lines: list[str] = []
-    for owner in ("agente", "venditore"):
-        owned = [t for t in tasks if (t.get("owner") or "agente") == owner]
-        if not owned:
-            continue
-        lines.append(f"— {c['email_owner_' + owner]} —")
-        for task in owned:
-            flags = []
-            if task.get("scadenza"):
-                flags.append(f"{c['email_task_due']}: {task['scadenza']}")
-            if task.get("blocca_pubblicazione"):
-                flags.append(c["email_task_blocking"])
-            suffix = f"  [{' · '.join(flags)}]" if flags else ""
-            lines.append(f"  • {task.get('descrizione', '')}{suffix}")
-            if task.get("citazione"):
-                lines.append(f"      “{task['citazione']}”")
-        lines.append("")
-    return lines
 
 
 def build_body(record: dict[str, Any]) -> str:
@@ -79,9 +58,13 @@ def build_body(record: dict[str, Any]) -> str:
         lines.append(f"  {c['email_none_missing']}")
     lines.append("")
 
-    tasks = record.get("tasks") or []
-    lines.append(c["email_section_tasks"])
-    lines += _task_lines(tasks, c) if tasks else [f"  {c['email_no_tasks']}", ""]
+    # The agent's edited meeting notes (key facts + open points, tasks left
+    # unassigned) — reproduced verbatim, since they're already structured
+    # plain text by the time they get here.
+    notes = (record.get("notes") or "").strip()
+    lines.append(c["email_section_notes"])
+    lines.append(notes if notes else f"  {c['email_no_notes']}")
+    lines.append("")
 
     lines.append(c["email_section_listing_text"])
     lines.append(record.get("listing_text") or c["email_no_text"])

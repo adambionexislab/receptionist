@@ -63,7 +63,8 @@ def _record_awaiting_confirmation():
     """An intake record in the 'review' state the confirm step expects."""
     record = acq_db.create(TENANT["id"], "it", "checkbox")
     acq_db.set_review_result(
-        record["id"], TENANT["id"], _FIELDS, [], "Bell'appartamento.", []
+        record["id"], TENANT["id"], _FIELDS, [], "Bell'appartamento.",
+        "PUNTI CHIAVE\n- ok",
     )
     return record
 
@@ -72,7 +73,7 @@ def _confirm(client, record_id, **extra):
     payload = {
         "listing_fields": _FIELDS,
         "listing_text": "Bell'appartamento.",
-        "tasks": [],
+        "notes": "PUNTI CHIAVE\n- ok",
         **extra,
     }
     return client.patch(f"/acquisizione/{record_id}/confirm", json=payload)

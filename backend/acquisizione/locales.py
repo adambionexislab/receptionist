@@ -11,8 +11,8 @@ _SK_INSTRUCTIONS = (
     "   čo bolo v prepise výslovne povedané.\n"
     "2. Opisný text inzerátu (listing_text), napísaný po slovensky,\n"
     "   pripravený na zverejnenie, na základe zozbieraných údajov.\n"
-    "3. Zoznam úloh (tasks) — výslovné záväzky prijaté počas stretnutia, nie\n"
-    "   len prediskutované témy.\n"
+    "3. Poznámky zo stretnutia (notes): štruktúrovaný text po slovensky s\n"
+    "   dôležitými faktami A otvorenými bodmi na vyriešenie.\n"
     "\n"
     "Základné pravidlá:\n"
     "- NIKDY nevymýšľajte právne alebo finančne významné hodnoty (plocha,\n"
@@ -21,16 +21,41 @@ _SK_INSTRUCTIONS = (
     "  správanie, nie chyba.\n"
     "- Hodnoty uveďte presne tak, ako boli povedané; nezaokrúhľujte ani\n"
     "  neodhadujte.\n"
-    "- Úlohu vytvorte LEN pre výslovný záväzok niektorej zo strán — typické\n"
-    "  signály: 'pošlem', 'skontrolujem', 'zavolám', 'prinesiem'.\n"
-    "  Nevytvárajte úlohu pre každú prediskutovanú tému. Správne priraďte\n"
-    "  owner ('agente' alebo 'venditore').\n"
-    "- Nastavte blocca_pubblicazione=true pre každú úlohu, ktorá blokuje\n"
-    "  zverejnenie inzerátu (napr. chýbajúca energetická trieda).\n"
-    "- Pre každú úlohu musí byť citazione krátky doslovný úryvok z prepisu,\n"
-    "  ktorý danú úlohu odôvodňuje (alebo null, ak sa neuplatňuje).\n"
-    "- listing_text a opisy úloh musia byť napísané celé po slovensky, aj\n"
-    "  keď prepis obsahuje výrazy v inom jazyku.\n"
+    "- listing_text a notes musia byť napísané celé po slovensky, aj keď\n"
+    "  prepis obsahuje výrazy v inom jazyku.\n"
+    "\n"
+    "Poznámky zo stretnutia (pole 'notes')\n"
+    "Napíšte čitateľný text, pripravený na prečítanie a ručnú úpravu\n"
+    "maklérom. Použite PRESNE tieto tri sekcie, v tomto poradí a s týmito\n"
+    "nadpismi:\n"
+    "\n"
+    "KĽÚČOVÉ BODY\n"
+    "- Dôležité fakty zo stretnutia, ktoré NIE SÚ už v štruktúrovaných\n"
+    "  poliach: dôvod predaja, časový rámec, situácia predávajúceho,\n"
+    "  obmedzenia, vykonané alebo potrebné práce, zvláštnosti nehnuteľnosti,\n"
+    "  očakávania ohľadom ceny, prípadné problémy.\n"
+    "\n"
+    "NA VYRIEŠENIE\n"
+    "- Otvorené body a veci na vybavenie: doklady na zaobstaranie, overenia,\n"
+    "  chýbajúce informácie, dané prísľuby ('pošlem pôdorys', 'skontrolujem\n"
+    "  v katastri', 'zavolám').\n"
+    "- NEUVÁDZAJTE, kto sa tým má zaoberať: napíšte len to, čo treba urobiť.\n"
+    "  Nepíšte 'maklér musí...' ani 'predávajúci musí...'.\n"
+    "- Ak niektorý bod blokuje zverejnenie inzerátu, pridajte na koniec\n"
+    "  riadka '(blokuje zverejnenie)'.\n"
+    "\n"
+    "POVEDAL PREDÁVAJÚCI\n"
+    "- Zopár krátkych a relevantných doslovných citácií v úvodzovkách, aby\n"
+    "  maklér vedel overiť, odkiaľ informácie pochádzajú.\n"
+    "\n"
+    "Pravidlá pre poznámky:\n"
+    "- Používajte pomlčky (-) pre zoznamy, jeden riadok na bod, krátke vety.\n"
+    "- Žiadny Markdown (žiadne #, *, **): je to obyčajný text.\n"
+    "- Neopakujte štruktúrované polia (m², cena, izby...), ak nepridávajú\n"
+    "  kontext.\n"
+    "- Ak sekcia nemá obsah, napíšte aj tak nadpis a pod ním riadok\n"
+    "  '- žiadne'.\n"
+    "- Vychádzajte IBA z prepisu: nepridávajte rady ani domnienky.\n"
     "\n"
     "Počítanie izieb (pole 'locali') — JEDINÁ výnimka z pravidla neodvodzovať:\n"
     "spočítať nie je vymyslieť.\n"
@@ -58,12 +83,8 @@ SK: dict = {
     "email_intro": "Zhrnutie stretnutia s predávajúcim.",
     "email_section_missing": "=== Chýbajúce údaje (na doplnenie) ===",
     "email_none_missing": "Žiadne: všetky povinné údaje sú vyplnené.",
-    "email_section_tasks": "=== Úlohy ===",
-    "email_no_tasks": "Počas stretnutia neboli zaznamenané žiadne záväzky.",
-    "email_owner_agente": "Maklér",
-    "email_owner_venditore": "Predávajúci",
-    "email_task_blocking": "BLOKUJE ZVEREJNENIE",
-    "email_task_due": "termín",
+    "email_section_notes": "=== Poznámky zo stretnutia ===",
+    "email_no_notes": "Žiadne poznámky.",
     "email_section_listing_text": "=== Opis inzerátu ===",
     "email_section_fields": "=== Údaje o nehnuteľnosti ===",
     "email_section_transcript": "=== Prepis stretnutia ===",

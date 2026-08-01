@@ -70,7 +70,7 @@ def test_envelope_schema_omits_missing_required_from_model_output():
     model — see extraction.py's docstring."""
     env = schema.envelope_schema("it")
     assert "missing_required" not in env["properties"]
-    assert set(env["required"]) == {"listing_fields", "listing_text", "tasks"}
+    assert set(env["required"]) == {"listing_fields", "listing_text", "notes"}
 
 
 @pytest.mark.parametrize("market", ["it", "sk"])
@@ -92,15 +92,9 @@ def test_extraction_result_validates_a_well_formed_response():
     result = schema.ExtractionResult.model_validate({
         "listing_fields": {"superficie_mq": 80},
         "listing_text": "Bell'appartamento in centro.",
-        "tasks": [{
-            "descrizione": "Invia planimetria",
-            "owner": "agente",
-            "scadenza": None,
-            "blocca_pubblicazione": False,
-            "citazione": "le mando la planimetria",
-        }],
+        "notes": "PUNTI CHIAVE\n- Vende per trasferimento.\n\nDA RISOLVERE\n- Planimetria mancante.",
     })
-    assert result.tasks[0].owner == "agente"
+    assert "DA RISOLVERE" in result.notes
 
 
 def test_to_listing_maps_fields_onto_the_phone_agent_shape():
@@ -136,10 +130,27 @@ def test_to_listing_coerces_non_numeric_values():
     assert listing["rooms"] == 3
 
 
-def test_extraction_result_rejects_invalid_owner():
+def test_extraction_result_requires_notes():
+    """notes carries the meeting's commitments now, so a response without it
+    is incomplete rather than merely sparse."""
     with pytest.raises(Exception):
         schema.ExtractionResult.model_validate({
             "listing_fields": {},
             "listing_text": "x",
-            "tasks": [{"descrizione": "x", "owner": "not_a_valid_owner"}],
         })
+
+
+@pytest.mark.parametrize("market", ["it", "sk"])
+def test_notes_prompt_forbids_assigning_tasks_to_a_person(market):
+    """Attributing a commitment to the agent vs. the seller from a transcript
+    proved unreliable, so the prompt must explicitly leave tasks unassigned."""
+    from acquisizione import extraction
+    instructions = extraction._content_for(market)["extraction_instructions"]
+    headings = (
+        ["PUNTI CHIAVE", "DA RISOLVERE"] if market == "it"
+        else ["KĽÚČOVÉ BODY", "NA VYRIEŠENIE"]
+    )
+    for heading in headings:
+        assert heading in instructions
+    forbid = "NON indicare chi" if market == "it" else "NEUVÁDZAJTE, kto"
+    assert forbid in instructions

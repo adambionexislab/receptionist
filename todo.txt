@@ -72,3 +72,5 @@ settings to add to the dashboard:
     - If the agency wants Cc of every email in agency mail
 
 Test: if caller is interested she starts qualifying questions and he interrupt her to ask if they have something else (he might be interesten in more listings)
+
+in the overview have each call have a field to witch adress(agent) the email was sent

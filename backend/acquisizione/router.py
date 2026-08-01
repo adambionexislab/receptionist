@@ -3,7 +3,7 @@
 An agent runs a live-transcribed listing-intake meeting with a property
 seller, entirely inside the agency dashboard (dashboard/index.html): GDPR
 consent logging, a live WebRTC transcription session, one-shot extraction
-into structured listing fields/tasks, an editable review + confirm step, and
+into structured listing fields + meeting notes, an editable review step, and
 optional photo enhancement.
 
 Ships dark behind config.ACQUISIZIONE_ENABLED — main.py only mounts this
@@ -162,7 +162,7 @@ async def finish_meeting(record_id: str, tenant: dict = Depends(current_tenant))
         db.set_review_result,
         record_id, tenant["id"],
         result["listing_fields"], result["missing_required"],
-        result["listing_text"], result["tasks"],
+        result["listing_text"], result["notes"],
     )
     return await asyncio.to_thread(db.get, record_id, tenant["id"])
 
@@ -170,7 +170,9 @@ async def finish_meeting(record_id: str, tenant: dict = Depends(current_tenant))
 class ConfirmRequest(BaseModel):
     listing_fields: dict[str, Any]
     listing_text: str
-    tasks: list[dict[str, Any]]
+    # Free-text meeting notes (key facts + open points), as edited by the
+    # agent. Replaced an earlier structured task list — see schema.py.
+    notes: str = ""
     # Who will handle the property this meeting produced. Required: it decides
     # where the phone agent emails leads for this listing, and a meeting is the
     # one moment when the answer is known for certain.
@@ -181,7 +183,7 @@ class ConfirmRequest(BaseModel):
 async def confirm_record(
     record_id: str, data: ConfirmRequest, tenant: dict = Depends(current_tenant)
 ):
-    """Save the agent's edited fields/text/tasks, mark the record final, and
+    """Save the agent's edited fields/text/notes, mark the record final, and
     publish it as a live listing so the phone agent can find it.
 
     The listing is created as source='manual' (see listings/db.py), which is
@@ -203,7 +205,7 @@ async def confirm_record(
 
     ok = await asyncio.to_thread(
         db.confirm, record_id, tenant["id"],
-        data.listing_fields, data.listing_text, data.tasks,
+        data.listing_fields, data.listing_text, data.notes,
     )
     if not ok:
         raise HTTPException(status_code=409, detail="Record is not awaiting confirmation")

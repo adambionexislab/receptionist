@@ -56,7 +56,7 @@ def _extract_output_text(data: dict[str, Any]) -> str:
 
 async def extract(transcript: str, market: str) -> dict[str, Any]:
     """Run the extraction call and return the storage-ready envelope:
-    {market, listing_fields, missing_required, listing_text, tasks}."""
+    {market, listing_fields, missing_required, listing_text, notes}."""
     if not settings.OPENAI_API_KEY:
         raise ExtractionError("OPENAI_API_KEY not configured")
     if not transcript.strip():
@@ -118,5 +118,5 @@ async def extract(transcript: str, market: str) -> dict[str, Any]:
         "listing_fields": result.listing_fields,
         "missing_required": missing,
         "listing_text": result.listing_text,
-        "tasks": [t.model_dump() for t in result.tasks],
+        "notes": result.notes,
     }

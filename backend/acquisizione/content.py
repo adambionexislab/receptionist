@@ -21,8 +21,8 @@ _IT_INSTRUCTIONS = (
     "   che è stato detto esplicitamente nella trascrizione.\n"
     "2. Un testo descrittivo dell'annuncio (listing_text), scritto in\n"
     "   italiano, pronto per essere pubblicato, basato sui dati raccolti.\n"
-    "3. Un elenco di attività (tasks) — impegni espliciti presi durante la\n"
-    "   riunione, non semplici argomenti discussi.\n"
+    "3. Le note della riunione (notes): un testo strutturato in italiano con\n"
+    "   i fatti importanti emersi E i punti aperti da risolvere.\n"
     "\n"
     "Regole fondamentali:\n"
     "- Non inventare MAI valori legalmente o economicamente rilevanti\n"
@@ -30,17 +30,41 @@ _IT_INSTRUCTIONS = (
     "  catastali). Se non è stato detto chiaramente, lascia il campo a null:\n"
     "  è il comportamento atteso, non un errore.\n"
     "- Riporta i valori così come detti; non arrotondare né stimare.\n"
-    "- Crea un task SOLO per un impegno esplicito preso da una delle parti —\n"
-    "  segnali tipici: 'le mando', 'controllo', 'richiamo', 'porto'. Non\n"
-    "  creare un task per ogni argomento discusso. Assegna correttamente\n"
-    "  owner ('agente' o 'venditore').\n"
-    "- Imposta blocca_pubblicazione=true per qualunque task che blocchi la\n"
-    "  pubblicazione dell'annuncio (es. manca la classe energetica).\n"
-    "- Per ogni task, citazione deve essere un breve estratto testuale della\n"
-    "  trascrizione che giustifica quel task (o null se non applicabile).\n"
-    "- listing_text e le descrizioni dei task devono essere scritti\n"
-    "  interamente in italiano, anche se la trascrizione contiene termini in\n"
-    "  un'altra lingua.\n"
+    "- listing_text e notes devono essere scritti interamente in italiano,\n"
+    "  anche se la trascrizione contiene termini in un'altra lingua.\n"
+    "\n"
+    "Note della riunione (campo 'notes')\n"
+    "Scrivi un testo in chiaro, pronto da leggere e da modificare a mano\n"
+    "dall'agente. Usa ESATTAMENTE queste tre sezioni, in quest'ordine e con\n"
+    "queste intestazioni:\n"
+    "\n"
+    "PUNTI CHIAVE\n"
+    "- Fatti importanti emersi nella riunione che NON sono già nei campi\n"
+    "  strutturati: motivo della vendita, tempistiche, situazione del\n"
+    "  venditore, vincoli, lavori fatti o da fare, particolarità\n"
+    "  dell'immobile, aspettative sul prezzo, eventuali criticità.\n"
+    "\n"
+    "DA RISOLVERE\n"
+    "- Punti aperti e cose da fare emersi dalla riunione: documenti da\n"
+    "  procurare, verifiche da fare, informazioni mancanti, promesse fatte\n"
+    "  ('le mando la planimetria', 'controllo in catasto', 'richiamo').\n"
+    "- NON indicare chi se ne deve occupare: scrivi solo la cosa da fare.\n"
+    "  Non scrivere 'l'agente deve...' né 'il venditore deve...'.\n"
+    "- Se un punto blocca la pubblicazione dell'annuncio, aggiungi in fondo\n"
+    "  alla riga '(blocca la pubblicazione)'.\n"
+    "\n"
+    "DETTO DAL VENDITORE\n"
+    "- Poche citazioni testuali brevi e rilevanti, tra virgolette, così\n"
+    "  l'agente può verificare da dove arrivano le informazioni.\n"
+    "\n"
+    "Regole per le note:\n"
+    "- Usa trattini (-) per gli elenchi, una riga per punto, frasi brevi.\n"
+    "- Niente Markdown (niente #, *, **): è testo semplice.\n"
+    "- Non ripetere i campi strutturati (mq, prezzo, locali...) se non\n"
+    "  aggiungono contesto.\n"
+    "- Se una sezione non ha contenuto, scrivi comunque l'intestazione e\n"
+    "  sotto una riga '- nessuno'.\n"
+    "- Basati SOLO sulla trascrizione: non aggiungere consigli o supposizioni.\n"
     "\n"
     "Conteggio dei locali (campo 'locali') — UNICA eccezione alla regola di\n"
     "non dedurre: qui CONTARE non è inventare.\n"
@@ -68,12 +92,8 @@ IT: dict = {
     "email_intro": "Riepilogo della riunione di acquisizione.",
     "email_section_missing": "=== Dati mancanti (da completare) ===",
     "email_none_missing": "Nessuno: tutti i dati obbligatori sono presenti.",
-    "email_section_tasks": "=== Attività da svolgere ===",
-    "email_no_tasks": "Nessun impegno registrato durante la riunione.",
-    "email_owner_agente": "Agente",
-    "email_owner_venditore": "Venditore",
-    "email_task_blocking": "BLOCCA PUBBLICAZIONE",
-    "email_task_due": "scadenza",
+    "email_section_notes": "=== Note della riunione ===",
+    "email_no_notes": "Nessuna nota.",
     "email_section_listing_text": "=== Descrizione annuncio ===",
     "email_section_fields": "=== Dati immobile ===",
     "email_section_transcript": "=== Trascrizione della riunione ===",

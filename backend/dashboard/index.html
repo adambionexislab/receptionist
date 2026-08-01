@@ -314,28 +314,12 @@
     padding: 12px; border-radius: 8px; font-size: .9rem; width: 100%; min-height: 140px;
     line-height: 1.6; font-family: inherit; resize: vertical;
   }
-  .acq-task-row {
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
-    padding: 12px; margin-bottom: 10px;
+  /* Meeting notes: taller than the listing-text box and monospaced, since
+     it's a structured plain-text outline the agent edits by hand. */
+  .acq-notes {
+    min-height: 280px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .84rem; line-height: 1.65;
   }
-  .acq-task-row-top { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-  .acq-task-row-top input[type="text"] {
-    flex: 1; min-width: 160px; background: var(--bg); border: 1px solid var(--border);
-    color: var(--text); padding: 8px 10px; border-radius: 8px; font-size: .88rem;
-  }
-  .acq-task-row select {
-    background: var(--bg); border: 1px solid var(--border); color: var(--text);
-    padding: 8px 10px; border-radius: 8px; font-size: .85rem;
-  }
-  .acq-task-row-bottom { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: .82rem; color: var(--text-dim); }
-  .acq-task-row-bottom label { display: flex; align-items: center; gap: 6px; margin: 0; text-transform: none; }
-  .acq-task-row-bottom input[type="checkbox"] { width: auto; }
-  .acq-task-row-bottom input[type="text"] {
-    background: var(--bg); border: 1px solid var(--border); color: var(--text);
-    padding: 6px 8px; border-radius: 6px; font-size: .82rem; width: 120px;
-  }
-  .acq-task-quote { color: var(--text-dim); font-size: .78rem; margin-top: 6px; font-style: italic; }
-  .acq-task-remove { background: none; border: none; color: var(--red); cursor: pointer; font-size: .8rem; padding: 4px 8px; }
   .acq-photo-hint { color: var(--text-dim); font-size: .8rem; margin: 0 0 16px; }
   .acq-photo-panels { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
   .acq-photo-panel-wrap { flex: 1; min-width: 240px; }
@@ -656,9 +640,8 @@
           <h3 id="acq-review-text-title"></h3>
           <textarea id="acq-listing-text" class="acq-textarea"></textarea>
 
-          <h3 id="acq-review-tasks-title"></h3>
-          <div id="acq-tasks-list" class="acq-tasks-list"></div>
-          <button class="btn ghost" id="acq-add-task-btn"></button>
+          <h3 id="acq-review-notes-title"></h3>
+          <textarea id="acq-notes" class="acq-textarea acq-notes"></textarea>
 
           <div class="err" id="acq-review-err"></div>
           <button class="btn" id="acq-confirm-btn"></button>
@@ -875,16 +858,10 @@
       acq_fields_show_all: "Mostra tutti i dati",
       acq_fields_show_empty: "Mostra solo i dati mancanti",
       acq_review_text_title: "Descrizione annuncio",
-      acq_review_tasks_title: "Attività",
-      acq_add_task_btn: "+ Aggiungi attività",
+      acq_review_notes_title: "Note della riunione",
       acq_confirm_btn: "Conferma",
       acq_err_confirm: "Salvataggio non riuscito. Riprova.",
       acq_field_missing: "mancante",
-      acq_task_owner_agente: "Agente",
-      acq_task_owner_venditore: "Venditore",
-      acq_task_blocking: "Blocca pubblicazione",
-      acq_task_due_placeholder: "Scadenza",
-      acq_task_remove: "Rimuovi",
       acq_confirmed_text: "Immobile confermato, pubblicato tra gli immobili e inviato via email.",
       acq_confirmed_no_email: "⚠ Invio dell'email non riuscito.",
       acq_confirmed_no_publish: "⚠ Pubblicazione tra gli immobili non riuscita.",
@@ -1008,16 +985,10 @@
       acq_fields_show_all: "Zobraziť všetky údaje",
       acq_fields_show_empty: "Zobraziť len chýbajúce údaje",
       acq_review_text_title: "Opis inzerátu",
-      acq_review_tasks_title: "Úlohy",
-      acq_add_task_btn: "+ Pridať úlohu",
+      acq_review_notes_title: "Poznámky zo stretnutia",
       acq_confirm_btn: "Potvrdiť",
       acq_err_confirm: "Uloženie zlyhalo. Skúste znova.",
       acq_field_missing: "chýba",
-      acq_task_owner_agente: "Maklér",
-      acq_task_owner_venditore: "Predávajúci",
-      acq_task_blocking: "Blokuje zverejnenie",
-      acq_task_due_placeholder: "Termín",
-      acq_task_remove: "Odstrániť",
       acq_confirmed_text: "Nehnuteľnosť potvrdená, zverejnená medzi nehnuteľnosťami a odoslaná e-mailom.",
       acq_confirmed_no_email: "⚠ E-mail sa nepodarilo odoslať.",
       acq_confirmed_no_publish: "⚠ Zverejnenie medzi nehnuteľnosťami zlyhalo.",
@@ -1099,8 +1070,8 @@
     "acq-agent-label": "acq_agent_label",
     "acq-review-fields-title": "acq_review_fields_title",
     "acq-review-text-title": "acq_review_text_title",
-    "acq-review-tasks-title": "acq_review_tasks_title",
-    "acq-add-task-btn": "acq_add_task_btn", "acq-confirm-btn": "acq_confirm_btn",
+    "acq-review-notes-title": "acq_review_notes_title",
+    "acq-confirm-btn": "acq_confirm_btn",
     "acq-confirmed-text": "acq_confirmed_text",
     "acq-meeting-title": "acq_meeting_title",
     "acq-photos-tool-title": "acq_photos_tool_title",
@@ -1792,8 +1763,7 @@
     const fieldsGrid = $("acq-fields-grid");
     const fieldsToggleBtn = $("acq-fields-toggle");
     const listingTextArea = $("acq-listing-text");
-    const tasksList = $("acq-tasks-list");
-    const addTaskBtn = $("acq-add-task-btn");
+    const notesArea = $("acq-notes");
     const confirmBtn = $("acq-confirm-btn");
     const agentWrap = $("acq-agent-wrap");
     const agentSelect = $("acq-agent");
@@ -2245,69 +2215,6 @@
       return wrap;
     }
 
-    function taskRowEl(task) {
-      const s = S();
-      const row = document.createElement("div");
-      row.className = "acq-task-row";
-      row.dataset.citazione = task.citazione || "";
-
-      const top = document.createElement("div");
-      top.className = "acq-task-row-top";
-
-      const descInput = document.createElement("input");
-      descInput.type = "text";
-      descInput.className = "acq-task-desc";
-      descInput.value = task.descrizione || "";
-      top.appendChild(descInput);
-
-      const ownerSelect = document.createElement("select");
-      ownerSelect.className = "acq-task-owner";
-      [["agente", s.acq_task_owner_agente], ["venditore", s.acq_task_owner_venditore]]
-        .forEach(([val, text]) => {
-          const opt = document.createElement("option");
-          opt.value = val; opt.textContent = text;
-          if (task.owner === val) opt.selected = true;
-          ownerSelect.appendChild(opt);
-        });
-      top.appendChild(ownerSelect);
-
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "acq-task-remove";
-      removeBtn.textContent = "× " + s.acq_task_remove;
-      removeBtn.addEventListener("click", () => row.remove());
-      top.appendChild(removeBtn);
-      row.appendChild(top);
-
-      const bottom = document.createElement("div");
-      bottom.className = "acq-task-row-bottom";
-
-      const dueInput = document.createElement("input");
-      dueInput.type = "text";
-      dueInput.className = "acq-task-due";
-      dueInput.placeholder = s.acq_task_due_placeholder;
-      dueInput.value = task.scadenza || "";
-      bottom.appendChild(dueInput);
-
-      const blockLabel = document.createElement("label");
-      const blockInput = document.createElement("input");
-      blockInput.type = "checkbox";
-      blockInput.className = "acq-task-block";
-      blockInput.checked = !!task.blocca_pubblicazione;
-      blockLabel.appendChild(blockInput);
-      blockLabel.appendChild(document.createTextNode(s.acq_task_blocking));
-      bottom.appendChild(blockLabel);
-      row.appendChild(bottom);
-
-      if (task.citazione) {
-        const quote = document.createElement("div");
-        quote.className = "acq-task-quote";
-        quote.textContent = "“" + task.citazione + "”";
-        row.appendChild(quote);
-      }
-      return row;
-    }
-
     // Single before/after pair (not a list): uploading a new photo replaces
     // whatever was there. Object URLs are tracked so they can be revoked
     // instead of leaking as the agent tries several photos in a session.
@@ -2562,8 +2469,7 @@
       agentWrap.classList.remove("acq-agent-invalid");
       renderAgentOptions();
       listingTextArea.value = record.listing_text || "";
-      tasksList.innerHTML = "";
-      (record.tasks || []).forEach((t) => tasksList.appendChild(taskRowEl(t)));
+      notesArea.value = record.notes || "";
       reviewErr.textContent = "";
       processingStep.classList.add("hidden");
       reviewStep.classList.remove("hidden");
@@ -2591,22 +2497,6 @@
     function collectFieldsPayload() {
       // Everything the model extracted, with the agent's edits laid over it.
       return { ...currentFields, ...readVisibleFields() };
-    }
-
-    function collectTasksPayload() {
-      const out = [];
-      tasksList.querySelectorAll(".acq-task-row").forEach((row) => {
-        const desc = row.querySelector(".acq-task-desc").value.trim();
-        if (!desc) return; // drop empty rows (e.g. an added-then-abandoned task)
-        out.push({
-          descrizione: desc,
-          owner: row.querySelector(".acq-task-owner").value,
-          scadenza: row.querySelector(".acq-task-due").value || null,
-          blocca_pubblicazione: row.querySelector(".acq-task-block").checked,
-          citazione: row.dataset.citazione || null,
-        });
-      });
-      return out;
     }
 
     async function attemptFinish() {
@@ -2638,13 +2528,6 @@
 
     finishRetryBtn.addEventListener("click", attemptFinish);
 
-    addTaskBtn.addEventListener("click", () => {
-      tasksList.appendChild(taskRowEl({
-        descrizione: "", owner: "agente", scadenza: null,
-        blocca_pubblicazione: false, citazione: "",
-      }));
-    });
-
     confirmBtn.addEventListener("click", async () => {
       reviewErr.textContent = "";
       // Required: the backend rejects a confirm without a valid agent, and
@@ -2661,7 +2544,7 @@
         const payload = {
           listing_fields: collectFieldsPayload(),
           listing_text: listingTextArea.value,
-          tasks: collectTasksPayload(),
+          notes: notesArea.value,
           agent_id: agentSelect.value,
         };
         const resp = await api("/acquisizione/" + recordId + "/confirm", {

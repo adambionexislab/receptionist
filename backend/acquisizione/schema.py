@@ -12,7 +12,7 @@ fall out of Pydantic's default schema generation. Pydantic is used only to
 validate/coerce the response we get back.
 """
 
-from typing import Any, Literal, Optional
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -108,49 +108,41 @@ def listing_fields_schema(market: str) -> dict[str, Any]:
     }
 
 
-_TASK_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "descrizione": {"type": "string", "description": "Task description, written in the market's language"},
-        "owner": {"type": "string", "enum": ["agente", "venditore"]},
-        "scadenza": {"type": ["string", "null"], "description": "Due date as an ISO date, or null if not stated"},
-        "blocca_pubblicazione": {"type": "boolean", "description": "True if this task gates publishing the listing"},
-        "citazione": {"type": ["string", "null"], "description": "Short verbatim transcript snippet justifying this task"},
-    },
-    "required": ["descrizione", "owner", "scadenza", "blocca_pubblicazione", "citazione"],
-    "additionalProperties": False,
-}
-
-
 def envelope_schema(market: str) -> dict[str, Any]:
     """Full JSON Schema for the extraction call's structured output. Does NOT
     ask the model for `missing_required` — that's computed deterministically
     from `REQUIRED_FIELDS` after validation (see `missing_required` below),
-    so it can never drift from the actual required list."""
+    so it can never drift from the actual required list.
+
+    `notes` replaced an earlier structured task array. Tasks are now written
+    inline in the notes and left unassigned: attributing a commitment to the
+    agent vs. the seller from a transcript proved unreliable, and a wrong
+    owner is worse than none.
+    """
     return {
         "type": "object",
         "properties": {
             "listing_fields": listing_fields_schema(market),
             "listing_text": {"type": "string", "description": "Draft listing description, written in the market's language"},
-            "tasks": {"type": "array", "items": _TASK_SCHEMA},
+            "notes": {
+                "type": "string",
+                "description": (
+                    "Structured plain-text meeting notes in the market's "
+                    "language: the important facts stated in the meeting, "
+                    "plus a section of open points/tasks to resolve. Left "
+                    "unassigned — do not attribute tasks to a person."
+                ),
+            },
         },
-        "required": ["listing_fields", "listing_text", "tasks"],
+        "required": ["listing_fields", "listing_text", "notes"],
         "additionalProperties": False,
     }
-
-
-class Task(BaseModel):
-    descrizione: str
-    owner: Literal["agente", "venditore"]
-    scadenza: Optional[str] = None
-    blocca_pubblicazione: bool = False
-    citazione: Optional[str] = None
 
 
 class ExtractionResult(BaseModel):
     listing_fields: dict[str, Any]
     listing_text: str
-    tasks: list[Task]
+    notes: str
 
 
 def _is_missing(value: Any) -> bool:

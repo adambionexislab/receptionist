@@ -1,9 +1,9 @@
 """Tests for the confirmed-meeting summary email body (acquisizione/notify.py).
 
 The body is the agency's only copy of what was committed to in the meeting,
-so these check the parts that would quietly lose information: tasks (grouped
-by owner, with due dates/blocking flags/quotes), the missing-data list, and
-the per-market language of both.
+so these check the parts that would quietly lose information: the meeting
+notes (key facts + unassigned open points), the missing-data list, and the
+per-market language of both.
 """
 
 import pytest
@@ -24,25 +24,37 @@ _RECORD = {
     },
     "missing_required": ["prezzo_richiesto", "classe_energetica"],
     "listing_text": "Bell'appartamento in centro.",
-    "tasks": [
-        {"descrizione": "Inviare planimetria", "owner": "agente",
-         "scadenza": "2026-08-05", "blocca_pubblicazione": False,
-         "citazione": "le mando la planimetria"},
-        {"descrizione": "Portare l'APE", "owner": "venditore",
-         "scadenza": None, "blocca_pubblicazione": True, "citazione": None},
-    ],
+    "notes": (
+        "PUNTI CHIAVE\n"
+        "- Vende per trasferimento di lavoro, tempi stretti.\n"
+        "\n"
+        "DA RISOLVERE\n"
+        "- Recuperare la planimetria aggiornata.\n"
+        "- Ottenere l'APE (blocca la pubblicazione)\n"
+        "\n"
+        "DETTO DAL VENDITORE\n"
+        "- \"le mando la planimetria\"\n"
+    ),
     "transcript": "Agente: buongiorno...",
 }
 
 
-def test_body_includes_tasks_with_owner_due_date_and_blocking_flag():
+def test_body_reproduces_the_meeting_notes_verbatim():
+    """The notes are already structured plain text by the time they reach the
+    email — the agent edited them — so nothing may be reformatted or dropped."""
     body = notify.build_body(_RECORD)
-    assert "Inviare planimetria" in body
-    assert "Portare l'APE" in body
-    assert "Agente" in body and "Venditore" in body
-    assert "2026-08-05" in body
-    assert "BLOCCA PUBBLICAZIONE" in body
-    assert "le mando la planimetria" in body  # the justifying quote
+    for line in _RECORD["notes"].strip().splitlines():
+        assert line in body
+
+
+def test_body_keeps_tasks_unassigned():
+    """Attributing a task to a person is exactly what this design removed;
+    the email must not reintroduce owner grouping."""
+    body = notify.build_body(_RECORD)
+    assert "Recuperare la planimetria aggiornata." in body
+    assert "(blocca la pubblicazione)" in body
+    assert "— Agente —" not in body
+    assert "— Venditore —" not in body
 
 
 def test_body_lists_missing_fields_by_readable_label():
@@ -65,30 +77,28 @@ def test_body_renders_booleans_and_omits_empty_fields():
     assert "Note del venditore:" not in body
 
 
-def test_body_handles_a_record_with_no_tasks_or_missing_fields():
+def test_body_handles_a_record_with_no_notes_or_missing_fields():
     body = notify.build_body({
-        **_RECORD, "tasks": [], "missing_required": [], "transcript": "",
+        **_RECORD, "notes": "", "missing_required": [], "transcript": "",
     })
-    assert "Nessun impegno registrato" in body
+    assert "Nessuna nota." in body
     assert "tutti i dati obbligatori sono presenti" in body
     assert "Trascrizione" not in body  # section omitted when there's none
 
 
 def test_slovak_record_renders_in_slovak():
     body = notify.build_body({**_RECORD, "market": "sk"})
-    assert "Úlohy" in body
-    assert "Maklér" in body and "Predávajúci" in body
-    assert "BLOKUJE ZVEREJNENIE" in body
+    assert "Poznámky zo stretnutia" in body
     assert "Úžitková plocha (m²): 85" in body
-    # No Italian section headings/labels leak in. (The transcript itself is
-    # verbatim meeting content and is deliberately never translated.)
-    assert "Attività da svolgere" not in body
+    # No Italian section headings/labels leak in. (The notes and transcript
+    # are verbatim meeting content and are deliberately never translated.)
+    assert "Note della riunione" not in body
     assert "Chýbajúce údaje" in body
 
 
 def test_unknown_market_falls_back_to_italian():
     body = notify.build_body({**_RECORD, "market": "fr"})
-    assert "Attività da svolgere" in body
+    assert "Note della riunione" in body
 
 
 @pytest.mark.asyncio

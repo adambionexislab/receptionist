@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS intake_records (
   missing_required   TEXT,
   listing_text       TEXT,
   tasks              TEXT,
+  notes              TEXT,
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL,
   confirmed_at       TEXT
@@ -41,6 +42,17 @@ CREATE TABLE IF NOT EXISTS intake_records (
 
 CREATE INDEX IF NOT EXISTS idx_intake_records_tenant ON intake_records(tenant_id, created_at);
 """
+
+# Columns added after the table first shipped. CREATE TABLE IF NOT EXISTS won't
+# alter an existing table on a deployed disk, so each is added with an
+# idempotent ALTER on startup — same pattern as tenants/db.py and listings/db.py.
+#
+# `notes` replaced the structured `tasks` array (free-text meeting notes with
+# unassigned tasks written inline). The old `tasks` column is deliberately kept
+# so already-confirmed records don't lose their data; nothing writes it now.
+_ADDED_COLUMNS = {
+    "notes": "TEXT",
+}
 
 _JSON_FIELDS = ("listing_fields", "missing_required", "tasks")
 
@@ -56,9 +68,20 @@ def init() -> None:
     with _tenants_db.write_lock:
         if not _initialized:
             conn.executescript(_SCHEMA)
+            _migrate(conn)
             conn.commit()
             _initialized = True
             logger.info("Acquisizione table ready (intake_records)")
+
+
+def _migrate(conn) -> None:
+    """Add columns introduced after the table first shipped. Idempotent: each
+    column is added only if a pre-existing table is missing it."""
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(intake_records)")}
+    for column, ddl in _ADDED_COLUMNS.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE intake_records ADD COLUMN {column} {ddl}")
+            logger.info("Migrated intake_records table: added column %s", column)
 
 
 def _conn():
@@ -90,6 +113,7 @@ def create(tenant_id: str, market: str, consent_method: str) -> dict[str, Any]:
         "missing_required": None,
         "listing_text": None,
         "tasks": None,
+        "notes": None,
         "created_at": now,
         "updated_at": now,
         "confirmed_at": None,
@@ -100,13 +124,14 @@ def create(tenant_id: str, market: str, consent_method: str) -> dict[str, Any]:
             "INSERT INTO intake_records "
             "(id, tenant_id, market, status, consent_given_at, consent_method, "
             " transcript, listing_fields, missing_required, listing_text, tasks, "
-            " created_at, updated_at, confirmed_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " notes, created_at, updated_at, confirmed_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 record["id"], record["tenant_id"], record["market"], record["status"],
                 record["consent_given_at"], record["consent_method"], record["transcript"],
                 record["listing_fields"], record["missing_required"], record["listing_text"],
-                record["tasks"], record["created_at"], record["updated_at"], record["confirmed_at"],
+                record["tasks"], record["notes"],
+                record["created_at"], record["updated_at"], record["confirmed_at"],
             ),
         )
         conn.commit()
@@ -172,7 +197,7 @@ def set_review_result(
     listing_fields: dict,
     missing_required: list,
     listing_text: str,
-    tasks: list,
+    notes: str,
 ) -> bool:
     """Write the extraction output and move the record to 'review'. Called once,
     right after a successful extraction call."""
@@ -181,13 +206,13 @@ def set_review_result(
     with _tenants_db.write_lock:
         cur = conn.execute(
             "UPDATE intake_records SET status = 'review', listing_fields = ?, "
-            "missing_required = ?, listing_text = ?, tasks = ?, updated_at = ? "
+            "missing_required = ?, listing_text = ?, notes = ?, updated_at = ? "
             "WHERE id = ? AND tenant_id = ?",
             (
                 json.dumps(listing_fields, ensure_ascii=False),
                 json.dumps(missing_required, ensure_ascii=False),
                 listing_text,
-                json.dumps(tasks, ensure_ascii=False),
+                notes,
                 now, record_id, tenant_id,
             ),
         )
@@ -214,7 +239,7 @@ def confirm(
     tenant_id: str,
     listing_fields: dict,
     listing_text: str,
-    tasks: list,
+    notes: str,
 ) -> bool:
     """Save the agent's edited fields and move the record to 'confirmed'. Only
     transitions from 'review' — nothing is final until this call."""
@@ -223,12 +248,12 @@ def confirm(
     with _tenants_db.write_lock:
         cur = conn.execute(
             "UPDATE intake_records SET status = 'confirmed', listing_fields = ?, "
-            "listing_text = ?, tasks = ?, updated_at = ?, confirmed_at = ? "
+            "listing_text = ?, notes = ?, updated_at = ?, confirmed_at = ? "
             "WHERE id = ? AND tenant_id = ? AND status = 'review'",
             (
                 json.dumps(listing_fields, ensure_ascii=False),
                 listing_text,
-                json.dumps(tasks, ensure_ascii=False),
+                notes,
                 now, now, record_id, tenant_id,
             ),
         )
