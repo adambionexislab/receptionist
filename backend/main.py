@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from acquisizione import db as acquisizione_db
 from acquisizione.router import router as acquisizione_router
+from agents import db as agents_db
 from billing.router import router as billing_router
 from call.router import router as call_router
 from calls import db as calls_db
@@ -134,6 +135,7 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(leadgen_db.init)
     await asyncio.to_thread(calls_db.init)
     await asyncio.to_thread(acquisizione_db.init)
+    await asyncio.to_thread(agents_db.init)
     await asyncio.to_thread(listings_db.init)
     await _load_all_tenant_listings()
     task = asyncio.create_task(_sync_loop())

@@ -59,4 +59,8 @@ landing page: access to the tools for non subscribed
 
 the counter cards in dashboard are for calendar month and should be for the subscribtion month
 
-video generation using runway gen-4.5
+video generation using runway gen-4.5 
+    helicopter reveal (with agency logo)
+    walktrough from photos of the rooms
+
+manage agents in dashboard, his name and number, phone number and email@adress, then each listing needs to have a number of the agent

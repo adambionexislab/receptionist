@@ -11,6 +11,7 @@ logged-in tenant's `locale`, not the URL, so there is no separate Slovak page.
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -18,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
+from agents import db as agents_db
 from calls import db as calls_db
 from config import settings
 from dashboard import session as sess
@@ -143,6 +145,74 @@ def delete_listing(listing_id: str, tenant: dict = Depends(current_tenant)):
     """Remove one listing so the phone agent stops offering it. Soft-deleted,
     so a later scrape can't resurrect it (see listings/db.py)."""
     if not listings_db.delete(listing_id, tenant["id"]):
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"ok": True}
+
+
+# ── agents (the agency's own staff, not Apollonia) ──────────────────────────
+# Deliberately not a full email validator (that needs a dependency and rejects
+# valid-but-unusual addresses): just enough to catch a typo'd address before it
+# lands on a card.
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+class AgentCreate(BaseModel):
+    name: str
+    email: str
+
+
+class AgentUpdate(BaseModel):
+    """All optional — a PATCH may send only what changed. `number` is assigned
+    by the server and is not editable."""
+    name: Optional[str] = None
+    email: Optional[str] = None
+
+
+def _clean_agent_fields(fields: dict) -> dict:
+    """Trim and validate the agent fields present in `fields` (422 on bad input).
+
+    Both name and email are required, so a PATCH may omit a field but may not
+    blank one out.
+    """
+    cleaned = {k: (v or "").strip() for k, v in fields.items()}
+    if "name" in cleaned and not cleaned["name"]:
+        raise HTTPException(status_code=422, detail="Name is required")
+    if "email" in cleaned:
+        if not cleaned["email"]:
+            raise HTTPException(status_code=422, detail="Email is required")
+        if not _EMAIL_RE.match(cleaned["email"]):
+            raise HTTPException(status_code=422, detail="Invalid email")
+    return cleaned
+
+
+@router.get("/dashboard/api/agents")
+def agents(tenant: dict = Depends(current_tenant)):
+    """The agency's agents, in the order they were added. Strictly scoped to
+    the logged-in tenant's id."""
+    return {"agents": agents_db.list_for_tenant(tenant["id"])}
+
+
+@router.post("/dashboard/api/agents")
+def create_agent(data: AgentCreate, tenant: dict = Depends(current_tenant)):
+    """Add an agent. The server assigns their number (see agents/db.py)."""
+    fields = _clean_agent_fields(data.model_dump())
+    return agents_db.create(tenant["id"], fields["name"], fields["email"])
+
+
+@router.patch("/dashboard/api/agents/{agent_id}")
+def update_agent(
+    agent_id: str, data: AgentUpdate, tenant: dict = Depends(current_tenant)
+):
+    fields = _clean_agent_fields(data.model_dump(exclude_unset=True, exclude_none=True))
+    updated = agents_db.update(agent_id, tenant["id"], fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return updated
+
+
+@router.delete("/dashboard/api/agents/{agent_id}")
+def delete_agent(agent_id: str, tenant: dict = Depends(current_tenant)):
+    if not agents_db.delete(agent_id, tenant["id"]):
         raise HTTPException(status_code=404, detail="Not found")
     return {"ok": True}
 

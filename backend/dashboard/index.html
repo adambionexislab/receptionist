@@ -199,26 +199,65 @@
   .listing-danger { color: var(--red); }
   .listing-confirm { font-size: .82rem; color: var(--red); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
+  /* ── agents cards ───────────────────────────────────────────────────── */
+  .agents-toolbar { display: flex; margin-bottom: 16px; }
+  .agents-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .agent-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .agent-card-head { display: flex; align-items: flex-start; gap: 12px; }
+  .agent-num {
+    flex: none; min-width: 32px; height: 32px; padding: 0 9px; border-radius: 999px;
+    background: var(--surface-2); color: var(--accent);
+    font-weight: 700; font-size: .9rem; font-variant-numeric: tabular-nums;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .agent-info { flex: 1; min-width: 0; }
+  .agent-name { font-weight: 600; font-size: 1rem; word-break: break-word; }
+  .agent-email { font-size: .85rem; margin-top: 2px; word-break: break-all; }
+  .agent-email a { color: var(--text-dim); text-decoration: none; }
+  .agent-email a:hover { color: var(--accent); text-decoration: underline; }
+  .agent-email-empty { color: var(--text-dim); font-style: italic; opacity: .7; }
+  .agent-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .agent-actions .spacer { flex: 1; }
+  .agent-edit-grid { display: grid; gap: 10px; }
+  .agent-edit-grid label { margin-bottom: 4px; }
+  .agent-edit-grid input {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 8px; font-size: .85rem; width: 100%;
+  }
+
   /* ── theme switch (light/dark), same pill pattern as the landing page's
      IT/SK language switch (see landingpage/index.html's .lang-switch) ──── */
-  .theme-switch {
+  /* Selectors are grouped rather than duplicated so the photo tool's
+     enhance/modernize switch stays visually identical to the theme one. */
+  .theme-switch, .mode-switch {
     position: relative; display: inline-flex; align-items: center;
     border-radius: 9999px; background: var(--surface-2); border: 1px solid var(--border); padding: 3px;
   }
-  .theme-switch-pill {
+  .theme-switch-pill, .mode-switch-pill {
     position: absolute; left: 3px; top: 3px; bottom: 3px; width: calc(50% - 3px);
     border-radius: 9999px; background: var(--accent-2);
     transition: transform .45s cubic-bezier(.16,1,.3,1);
   }
-  .theme-switch.is-dark .theme-switch-pill { transform: translateX(100%); }
-  .theme-switch-opt {
+  .theme-switch.is-dark .theme-switch-pill,
+  .mode-switch.is-second .mode-switch-pill { transform: translateX(100%); }
+  .theme-switch-opt, .mode-switch-opt {
     position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center;
-    width: 28px; padding: 6px 0; background: transparent; border: none; cursor: pointer;
+    padding: 6px 0; background: transparent; border: none; cursor: pointer;
     color: var(--text-dim); transition: color .3s ease;
   }
-  .theme-switch-opt.is-active { color: var(--on-accent); }
-  .theme-switch-opt:not(.is-active):hover { color: var(--text); }
-  .theme-switch-opt svg { width: 14px; height: 14px; display: block; }
+  .theme-switch-opt, .mode-switch-opt { width: 28px; }
+  .theme-switch-opt.is-active, .mode-switch-opt.is-active { color: var(--on-accent); }
+  .theme-switch-opt:not(.is-active):hover,
+  .mode-switch-opt:not(.is-active):hover { color: var(--text); }
+  .theme-switch-opt svg, .mode-switch-opt svg { width: 14px; height: 14px; display: block; }
+  .mode-switch[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+  .acq-photo-modernize { display: flex; align-items: center; gap: 10px; }
+  .acq-photo-modernize > span { font-size: .83rem; color: var(--text-dim); }
+  .acq-photo-mode-hint { color: var(--text-dim); font-size: .78rem; margin: 8px 0 0; }
   #theme-switch-standalone { position: fixed; top: 18px; right: 20px; z-index: 60; }
 
   /* ── acquisizione (seller-meeting capture) ─────────────────────────── */
@@ -294,11 +333,6 @@
   .acq-photo-panel-empty { color: var(--text-dim); font-size: .85rem; text-align: center; padding: 20px; }
   .acq-photo-panel-img { width: 100%; height: 100%; object-fit: contain; }
   .acq-photo-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .acq-photo-modernize {
-    display: flex; align-items: center; gap: 7px; cursor: pointer;
-    font-size: .83rem; color: var(--text-dim); text-transform: none;
-  }
-  .acq-photo-modernize input { width: auto; }
   .acq-photo-err { color: var(--red); font-size: .78rem; margin-top: 10px; }
 
   /* Loader (right panel, while waiting on the model) */
@@ -407,6 +441,8 @@
 
     .listings-grid { grid-template-columns: 1fr; }
     .listing-card { padding: 14px; }
+    .agents-grid { grid-template-columns: 1fr; }
+    .agent-card { padding: 14px; }
 
     #theme-switch-standalone { top: 12px; right: 14px; }
   }
@@ -460,6 +496,7 @@
     <nav class="tabs">
       <button class="tab active" id="tab-contacts" data-view="contacts">Contatti</button>
       <button class="tab" id="tab-listings" data-view="listings">Immobili</button>
+      <button class="tab" id="tab-agents" data-view="agents">Agenti</button>
       <button class="tab hidden" id="tab-acquisizione" data-view="acquisizione">Acquisizione</button>
     </nav>
     <div class="spacer"></div>
@@ -528,6 +565,17 @@
       <div id="listings-grid" class="listings-grid"></div>
       <div class="card">
         <div class="empty hidden" id="listings-empty">Nessun immobile disponibile.</div>
+      </div>
+    </section>
+
+    <section id="view-agents" class="view">
+      <h2 id="agents-title">Agenti</h2>
+      <div class="agents-toolbar">
+        <button class="btn ghost" id="agent-add-btn">+ Aggiungi agente</button>
+      </div>
+      <div id="agents-grid" class="agents-grid"></div>
+      <div class="card">
+        <div class="empty hidden" id="agents-empty">Nessun agente ancora.</div>
       </div>
     </section>
 
@@ -616,15 +664,29 @@
           </div>
 
           <div class="acq-photo-controls">
-            <label class="acq-photo-modernize">
-              <input type="checkbox" id="acq-photo-modernize-check" />
+            <div class="acq-photo-modernize">
               <span id="acq-photo-modernize-label"></span>
-            </label>
+              <span class="mode-switch" id="acq-photo-mode" role="group">
+                <span class="mode-switch-pill" aria-hidden="true"></span>
+                <!-- IEC on/off symbols: ○ = off, | = on -->
+                <button type="button" class="mode-switch-opt is-active" data-mode="enhance" id="acq-mode-enhance">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                    <circle cx="12" cy="12" r="7"></circle>
+                  </svg>
+                </button>
+                <button type="button" class="mode-switch-opt" data-mode="modernize" id="acq-mode-modernize">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                    <line x1="12" y1="4" x2="12" y2="20"></line>
+                  </svg>
+                </button>
+              </span>
+            </div>
             <div class="spacer"></div>
             <button class="btn ghost hidden" id="acq-photo-clear-btn"></button>
             <a class="btn ghost hidden" id="acq-photo-download-link" download></a>
             <button class="btn" id="acq-photo-enhance-btn" disabled></button>
           </div>
+          <p class="acq-photo-mode-hint" id="acq-photo-mode-hint"></p>
           <div class="err" id="acq-photo-err"></div>
         </div>
       </div>
@@ -725,6 +787,16 @@
       listing_own: "Acquisizione",
       outcomes: { lead: "Lead", message: "Messaggio", call: "Chiamata" },
       types: { vendita: "Vendita", affitto: "Affitto" },
+      agents: "Agenti",
+      agent_add: "+ Aggiungi agente",
+      agent_name: "Nome",
+      agent_email: "Email",
+      agent_no_email: "Email non indicata",
+      agents_empty: "Nessun agente ancora.",
+      agent_delete_confirm: "Rimuovere questo agente?",
+      agent_name_required: "Inserisci il nome dell'agente.",
+      agent_email_required: "Inserisci l'indirizzo email dell'agente.",
+      agent_email_invalid: "Indirizzo email non valido.",
       acq_tab: "Strumenti AI",
       acq_title: "Strumenti AI",
       acq_meeting_title: "Acquisizione",
@@ -769,8 +841,12 @@
       acq_photos_tool_title: "Foto",
       acq_photo_upload_label: "Clicca per caricare una foto",
       acq_photo_result_placeholder: "Il risultato apparirà qui",
-      acq_photo_modernize_label: "Modernizza e arreda (ambiente vuoto/danneggiato/in ristrutturazione)",
-      acq_photo_enhance_btn: "Migliora",
+      acq_photo_modernize_label: "Modernizza e arreda",
+      acq_photo_mode_off: "Disattivato",
+      acq_photo_mode_on: "Attivato",
+      acq_photo_mode_enhance_hint: "Corregge luce e prospettiva e rimuove il disordine, senza cambiare l'arredamento.",
+      acq_photo_mode_modernize_hint: "Per ambienti vuoti, datati o in ristrutturazione: rinnova le finiture e arreda in stile moderno.",
+      acq_photo_enhance_btn: "Elabora foto",
       acq_photo_clear_btn: "Cambia foto",
       acq_loader_text: "Elaborazione",
       acq_photo_hint: "Ogni foto può richiedere fino a 1-2 minuti per essere elaborata.",
@@ -825,6 +901,16 @@
       listing_own: "Získanie",
       outcomes: { lead: "Záujemca", message: "Odkaz", call: "Hovor" },
       types: { vendita: "Predaj", affitto: "Prenájom" },
+      agents: "Makléri",
+      agent_add: "+ Pridať makléra",
+      agent_name: "Meno",
+      agent_email: "E-mail",
+      agent_no_email: "E-mail neuvedený",
+      agents_empty: "Zatiaľ žiadni makléri.",
+      agent_delete_confirm: "Odstrániť tohto makléra?",
+      agent_name_required: "Zadajte meno makléra.",
+      agent_email_required: "Zadajte e-mailovú adresu makléra.",
+      agent_email_invalid: "Neplatná e-mailová adresa.",
       acq_tab: "Nástroje AI",
       acq_title: "Nástroje AI",
       acq_meeting_title: "Získanie",
@@ -869,8 +955,12 @@
       acq_photos_tool_title: "Fotografie",
       acq_photo_upload_label: "Kliknite pre nahratie fotografie",
       acq_photo_result_placeholder: "Výsledok sa tu zobrazí",
-      acq_photo_modernize_label: "Modernizovať a zariadiť (prázdny/poškodený/rozostavaný priestor)",
-      acq_photo_enhance_btn: "Vylepšiť",
+      acq_photo_modernize_label: "Modernizovať a zariadiť",
+      acq_photo_mode_off: "Vypnuté",
+      acq_photo_mode_on: "Zapnuté",
+      acq_photo_mode_enhance_hint: "Upraví osvetlenie a perspektívu a odstráni neporiadok, bez zmeny zariadenia.",
+      acq_photo_mode_modernize_hint: "Pre prázdne, staré alebo rozostavané priestory: obnoví povrchy a zariadi v modernom štýle.",
+      acq_photo_enhance_btn: "Spracovať fotografiu",
       acq_photo_clear_btn: "Zmeniť fotografiu",
       acq_loader_text: "Spracovanie",
       acq_photo_hint: "Spracovanie jednej fotografie môže trvať 1-2 minúty.",
@@ -916,6 +1006,8 @@
     /* The listings table's <th>s are gone (it's a card grid now), but the
        th_* strings live on as the card field labels — see listingReadCard. */
     "listings-empty": "listings_empty",
+    "tab-agents": "agents", "agents-title": "agents",
+    "agent-add-btn": "agent_add", "agents-empty": "agents_empty",
     "tab-acquisizione": "acq_tab", "acq-title": "acq_title",
     "acq-consent-text": "acq_consent_text", "acq-consent-label": "acq_consent_label",
     "acq-start-btn": "acq_start_btn", "acq-finish-btn": "acq_finish_btn",
@@ -944,6 +1036,7 @@
     const transcriptEl = $("acq-transcript");
     if (transcriptEl) transcriptEl.setAttribute("data-placeholder", s.acq_transcript_placeholder);
     if (window.AcqRefreshLiveLabels) window.AcqRefreshLiveLabels();
+    if (window.AcqRefreshPhotoMode) window.AcqRefreshPhotoMode();
     document.documentElement.lang = LOCALE;
     document.title = s.title;
   }
@@ -959,6 +1052,7 @@
     loadSummary();
     loadContacts();
     loadListings();
+    loadAgents();
   }
 
   function showView(name) {
@@ -1266,6 +1360,176 @@
     } catch (_) { /* leave the grid empty on a transient error */ }
   }
 
+  // ── Agents cards ────────────────────────────────────────────────────────
+  // The agency's own people (Apollonia is the AI). Cards behave like the
+  // listings cards above — read or edit mode, swapped in place — except the
+  // number is assigned server-side in the order agents are added, so it is
+  // shown but never editable.
+  const AGENT_EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+  function agentReadCard(a) {
+    const s = S();
+    const card = el("div", "agent-card");
+
+    const head = el("div", "agent-card-head");
+    head.appendChild(el("span", "agent-num", "#" + a.number));
+    const info = el("div", "agent-info");
+    info.appendChild(el("div", "agent-name", a.name || "—"));
+    const email = el("div", "agent-email");
+    if (a.email) {
+      const link = el("a", null, a.email);
+      link.href = "mailto:" + a.email;
+      email.appendChild(link);
+    } else {
+      email.className = "agent-email agent-email-empty";
+      email.textContent = s.agent_no_email;
+    }
+    info.appendChild(email);
+    head.appendChild(info);
+    card.appendChild(head);
+
+    const actions = el("div", "agent-actions");
+    const editBtn = el("button", "btn ghost", s.listing_edit);
+    editBtn.type = "button";
+    editBtn.addEventListener("click", () => card.replaceWith(agentEditCard(a)));
+    actions.appendChild(editBtn);
+    actions.appendChild(el("div", "spacer"));
+
+    const delBtn = el("button", "btn ghost listing-danger", s.listing_delete);
+    delBtn.type = "button";
+    delBtn.addEventListener("click", () => {
+      actions.replaceWith(agentDeleteConfirm(a, card));
+    });
+    actions.appendChild(delBtn);
+    card.appendChild(actions);
+    return card;
+  }
+
+  function agentDeleteConfirm(a, card) {
+    const s = S();
+    const row = el("div", "agent-actions listing-confirm");
+    const msg = el("span", null, s.agent_delete_confirm);
+    row.appendChild(msg);
+    const yes = el("button", "btn ghost listing-danger", s.listing_delete_yes);
+    yes.type = "button";
+    yes.addEventListener("click", async () => {
+      yes.disabled = true;
+      try {
+        const resp = await api("/dashboard/api/agents/" + a.id, { method: "DELETE" });
+        if (!resp.ok) throw new Error("delete " + resp.status);
+        card.remove();
+        refreshAgentsEmpty();
+      } catch (_) {
+        yes.disabled = false;
+        msg.textContent = S().listing_save_err;
+      }
+    });
+    const no = el("button", "btn ghost", s.listing_cancel);
+    no.type = "button";
+    // Re-render the whole card, as in listingDeleteConfirm — rebuilding only
+    // the row would leave its handlers closed over a detached card element.
+    no.addEventListener("click", () => card.replaceWith(agentReadCard(a)));
+    row.appendChild(yes);
+    row.appendChild(no);
+    return row;
+  }
+
+  // a === null → the card is a new-agent form: save POSTs instead of PATCHing,
+  // and cancel drops the card instead of reverting it.
+  function agentEditCard(a) {
+    const s = S();
+    const card = el("div", "agent-card");
+    const grid = el("div", "agent-edit-grid");
+    const inputs = {};
+
+    [["name", s.agent_name, "text"], ["email", s.agent_email, "email"]].forEach(
+      ([name, label, type]) => {
+        const wrap = el("div");
+        wrap.appendChild(el("label", null, label));
+        const input = document.createElement("input");
+        input.type = type;
+        input.value = a && a[name] != null ? a[name] : "";
+        wrap.appendChild(input);
+        grid.appendChild(wrap);
+        inputs[name] = input;
+      }
+    );
+    card.appendChild(grid);
+
+    const err = el("div", "err");
+    card.appendChild(err);
+
+    const actions = el("div", "agent-actions");
+    const saveBtn = el("button", "btn ghost", s.listing_save);
+    saveBtn.type = "button";
+    saveBtn.addEventListener("click", async () => {
+      const payload = {
+        name: inputs.name.value.trim(),
+        email: inputs.email.value.trim(),
+      };
+      // The same rules the backend enforces (see _clean_agent_fields), checked
+      // here too so a typo is caught without a round trip.
+      err.textContent = "";
+      if (!payload.name) { err.textContent = S().agent_name_required; return; }
+      if (!payload.email) { err.textContent = S().agent_email_required; return; }
+      if (!AGENT_EMAIL_RE.test(payload.email)) {
+        err.textContent = S().agent_email_invalid;
+        return;
+      }
+      saveBtn.disabled = true;
+      try {
+        const resp = await api("/dashboard/api/agents" + (a ? "/" + a.id : ""), {
+          method: a ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok) throw new Error("save " + resp.status);
+        card.replaceWith(agentReadCard(await resp.json()));
+        refreshAgentsEmpty();
+      } catch (_) {
+        err.textContent = S().listing_save_err;
+        saveBtn.disabled = false;
+      }
+    });
+    actions.appendChild(saveBtn);
+
+    const cancelBtn = el("button", "btn ghost", s.listing_cancel);
+    cancelBtn.type = "button";
+    cancelBtn.addEventListener("click", () => {
+      if (a) {
+        card.replaceWith(agentReadCard(a));
+      } else {
+        card.remove();
+        refreshAgentsEmpty();
+      }
+    });
+    actions.appendChild(cancelBtn);
+    card.appendChild(actions);
+    // After the caller has inserted the card into the grid.
+    setTimeout(() => inputs.name.focus(), 0);
+    return card;
+  }
+
+  function refreshAgentsEmpty() {
+    $("agents-empty").classList.toggle("hidden", $("agents-grid").children.length > 0);
+  }
+
+  function renderAgents(rows) {
+    const grid = $("agents-grid");
+    grid.innerHTML = "";
+    for (const a of rows) grid.appendChild(agentReadCard(a));
+    refreshAgentsEmpty();
+  }
+
+  async function loadAgents() {
+    try {
+      const resp = await api("/dashboard/api/agents");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      renderAgents(data.agents || []);
+    } catch (_) { /* leave the grid empty on a transient error */ }
+  }
+
   function showLogin() {
     $("app").classList.add("hidden");
     $("login").classList.remove("hidden");
@@ -1314,6 +1578,15 @@
   for (const t of document.querySelectorAll(".tab"))
     t.addEventListener("click", () => showView(t.dataset.view));
 
+  // Appended (not prepended) so the form sits where the new agent's number
+  // puts them: last.
+  $("agent-add-btn").addEventListener("click", () => {
+    const card = agentEditCard(null);
+    $("agents-grid").appendChild(card);
+    refreshAgentsEmpty();
+    card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  });
+
   // ── Acquisizione: live-transcribed seller-meeting capture ────────────────
   // Flow: consent checkbox → POST /acquisizione/consent → Wake Lock (must be
   // acquired inside this same click handler — the #1 Wake Lock gotcha is that
@@ -1361,7 +1634,9 @@
     const photoAfterEmpty = $("acq-photo-after-empty");
     const photoLoader = $("acq-photo-loader");
     const photoAfterImg = $("acq-photo-after-img");
-    const photoModernizeCheck = $("acq-photo-modernize-check");
+    const photoModeSwitch = $("acq-photo-mode");
+    const photoModeHint = $("acq-photo-mode-hint");
+    let photoMode = "enhance";   // "enhance" | "modernize"
     const photoClearBtn = $("acq-photo-clear-btn");
     const photoDownloadLink = $("acq-photo-download-link");
     const photoEnhanceBtn = $("acq-photo-enhance-btn");
@@ -1904,6 +2179,34 @@
       resetPhotoAfter();
     }
 
+    // Mode switch (Migliora / Modernizza) — same sliding-pill component as the
+    // theme toggle. Also re-applied on locale change via applyStrings().
+    function applyPhotoMode() {
+      const s = S();
+      const on = photoMode === "modernize";
+      photoModeSwitch.classList.toggle("is-second", on);
+      photoModeSwitch.querySelectorAll(".mode-switch-opt").forEach((btn) => {
+        btn.classList.toggle("is-active", btn.dataset.mode === photoMode);
+        // Icon-only buttons, so the on/off meaning has to come from the
+        // accessible name rather than visible text.
+        btn.setAttribute(
+          "aria-label",
+          btn.dataset.mode === "modernize" ? s.acq_photo_mode_on : s.acq_photo_mode_off
+        );
+      });
+      photoModeHint.textContent = on
+        ? s.acq_photo_mode_modernize_hint : s.acq_photo_mode_enhance_hint;
+    }
+    window.AcqRefreshPhotoMode = applyPhotoMode;
+
+    photoModeSwitch.querySelectorAll(".mode-switch-opt").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (photoEnhancing) return;
+        photoMode = btn.dataset.mode;
+        applyPhotoMode();
+      });
+    });
+
     photoBeforePanel.addEventListener("click", () => {
       if (!photoEnhancing) photoInput.click();
     });
@@ -1932,7 +2235,7 @@
       photoErr.textContent = "";
       photoEnhancing = true;
       photoEnhanceBtn.disabled = true;
-      photoModernizeCheck.disabled = true;
+      photoModeSwitch.setAttribute("aria-disabled", "true");
       photoClearBtn.disabled = true;
       photoAfterEmpty.classList.add("hidden");
       photoAfterImg.classList.add("hidden");
@@ -1942,7 +2245,7 @@
       try {
         const formData = new FormData();
         formData.append("image", photoFile);
-        formData.append("mode", photoModernizeCheck.checked ? "modernize" : "enhance");
+        formData.append("mode", photoMode);
         const resp = await api("/acquisizione/photos/enhance", { method: "POST", body: formData });
         if (!resp.ok) throw new Error("enhance " + resp.status);
         const blob = await resp.blob();
@@ -1962,7 +2265,7 @@
       } finally {
         photoEnhancing = false;
         photoEnhanceBtn.disabled = false;
-        photoModernizeCheck.disabled = false;
+        photoModeSwitch.removeAttribute("aria-disabled");
         photoClearBtn.disabled = false;
       }
     });
