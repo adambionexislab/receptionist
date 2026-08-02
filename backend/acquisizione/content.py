@@ -88,8 +88,11 @@ _IT_INSTRUCTIONS = (
 IT: dict = {
     "extraction_instructions": _IT_INSTRUCTIONS,
     # ── meeting-summary email (see acquisizione/notify.py) ────────────────────
-    "email_subject": "Acquisizione — {address}",
-    "email_intro": "Riepilogo della riunione di acquisizione.",
+    # "ApollonIA Meeting" is the tool's product name and stays in English in
+    # every market, like "ApollonIA" itself — only the copy around it is
+    # translated. Mirrored in locales.SK and the dashboard's STRINGS.
+    "email_subject": "ApollonIA Meeting — {address}",
+    "email_intro": "Riepilogo dell'ApollonIA Meeting con il venditore.",
     "email_section_missing": "=== Dati mancanti (da completare) ===",
     "email_none_missing": "Nessuno: tutti i dati obbligatori sono presenti.",
     "email_section_notes": "=== Note della riunione ===",

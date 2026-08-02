@@ -79,8 +79,9 @@ _SK_INSTRUCTIONS = (
 SK: dict = {
     "extraction_instructions": _SK_INSTRUCTIONS,
     # ── meeting-summary email (see acquisizione/notify.py) ────────────────────
-    "email_subject": "Získanie — {address}",
-    "email_intro": "Zhrnutie stretnutia s predávajúcim.",
+    # Product name, untranslated — see content.IT's note.
+    "email_subject": "ApollonIA Meeting — {address}",
+    "email_intro": "Zhrnutie ApollonIA Meeting s predávajúcim.",
     "email_section_missing": "=== Chýbajúce údaje (na doplnenie) ===",
     "email_none_missing": "Žiadne: všetky povinné údaje sú vyplnené.",
     "email_section_notes": "=== Poznámky zo stretnutia ===",

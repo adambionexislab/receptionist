@@ -506,7 +506,7 @@
       <button class="tab active" id="tab-contacts" data-view="contacts">Contatti</button>
       <button class="tab" id="tab-listings" data-view="listings">Immobili</button>
       <button class="tab" id="tab-agents" data-view="agents">Agenti</button>
-      <button class="tab hidden" id="tab-acquisizione" data-view="acquisizione">Acquisizione</button>
+      <button class="tab hidden" id="tab-acquisizione" data-view="acquisizione">Strumenti AI</button>
     </nav>
     <div class="spacer"></div>
     <span class="theme-switch" id="theme-switch-header" role="group" aria-label="Tema">
@@ -572,6 +572,9 @@
 
     <section id="view-listings" class="view">
       <h2 id="listings-title">Immobili</h2>
+      <div class="agents-toolbar">
+        <button class="btn ghost" id="listing-add-btn">+ Aggiungi immobile</button>
+      </div>
       <div id="listings-grid" class="listings-grid"></div>
       <div class="card">
         <div class="empty hidden" id="listings-empty">Nessun immobile disponibile.</div>
@@ -592,7 +595,7 @@
     <section id="view-acquisizione" class="view">
       <h2 id="acq-title">Strumenti AI</h2>
 
-      <h3 id="acq-meeting-title" class="acq-tool-title">Acquisizione</h3>
+      <h3 id="acq-meeting-title" class="acq-tool-title">ApollonIA Meeting</h3>
       <div id="acq-consent" class="card">
         <div class="acq-pad">
           <p id="acq-consent-text" class="acq-consent-text"></p>
@@ -655,7 +658,7 @@
         </div>
       </div>
 
-      <h3 id="acq-photos-tool-title" class="acq-tool-title">Foto</h3>
+      <h3 id="acq-photos-tool-title" class="acq-tool-title">ApollonIA Photo</h3>
       <div id="acq-photos-tool" class="card">
         <div class="acq-pad">
           <p class="acq-photo-hint" id="acq-photo-hint"></p>
@@ -801,7 +804,11 @@
       listing_delete_confirm: "Eliminare questo immobile?",
       listing_delete_yes: "Sì, elimina",
       listing_save_err: "Operazione non riuscita.",
-      listing_own: "Acquisizione",
+      // Badge on a listing this tool produced — names the tool, so it follows
+      // the same untranslated product name.
+      listing_own: "ApollonIA Meeting",
+      listing_add: "+ Aggiungi immobile",
+      listing_address_required: "Inserisci l'indirizzo dell'immobile.",
       listing_agent: "Agente",
       listing_agent_none: "Nessun agente",
       listing_agent_none_hint: "Senza agente assegnato",
@@ -827,7 +834,9 @@
       agent_email_invalid: "Indirizzo email non valido.",
       acq_tab: "Strumenti AI",
       acq_title: "Strumenti AI",
-      acq_meeting_title: "Acquisizione",
+      // The tool's product name — English in every locale, like "ApollonIA"
+      // itself. Only the surrounding UI copy is translated.
+      acq_meeting_title: "ApollonIA Meeting",
       acq_consent_text:
         "Prima di iniziare, informi il venditore che la conversazione verrà " +
         "trascritta automaticamente (nessun audio viene registrato o " +
@@ -842,7 +851,7 @@
       acq_resume_btn: "Riprendi",
       acq_finish_btn: "Termina riunione",
       acq_transcript_placeholder: "La trascrizione apparirà qui man mano che si parla…",
-      acq_new_btn: "Nuova acquisizione",
+      acq_new_btn: "Nuovo ApollonIA Meeting",
       acq_err_mic: "Per la trascrizione è necessario l'accesso al microfono.",
       acq_err_conn: "Impossibile avviare la trascrizione. Riprova.",
       acq_processing_text: "Elaborazione della trascrizione in corso…",
@@ -865,7 +874,8 @@
       acq_confirmed_text: "Immobile confermato, pubblicato tra gli immobili e inviato via email.",
       acq_confirmed_no_email: "⚠ Invio dell'email non riuscito.",
       acq_confirmed_no_publish: "⚠ Pubblicazione tra gli immobili non riuscita.",
-      acq_photos_tool_title: "Foto",
+      // Product name, untranslated — same rule as acq_meeting_title.
+      acq_photos_tool_title: "ApollonIA Photo",
       acq_photo_upload_label: "Trascina qui una foto o clicca per caricarla",
       acq_photo_err_type: "Formato non supportato: usa JPG, PNG o WebP.",
       acq_photo_result_placeholder: "Il risultato apparirà qui",
@@ -927,7 +937,9 @@
       listing_delete_confirm: "Odstrániť túto nehnuteľnosť?",
       listing_delete_yes: "Áno, odstrániť",
       listing_save_err: "Operácia zlyhala.",
-      listing_own: "Získanie",
+      listing_own: "ApollonIA Meeting",
+      listing_add: "+ Pridať nehnuteľnosť",
+      listing_address_required: "Zadajte adresu nehnuteľnosti.",
       listing_agent: "Maklér",
       listing_agent_none: "Bez makléra",
       listing_agent_none_hint: "Nie je priradený maklér",
@@ -954,7 +966,7 @@
       agent_email_invalid: "Neplatná e-mailová adresa.",
       acq_tab: "Nástroje AI",
       acq_title: "Nástroje AI",
-      acq_meeting_title: "Získanie",
+      acq_meeting_title: "ApollonIA Meeting",  // product name, untranslated
       acq_consent_text:
         "Skôr než začnete, informujte predávajúceho, že konverzácia bude " +
         "automaticky prepisovaná (žiadny zvuk sa nenahráva ani neukladá) " +
@@ -969,7 +981,7 @@
       acq_resume_btn: "Pokračovať",
       acq_finish_btn: "Ukončiť stretnutie",
       acq_transcript_placeholder: "Prepis sa tu bude postupne zobrazovať, ako budete hovoriť…",
-      acq_new_btn: "Nové stretnutie",
+      acq_new_btn: "Nový ApollonIA Meeting",
       acq_err_mic: "Na prepis je potrebný prístup k mikrofónu.",
       acq_err_conn: "Prepis sa nepodarilo spustiť. Skúste znova.",
       acq_processing_text: "Spracúva sa prepis…",
@@ -992,7 +1004,7 @@
       acq_confirmed_text: "Nehnuteľnosť potvrdená, zverejnená medzi nehnuteľnosťami a odoslaná e-mailom.",
       acq_confirmed_no_email: "⚠ E-mail sa nepodarilo odoslať.",
       acq_confirmed_no_publish: "⚠ Zverejnenie medzi nehnuteľnosťami zlyhalo.",
-      acq_photos_tool_title: "Fotografie",
+      acq_photos_tool_title: "ApollonIA Photo",  // product name, untranslated
       acq_photo_upload_label: "Presuňte sem fotografiu alebo kliknite pre nahratie",
       acq_photo_err_type: "Nepodporovaný formát: použite JPG, PNG alebo WebP.",
       acq_photo_result_placeholder: "Výsledok sa tu zobrazí",
@@ -1058,7 +1070,7 @@
     "listings-title": "listings",
     /* The listings table's <th>s are gone (it's a card grid now), but the
        th_* strings live on as the card field labels — see listingReadCard. */
-    "listings-empty": "listings_empty",
+    "listings-empty": "listings_empty", "listing-add-btn": "listing_add",
     "tab-agents": "agents", "agents-title": "agents",
     "agent-add-btn": "agent_add", "agents-empty": "agents_empty",
     "tab-acquisizione": "acq_tab", "acq-title": "acq_title",
@@ -1341,8 +1353,13 @@
     return row;
   }
 
+  // l === null → the card is a new-listing form: save POSTs instead of
+  // PATCHing, and cancel drops the card instead of reverting it. Same shape as
+  // agentEditCard(null) on the Agenti tab.
   function listingEditCard(l) {
     const s = S();
+    const isNew = !l;
+    if (isNew) l = { type: "vendita" };
     const card = el("div", "listing-card");
     const grid = el("div", "listing-edit-grid");
     const inputs = {};
@@ -1414,26 +1431,42 @@
     saveBtn.type = "button";
     saveBtn.addEventListener("click", async () => {
       err.textContent = "";
-      saveBtn.disabled = true;
       const payload = {
         text: textArea.value,
         type: inputs.type.value,
-        // "" clears the assignment; the backend applies it via set_agent, which
-        // deliberately doesn't mark the listing as agent-edited.
+        // "" clears the assignment; on an edit the backend applies it via
+        // set_agent, which deliberately doesn't mark the listing agent-edited.
         agent_id: inputs.agent_id.value,
       };
-      ["address", "zone"].forEach((k) => { payload[k] = inputs[k].value; });
+      ["address", "zone"].forEach((k) => { payload[k] = inputs[k].value.trim(); });
       LISTING_NUM_FIELDS.forEach((k) => {
         payload[k] = inputs[k].value === "" ? 0 : Number(inputs[k].value);
       });
+      // The address is what the phone agent matches a caller's spoken street
+      // against, so a listing without one could never be found. Checked here
+      // too (the backend 422s) to save a round trip.
+      if (!payload.address) {
+        err.textContent = S().listing_address_required;
+        inputs.address.focus();
+        return;
+      }
+      saveBtn.disabled = true;
       try {
-        const resp = await api("/dashboard/api/listings/" + l.id, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        const resp = await api(
+          "/dashboard/api/listings" + (isNew ? "" : "/" + l.id),
+          {
+            method: isNew ? "POST" : "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+        );
         if (!resp.ok) throw new Error("save " + resp.status);
         card.replaceWith(listingReadCard(await resp.json()));
+        if (isNew) {
+          $("listings-empty").classList.add("hidden");
+          // The agents' "N immobili gestiti" counts just moved.
+          if (payload.agent_id) loadAgents();
+        }
       } catch (_) {
         err.textContent = S().listing_save_err;
         saveBtn.disabled = false;
@@ -1443,9 +1476,19 @@
 
     const cancelBtn = el("button", "btn ghost", s.listing_cancel);
     cancelBtn.type = "button";
-    cancelBtn.addEventListener("click", () => card.replaceWith(listingReadCard(l)));
+    cancelBtn.addEventListener("click", () => {
+      if (isNew) {
+        card.remove();
+        if (!$("listings-grid").children.length) {
+          $("listings-empty").classList.remove("hidden");
+        }
+      } else {
+        card.replaceWith(listingReadCard(l));
+      }
+    });
     actions.appendChild(cancelBtn);
     card.appendChild(actions);
+    if (isNew) setTimeout(() => inputs.address.focus(), 0);
     return card;
   }
 
@@ -1718,6 +1761,15 @@
 
   for (const t of document.querySelectorAll(".tab"))
     t.addEventListener("click", () => showView(t.dataset.view));
+
+  // Prepended: listings are ordered newest-first (see listings/db.py), so the
+  // form sits where the saved listing will land.
+  $("listing-add-btn").addEventListener("click", () => {
+    const card = listingEditCard(null);
+    $("listings-grid").prepend(card);
+    $("listings-empty").classList.add("hidden");
+    card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  });
 
   // Appended (not prepended) so the form sits where the new agent's number
   // puts them: last.

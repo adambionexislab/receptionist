@@ -5,6 +5,12 @@ from pydantic_settings import BaseSettings
 
 _ENV_FILE = Path(__file__).parent.parent / ".env"
 
+# Default reasoning model for every non-realtime text task (post-call lead
+# summary, acquisizione transcript extraction). One constant so a model bump
+# lands on all of them at once and no task is left behind on an old model;
+# each still has its own env var when one task needs to diverge.
+_TEXT_MODEL_DEFAULT = "gpt-5.6-terra"
+
 
 class Settings(BaseSettings):
     # Apify / Immobiliare.it listings sync
@@ -77,12 +83,16 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: Optional[str] = None
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
 
+    # Text (non-realtime) reasoning models — see _TEXT_MODEL_DEFAULT above.
+    # Post-call one-sentence lead summary prepended to the lead email.
+    SUMMARY_MODEL: str = _TEXT_MODEL_DEFAULT
+    # Transcript → structured listing fields/notes.
+    EXTRACTION_MODEL: str = _TEXT_MODEL_DEFAULT
+
     # Acquisizione (seller-meeting capture) — ships dark until this is set.
     ACQUISIZIONE_ENABLED: bool = False
     # Live streaming transcription model for the browser WebRTC meeting capture.
     REALTIME_TRANSCRIBE_MODEL: str = "gpt-realtime-whisper"
-    # Transcript → structured listing fields/tasks (reasoning model).
-    EXTRACTION_MODEL: str = "gpt-5.6-terra"
     # Property photo enhancement (declutter/relight/straighten).
     IMAGE_EDIT_MODEL: str = "gpt-image-2"
 

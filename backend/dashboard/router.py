@@ -113,6 +113,38 @@ def listings(tenant: dict = Depends(current_tenant)):
     return {"listings": listings_db.list_for_tenant(tenant["id"])}
 
 
+class ListingCreate(BaseModel):
+    """A listing the agency enters by hand, rather than one the portal scrape
+    or an Acquisizione meeting produced. Only the address is required — it is
+    what the phone agent matches a caller's "I'm calling about Via Roma" on,
+    and a listing without one can never be found."""
+    address: str
+    zone: str = ""
+    type: Literal["vendita", "affitto"] = "vendita"
+    rooms: int = 0
+    size_sqm: int = 0
+    price: int = 0
+    currency: str = "EUR"
+    available: bool = True
+    text: str = ""
+    agent_id: Optional[str] = None
+
+
+@router.post("/dashboard/api/listings", status_code=201)
+def create_listing(data: ListingCreate, tenant: dict = Depends(current_tenant)):
+    """Add a listing by hand. Stored as source='manual' (see listings/db.py),
+    so a later Immobiliare.it scrape never overwrites or removes it — it isn't
+    on the portal, and only the agency knows about it."""
+    fields = data.model_dump()
+    agent_id = (fields.pop("agent_id") or "").strip() or None
+    if not fields["address"].strip():
+        raise HTTPException(status_code=422, detail="Address is required")
+    # An id from another tenant would route this agency's leads to a stranger.
+    if agent_id and not agents_db.get(agent_id, tenant["id"]):
+        raise HTTPException(status_code=422, detail="Unknown agent")
+    return listings_db.create_manual(tenant["id"], fields, agent_id)
+
+
 class ListingUpdate(BaseModel):
     """Agent-editable listing fields. All optional — a PATCH may send only
     what changed. Unknown fields are ignored by listings_db.update."""
@@ -145,6 +177,10 @@ def update_listing(
     fields = {
         k: v for k, v in sent.items() if k != "agent_id" and v is not None
     }
+    # Same rule as creating one: a listing the phone agent can't match an
+    # address against is a listing no caller can ever be told about.
+    if "address" in fields and not fields["address"].strip():
+        raise HTTPException(status_code=422, detail="Address is required")
 
     updated = None
     if "agent_id" in sent:

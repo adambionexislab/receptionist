@@ -84,8 +84,7 @@ _SK_SYSTEM_PROMPT_BODY = (
     "  potvrdenie alebo ďalšiu otázku). Po úvodnej fráze nikdy neostaňte\n"
     "  ticho a nečakajte, kým sa volajúci ozve.\n"
     "- Pred nástrojmi mark_listing_interest a end_call úvodnú frázu\n"
-    "  NEPOUŽÍVAJTE. Rozlúčka pri ukončení hovoru nie je úvodná fráza —\n"
-    "  vyslovte priamo slová rozlúčky, neohlasujte ju.\n"
+    "  NEPOUŽÍVAJTE. end_call zavolajte mlčky: rozlúčku zabezpečí systém.\n"
     "\n"
     "# Dĺžka odpovedí\n"
     "- Odpovedajte stručne: jedna alebo dve vety obsahu. Pred použitím nástroja\n"
@@ -194,9 +193,7 @@ _SK_SYSTEM_PROMPT_BODY = (
     "   NESĽUBUJTE, že maklér zavolá späť alebo bude volajúceho kontaktovať —\n"
     "   či a kedy to urobí, rozhodne maklér.\n"
     "6. Potom ukončite hovor podľa '# Ako ukončiť hovor': spýtajte sa, či\n"
-    "   môžete pomôcť ešte s niečím, a ak nie, vyslovte slová rozlúčky\n"
-    "   (nie ich ohlásenie) a zavolajte nástroj end_call, aby ste hovor\n"
-    "   naozaj zložili.\n"
+    "   môžete pomôcť ešte s niečím, a ak nie, zavolajte nástroj end_call.\n"
     "Nikdy sa nepokúšajte odpovedať na otázky mimo vašej kompetencie.\n"
     "Nevymýšľajte postupy, ceny ani právne/zmluvné informácie.\n"
     "\n"
@@ -270,14 +267,23 @@ _SK_SYSTEM_PROMPT_BODY = (
     "Hneď po tom, ako ste volajúcemu povedali, že jeho požiadavku odovzdáte\n"
     "realitnému maklérovi:\n"
     "1. Spýtajte sa, či mu môžete pomôcť ešte s niečím.\n"
-    "2. Ak povie nie: vyslovte skutočné slová rozlúčky, ktoré má volajúci\n"
-    "   počuť (napríklad 'Ďakujem za telefonát, pekný deň, dovidenia.').\n"
-    "   NEOHLASUJTE rozlúčku ani ukončenie hovoru ('rozlúčim sa', 'poviem vám\n"
-    "   dovidenia', 'teraz zložím', 'ukončím hovor') — rovno povedzte tie\n"
-    "   slová rozlúčky. Hneď po rozlúčke zavolajte nástroj end_call a už nič\n"
-    "   nedodávajte.\n"
+    "2. Ak povie nie: HNEĎ zavolajte nástroj end_call a už nič nehovorte.\n"
+    "   Nelúčte sa sama a nehovorte, čo sa chystáte urobiť: rozlúčku\n"
+    "   zabezpečí systém, ktorý ju dá vysloviť hneď potom. Vaším posledným\n"
+    "   vysloveným ťahom je otázka z bodu 1.\n"
     "3. Ak povie áno: pokračujte v pomoci normálne a po dokončení zopakujte\n"
     "   tento postup.\n"
+)
+
+# Instructions for the farewell turn — these REPLACE the system prompt above
+# for that single response; see _FAREWELL_INSTRUCTION in call/router.py for why.
+_SK_FAREWELL_INSTRUCTION = (
+    "Povedzte iba slová rozlúčky volajúcemu, v jazyku, ktorý volajúci "
+    "používal počas rozhovoru, a nič iné. Príklad po slovensky: 'Ďakujem za "
+    "telefonát, prajem pekný deň, dovidenia.' Jedna krátka veta. "
+    "NEOHLASUJTE rozlúčku ani ukončenie hovoru ('rozlúčim sa', 'teraz "
+    "zložím', 'ukončím hovor'), nehovorte, čo urobíte ďalej, neklaďte "
+    "otázky, nič nepridávajte."
 )
 
 _SK_ASK_FOR_NUMBER = (
@@ -290,6 +296,18 @@ _SK_ASK_FOR_NUMBER = (
     "odovzdajte v poli 'phone' toho istého nástroja. Spýtajte sa naň iba raz,\n"
     "prirodzene; ak ho volajúci nechce nechať, pokračujte aj tak bez naliehania.\n"
 )
+
+
+# Section headers of the lead email. Named constants because the summary
+# instruction quotes them back to the model: if a header drifts from the text
+# in the prompt, the model loses its map of the email.
+_SK_SECTION_COLLECTED = "=== Údaje získané od volajúceho ==="
+_SK_SECTION_INTERESTED = "=== Nehnuteľnosť, o ktorú má záujem ==="
+
+# Spelled out on purpose: "Nehnuteľnosť na predaj" alone reads as the property
+# on offer, and both the agent skimming the mail and the summary model then
+# mistake the caller's own flat for the one he called about.
+_SK_PROPERTY_TO_SELL_LABEL = "Vlastná nehnuteľnosť na predaj pred kúpou"
 
 
 SK = {
@@ -308,6 +326,7 @@ SK = {
         "Telefón zazvonil a vy ste ho zdvihli. Pozdravte volajúceho a "
         "spýtajte sa, ako mu môžete pomôcť."
     ),
+    "farewell_instruction": _SK_FAREWELL_INSTRUCTION,
     # ── lead-email content ────────────────────────────────────────────────────
     "caller_info_labels": {
         "name": "Meno",
@@ -317,7 +336,7 @@ SK = {
         "has_pets": "Domáce zvieratá",
         "move_in_date": "Želaný dátum nasťahovania",
         "has_mortgage_preapproval": "Predschválená hypotéka",
-        "has_property_to_sell": "Nehnuteľnosť na predaj",
+        "has_property_to_sell": _SK_PROPERTY_TO_SELL_LABEL,
         "sale_timeline": "Časový rámec pre podpis kúpnej zmluvy",
         "visit_availability": "Dostupnosť na obhliadku",
     },
@@ -327,7 +346,16 @@ SK = {
         "pochopil, o čo ide (kto volal a čo chce). Volajúceho označte jeho "
         "menom, ak je v popise uvedené; ak meno nie je, použite slovo "
         "'Volajúci'. Do vety NEVKLADAJTE telefónne číslo (uvádza sa inde). "
-        "Napíšte iba tú vetu, bez úvodov, úvodzoviek alebo zoznamov."
+        "Napíšte iba tú vetu, bez úvodov, úvodzoviek alebo zoznamov.\n\n"
+        "Ako čítať popis:\n"
+        f"- Nehnuteľnosť, o ktorú má volajúci záujem, je IBA tá uvedená pod "
+        f"'{_SK_SECTION_INTERESTED}'. Ak je tá sekcia prázdna, volajúci si "
+        "žiadnu nevybral: nevymýšľajte si ju.\n"
+        f"- '{_SK_SECTION_COLLECTED}' obsahuje kvalifikačné údaje O "
+        "volajúcom, nie nehnuteľnosť, ktorú hľadá. Najmä "
+        f"'{_SK_PROPERTY_TO_SELL_LABEL}' je nehnuteľnosť, ktorú volajúci už "
+        "vlastní a potrebuje ju predať: nie je to tá, kvôli ktorej volal, a "
+        "nikdy ju tak neuvádzajte."
     ),
     "unknown_caller": "neznáme",
     "email_caller_label": "Volajúci",
@@ -336,9 +364,9 @@ SK = {
     "email_agent_unassigned": "k nehnuteľnosti nie je priradený maklér",
     "email_agent_no_email": "bez e-mailovej adresy",
     "email_agent_to_agency": "odoslané kancelárii",
-    "email_section_collected": "=== Údaje získané od volajúceho ===",
+    "email_section_collected": _SK_SECTION_COLLECTED,
     "email_no_data": "Žiadne údaje neboli získané.",
-    "email_section_interested": "=== Nehnuteľnosť, o ktorú má záujem ===",
+    "email_section_interested": _SK_SECTION_INTERESTED,
     "email_none_specified": "Volajúci žiadnu neuviedol.",
     "email_section_others": "=== Ďalšie predstavené nehnuteľnosti ===",
     "email_none": "Žiadne.",

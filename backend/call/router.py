@@ -76,10 +76,20 @@ _CALLER_INFO_LABELS: dict[str, str] = {
     "has_pets": "Animali domestici",
     "move_in_date": "Data di ingresso desiderata",
     "has_mortgage_preapproval": "Mutuo pre-approvato",
-    "has_property_to_sell": "Immobile da vendere",
+    # Spelled out on purpose: "Immobile da vendere" alone reads as the property
+    # on offer, and both the agent skimming the mail and the summary model then
+    # mistake the caller's own house for the one he called about.
+    "has_property_to_sell": "Immobile di proprietà da vendere prima dell'acquisto",
     "sale_timeline": "Tempistiche per il rogito",
     "visit_availability": "Disponibilità per visita",
 }
+
+
+# Section headers of the lead email. Named constants because the summary
+# instruction quotes them back to the model: if a header drifts from the text
+# in the prompt, the model loses its map of the email.
+_EMAIL_SECTION_COLLECTED = "=== Dati raccolti dal chiamante ==="
+_EMAIL_SECTION_INTERESTED = "=== Immobile di interesse ==="
 
 
 # Only the first line of the system prompt is tenant-specific; the body
@@ -151,8 +161,7 @@ _SYSTEM_PROMPT_BODY = (
     "  o la domanda successiva). Dopo un preambolo non restare mai in silenzio\n"
     "  in attesa che il chiamante parli.\n"
     "- Non usare un preambolo prima di mark_listing_interest e di end_call.\n"
-    "  Il saluto di chiusura non è un preambolo: pronuncia direttamente le\n"
-    "  parole del saluto, non annunciarlo.\n"
+    "  Chiama end_call in silenzio: al saluto finale pensa il sistema.\n"
     "\n"
     "# Lunghezza delle risposte\n"
     "- Rispondi in modo breve: una o due frasi di contenuto. Prima di usare\n"
@@ -263,9 +272,7 @@ _SYSTEM_PROMPT_BODY = (
     "   NON promettere che l'agente richiamerà o ricontatterà il chiamante:\n"
     "   se e quando farlo lo decide l'agente.\n"
     "6. Poi chiudi la chiamata secondo '# Come chiudere la chiamata': chiedi\n"
-    "   se puoi aiutarlo con altro e, se no, pronuncia le parole di saluto\n"
-    "   (senza annunciarle) e chiama lo strumento end_call per riagganciare\n"
-    "   davvero.\n"
+    "   se puoi aiutarlo con altro e, se no, chiama lo strumento end_call.\n"
     "Non tentare mai di rispondere a domande fuori dalla tua competenza.\n"
     "Non inventare procedure, prezzi, o informazioni legali/contrattuali.\n"
     "\n"
@@ -340,14 +347,28 @@ _SYSTEM_PROMPT_BODY = (
     "Subito dopo aver detto al chiamante che inoltrerai la sua richiesta a\n"
     "un agente immobiliare:\n"
     "1. Chiedi se puoi aiutarlo con qualcos'altro.\n"
-    "2. Se dice di no: pronuncia le vere parole di saluto che il chiamante\n"
-    "   deve sentire (es. 'Grazie della chiamata, buona giornata,\n"
-    "   arrivederci.'). NON annunciare il saluto né la chiusura ('la saluto',\n"
-    "   'le dico arrivederci', 'ora riaggancio', 'chiudo la chiamata'): di'\n"
-    "   subito quelle parole. Subito dopo il saluto chiama lo strumento\n"
-    "   end_call e non aggiungere altro.\n"
+    "2. Se dice di no: chiama SUBITO lo strumento end_call, senza dire\n"
+    "   nient'altro. Non salutare tu e non dire cosa stai per fare: al\n"
+    "   saluto finale pensa il sistema, che lo fa pronunciare subito dopo.\n"
+    "   Il tuo ultimo turno parlato è la domanda del punto 1.\n"
     "3. Se dice di sì: continua ad aiutarlo normalmente, e ripeti questa\n"
     "   procedura quando hai finito.\n"
+)
+
+
+# Instructions for the farewell turn. These REPLACE the system prompt above for
+# that one response (see the end_call handler), which is the whole point: the
+# main prompt teaches her to announce an action before every slow tool, and that
+# habit is what leaked "ora chiudo la chiamata" into the goodbye no matter how
+# many times the prompt forbade it. A turn whose only instruction is "say
+# goodbye" has no announcing habit to fall back on.
+_FAREWELL_INSTRUCTION = (
+    "Di' soltanto le parole di commiato al chiamante, nella lingua che il "
+    "chiamante ha usato durante la conversazione, e nient'altro. Esempio in "
+    "italiano: 'Grazie della chiamata, buona giornata, arrivederci.' "
+    "Una sola frase breve. NON annunciare il saluto né la chiusura ('la "
+    "saluto', 'ora riaggancio', 'chiudo la chiamata'), non dire cosa farai "
+    "dopo, non fare domande, non aggiungere altro."
 )
 
 _SYSTEM_PROMPT = _DEFAULT_FIRST_LINE + _SYSTEM_PROMPT_BODY
@@ -384,6 +405,7 @@ _IT_CONTENT: dict[str, Any] = {
         "Il telefono ha squillato e hai risposto. "
         "Saluta il chiamante e chiedi come puoi aiutarlo."
     ),
+    "farewell_instruction": _FAREWELL_INSTRUCTION,
     "caller_info_labels": _CALLER_INFO_LABELS,
     "summary_instruction": (
         "Sei l'assistente di un'agenzia immobiliare. "
@@ -394,7 +416,16 @@ _IT_CONTENT: dict[str, Any] = {
         "con il suo nome, se presente nella descrizione; se "
         "manca, usa la parola 'Il chiamante'. NON inserire il "
         "numero di telefono nella frase (è riportato altrove). "
-        "Scrivi solo la frase, senza preamboli, virgolette o elenchi."
+        "Scrivi solo la frase, senza preamboli, virgolette o elenchi.\n\n"
+        "Come leggere la descrizione:\n"
+        f"- L'immobile che interessa al chiamante è SOLO quello elencato "
+        f"sotto '{_EMAIL_SECTION_INTERESTED}'. Se quella sezione è vuota, "
+        "il chiamante non ha scelto nessun immobile: non inventarne uno.\n"
+        f"- '{_EMAIL_SECTION_COLLECTED}' contiene dati di qualificazione SUL "
+        "chiamante, non l'immobile che cerca. In particolare "
+        f"'{_CALLER_INFO_LABELS['has_property_to_sell']}' è un immobile che "
+        "il chiamante possiede già e deve vendere: non è quello per cui ha "
+        "chiamato e non va mai presentato come tale."
     ),
     "unknown_caller": "sconosciuto",
     "email_caller_label": "Chiamante",
@@ -403,9 +434,9 @@ _IT_CONTENT: dict[str, Any] = {
     "email_agent_unassigned": "nessun agente assegnato all'immobile",
     "email_agent_no_email": "nessun indirizzo email",
     "email_agent_to_agency": "inoltrato all'agenzia",
-    "email_section_collected": "=== Dati raccolti dal chiamante ===",
+    "email_section_collected": _EMAIL_SECTION_COLLECTED,
     "email_no_data": "Nessun dato raccolto.",
-    "email_section_interested": "=== Immobile di interesse ===",
+    "email_section_interested": _EMAIL_SECTION_INTERESTED,
     "email_none_specified": "Nessuno specificato dal chiamante.",
     "email_section_others": "=== Altri immobili presentati ===",
     "email_none": "Nessuno.",
@@ -600,10 +631,10 @@ _END_CALL_TOOL: dict[str, Any] = {
     "description": (
         "End the phone call. Use this ONLY after telling the caller you'll "
         "forward their request to a real estate agent, asking if there's "
-        "anything else you can help with, and the caller says no. Say the "
-        "actual goodbye words to the caller first (a real farewell like "
-        "'Thank you for calling, have a nice day, goodbye') — not a statement "
-        "that you're about to say goodbye — then call this tool to hang up."
+        "anything else you can help with, and the caller says no. Call it "
+        "silently, as your whole turn: do NOT say goodbye and do NOT announce "
+        "that you are ending the call. The farewell is spoken for you right "
+        "after this tool returns."
     ),
     "parameters": {
         "type": "object",
@@ -836,6 +867,31 @@ async def _reject_call(call_id: str, status_code: int = 603) -> None:
         logger.error("Reject error for call %s: %s", call_id, exc)
 
 
+# How long to wait for the farewell response after end_call before hanging up
+# regardless: generous for a one-sentence goodbye, short enough that a failed
+# response never leaves the caller listening to nothing.
+_FAREWELL_TIMEOUT_SECONDS = 12.0
+
+
+def _farewell_response_event(content: dict[str, Any]) -> dict[str, Any]:
+    """The `response.create` that speaks the goodbye after end_call.
+
+    `instructions` here REPLACE the session prompt for this one response, which
+    is the entire mechanism: the full prompt also teaches her to announce an
+    action before every slow tool, and that habit kept surfacing as "ukončím
+    hovor" / "ora chiudo la chiamata" in place of the goodbye, however many
+    times the prompt forbade it. This turn's only instruction is to say the
+    farewell. `tool_choice: none` keeps it spoken — she cannot answer the
+    request for a goodbye with another tool call."""
+    return {
+        "type": "response.create",
+        "response": {
+            "instructions": content["farewell_instruction"],
+            "tool_choice": "none",
+        },
+    }
+
+
 async def _hangup_call(call_id: str) -> None:
     """Hang up a live SIP call via the OpenAI REST API."""
     if not call_id:
@@ -958,6 +1014,11 @@ async def incoming_call(request: Request) -> Response:
         "caller_info": {},
         "left_message": None,
         "last_speech_at": 0.0,
+        # Set when end_call fires: the farewell turn has been requested and the
+        # next thing she says is the goodbye, after which we hang up. ending_at
+        # is the loop clock at that moment, so the watchdog can give up waiting.
+        "ending": False,
+        "ending_at": None,
         # Wall-clock call start, stamped once the call is accepted (see
         # _run_call); used to compute duration_seconds when the call is persisted.
         "started_at": None,
@@ -975,10 +1036,10 @@ async def incoming_call(request: Request) -> Response:
     return Response(status_code=200)
 
 
-# Cheap text model used for the post-call one-sentence lead summary. The
+# The post-call one-sentence lead summary runs on settings.SUMMARY_MODEL. The
 # realtime model handles the live conversation; this is a separate, non-audio
-# call made once the call has ended, so latency is not a concern.
-_SUMMARY_MODEL = "gpt-5.4-nano"
+# call made once the call has ended, so latency is not a concern. It shares its
+# default with the acquisizione extraction — see config._TEXT_MODEL_DEFAULT.
 
 
 def _fallback_lead_summary(content: dict[str, Any], session: dict[str, Any]) -> str:
@@ -1032,12 +1093,12 @@ async def _generate_lead_summary(
                 "https://api.openai.com/v1/responses",
                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
                 json={
-                    "model": _SUMMARY_MODEL,
+                    "model": settings.SUMMARY_MODEL,
                     "instructions": content["summary_instruction"],
                     "input": detail_body,
-                    # nano on a simple summarisation task: lightest supported
-                    # reasoning + terse output. max_output_tokens covers
-                    # reasoning + text. Notes on this model's quirks:
+                    # A simple summarisation task: light reasoning + terse
+                    # output. max_output_tokens covers reasoning + text, so it
+                    # is not a cap on sentence length. Responses API quirks:
                     #   - reasoning.effort: none/low/medium/high/xhigh (no "minimal")
                     #   - temperature is NOT supported on the Responses API
                     "reasoning": {"effort": "low"},
@@ -1241,31 +1302,20 @@ def _agent_display(agent: dict[str, Any]) -> str:
     return f"#{agent.get('number', '?')} {agent.get('name', '')}".strip()
 
 
-async def _send_lead_email(session: dict[str, Any]) -> None:
-    content = _content(session.get("locale"))
-    # Who handles the property the caller is interested in decides where this
-    # lead lands; see _resolve_lead_recipients for the fallbacks.
-    agents = _interest_agents(session)
-    recipients, cc, routed = _resolve_lead_recipients(session, agents)
-    # Stash for _persist_call, which records who the lead was routed to.
-    session["routed_agents"] = agents if routed else []
-    if not settings.RESEND_API_KEY or not recipients:
-        logger.warning("RESEND_API_KEY/lead email not configured — lead email skipped")
-        return
+def _format_lead_body(
+    content: dict[str, Any],
+    session: dict[str, Any],
+    caller: str,
+    agents: list[dict[str, Any]],
+    routed: bool,
+) -> str:
+    """The detailed part of the lead email — the part below the summary line.
 
-    # Work out a usable callback number (auto-detected caller ID, else a number
-    # the caller spoke aloud). A lead with no callback number is useless — skip.
-    caller = _resolve_callback_number(session)
-    if not caller:
-        logger.info(
-            "Lead suppressed — no usable caller number (caller ID was the "
-            "tenant's own number / withheld and the caller left none)"
-        )
-        return
-    # Make the resolved number the one every downstream step (summary, body,
-    # subject) sees.
-    session["caller_number"] = caller
-
+    This same text is what the summary model reads, so the sections have to stay
+    unambiguous: what the caller wants lives under 'interested' only, while
+    'collected' holds qualifying facts ABOUT him (including any property of his
+    own he has to sell first). Never raises: a formatting slip must not cost the
+    agency a lead."""
     try:
         lines: list[str] = [
             f"{content['email_caller_label']}: {caller}",
@@ -1299,7 +1349,6 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
                 lines.append(brief)
         else:
             lines.append(content["email_none_specified"])
-            lines.append("")
 
         others = [
             listing for listing in session["listings_shown"]
@@ -1321,13 +1370,41 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
             lines.append(f"{content['email_urgency_label']}: {urgency_disp}")
             lines.append(f"{content['email_message_label']}: {msg_data.get('message', '')}")
 
-        detail_body = "\n".join(lines)
+        return "\n".join(lines)
     except Exception as exc:
         logger.error("Failed to format lead email body: %s", exc)
-        detail_body = (
+        return (
             f"{content['email_caller_label']}: {caller}\n"
             f"{content['email_format_error']}"
         )
+
+
+async def _send_lead_email(session: dict[str, Any]) -> None:
+    content = _content(session.get("locale"))
+    # Who handles the property the caller is interested in decides where this
+    # lead lands; see _resolve_lead_recipients for the fallbacks.
+    agents = _interest_agents(session)
+    recipients, cc, routed = _resolve_lead_recipients(session, agents)
+    # Stash for _persist_call, which records who the lead was routed to.
+    session["routed_agents"] = agents if routed else []
+    if not settings.RESEND_API_KEY or not recipients:
+        logger.warning("RESEND_API_KEY/lead email not configured — lead email skipped")
+        return
+
+    # Work out a usable callback number (auto-detected caller ID, else a number
+    # the caller spoke aloud). A lead with no callback number is useless — skip.
+    caller = _resolve_callback_number(session)
+    if not caller:
+        logger.info(
+            "Lead suppressed — no usable caller number (caller ID was the "
+            "tenant's own number / withheld and the caller left none)"
+        )
+        return
+    # Make the resolved number the one every downstream step (summary, body,
+    # subject) sees.
+    session["caller_number"] = caller
+
+    detail_body = _format_lead_body(content, session, caller, agents, routed)
 
     # Let a text model write a one-sentence summary of the call so the agent
     # grasps the lead at a glance, then prepend it to the detailed body.
@@ -1435,6 +1512,13 @@ async def _run_call(
                         text = msg.get("transcript", "").strip()
                         if text:
                             logger.info("Apollonia: %s", text)
+                        if session.get("ending"):
+                            # That was the farewell. Its audio is still draining
+                            # down the SIP leg — the transcript lands ahead of
+                            # playout — so hold briefly before tearing down.
+                            await asyncio.sleep(3.0)
+                            await _hangup_call(call_id)
+                            return
 
                     elif etype == "response.function_call_arguments.done":
                         if msg.get("name") == "search_listings":
@@ -1560,12 +1644,18 @@ async def _run_call(
                                     "output": json.dumps({"ended": True}),
                                 },
                             }))
-                            # The prompt has her say a short goodbye just before
-                            # calling end_call; give that farewell audio a moment
-                            # to play out over SIP before we tear the call down.
-                            await asyncio.sleep(3.0)
-                            await _hangup_call(call_id)
-                            return
+                            # She calls end_call silently; the goodbye is spoken
+                            # by this separate, single-purpose response — see
+                            # _farewell_response_event.
+                            session["ending"] = True
+                            await ws.send(json.dumps(
+                                _farewell_response_event(content), ensure_ascii=False
+                            ))
+                            # Hang-up happens once the farewell transcript lands
+                            # (see response.output_audio_transcript.done above),
+                            # with the watchdog below as the backstop if that
+                            # response never arrives.
+                            session["ending_at"] = asyncio.get_event_loop().time()
 
                     elif etype == "input_audio_buffer.speech_started":
                         session["last_speech_at"] = asyncio.get_event_loop().time()
@@ -1577,7 +1667,20 @@ async def _run_call(
             async def silence_watchdog() -> None:
                 while True:
                     await asyncio.sleep(1)
-                    if asyncio.get_event_loop().time() - session["last_speech_at"] > 100:
+                    now = asyncio.get_event_loop().time()
+                    # Once end_call has fired the only thing owed is the
+                    # farewell. If that response never lands, don't hold the
+                    # caller on an open line for the full silence timeout.
+                    ending_at = session.get("ending_at")
+                    if ending_at and now - ending_at > _FAREWELL_TIMEOUT_SECONDS:
+                        logger.warning(
+                            "No farewell within %.0fs of end_call — hanging up %s",
+                            _FAREWELL_TIMEOUT_SECONDS,
+                            call_id,
+                        )
+                        await _hangup_call(call_id)
+                        break
+                    if now - session["last_speech_at"] > 100:
                         logger.info("100s silence — hanging up call %s", call_id)
                         await _hangup_call(call_id)
                         break

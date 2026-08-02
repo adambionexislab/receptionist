@@ -56,6 +56,10 @@ services:
         value: "false"
       - key: REALTIME_TRANSCRIBE_MODEL
         value: gpt-realtime-whisper
+      # Text reasoning models — keep these two in step unless one task is
+      # deliberately being pinned to a different model.
+      - key: SUMMARY_MODEL
+        value: gpt-5.6-terra
       - key: EXTRACTION_MODEL
         value: gpt-5.6-terra
       - key: IMAGE_EDIT_MODEL

@@ -95,6 +95,14 @@ def test_another_tenants_agent_is_rejected(client):
     assert listings_db.get(listing["id"], TENANT["id"])["agent_id"] is None
 
 
+def test_an_edit_cannot_blank_the_address(client):
+    """Without an address the phone agent can never match a caller to it."""
+    listing = listings_db.create_manual(TENANT["id"], {"address": "Via Roma 1"})
+
+    assert _patch(client, listing["id"], {"address": "  "}).status_code == 422
+    assert listings_db.get(listing["id"], TENANT["id"])["address"] == "Via Roma 1"
+
+
 def test_unknown_listing_is_a_404(client):
     agent = agents_db.create(TENANT["id"], "Mario Rossi", "mario@studio.it")
     assert _patch(client, "no-such-listing", {"agent_id": agent["id"]}).status_code == 404
