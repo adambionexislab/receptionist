@@ -78,3 +78,6 @@ in the overview have each call have a field to witch adress(agent) the email was
 if i open the dashboard on the phone. is the phone number in contacts clickcable ? 
 
 test: minutes counter
+call bugs: didnt hang up
+            listed a listing in presented listing even though she didnt mention it
+            it searched for dom n Hlavnej v Pezinku and got 3 resluts including Hlavná 45, košice

@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -873,6 +874,70 @@ async def _reject_call(call_id: str, status_code: int = 603) -> None:
 _FAREWELL_TIMEOUT_SECONDS = 12.0
 
 
+class _ResponseGate:
+    """Serialises `response.create` against the Realtime response lifecycle.
+
+    The API generates nothing when asked for a response while one is still
+    open, and tool calls arrive mid-response — `function_call_arguments.done`
+    precedes `response.done`, and gpt-realtime-2 emits several phases per turn.
+    So replying to a tool result immediately races the very response the tool
+    call came from, and losing that race is silent: Apollonia simply stops
+    talking after the tool until the caller says something and VAD opens a
+    fresh turn. The farewell after end_call went missing the same way.
+
+    Requests made while a response is open are held and sent on `response.done`.
+    """
+
+    def __init__(self, send: Callable[[dict[str, Any]], Awaitable[None]]) -> None:
+        self._send = send
+        self.active = False
+        self._pending: tuple[dict[str, Any], Callable[[], None] | None] | None = None
+
+    def opened(self) -> None:
+        """A `response.created` arrived."""
+        self.active = True
+
+    async def closed(self) -> None:
+        """A `response.done` arrived — release whatever queued behind it."""
+        self.active = False
+        pending, self._pending = self._pending, None
+        if pending is not None:
+            await self._dispatch(*pending)
+
+    async def request(
+        self,
+        event: dict[str, Any] | None = None,
+        *,
+        on_sent: Callable[[], None] | None = None,
+    ) -> None:
+        """Ask for a model turn now, or as soon as the open one finishes.
+
+        `on_sent` fires when the request actually goes out, which is not the
+        same moment it was made — the farewell uses it to mark that the next
+        thing she says is the goodbye.
+
+        Only the most recent request is held: several tool results inside one
+        response still warrant a single turn, so collapsing them is correct
+        rather than lossy.
+        """
+        await self._queue_or_send(event or {"type": "response.create"}, on_sent)
+
+    async def _queue_or_send(
+        self, event: dict[str, Any], on_sent: Callable[[], None] | None
+    ) -> None:
+        if self.active:
+            self._pending = (event, on_sent)
+            return
+        await self._dispatch(event, on_sent)
+
+    async def _dispatch(
+        self, event: dict[str, Any], on_sent: Callable[[], None] | None
+    ) -> None:
+        await self._send(event)
+        if on_sent is not None:
+            on_sent()
+
+
 def _farewell_response_event(content: dict[str, Any]) -> dict[str, Any]:
     """The `response.create` that speaks the goodbye after end_call.
 
@@ -1014,9 +1079,9 @@ async def incoming_call(request: Request) -> Response:
         "caller_info": {},
         "left_message": None,
         "last_speech_at": 0.0,
-        # Set when end_call fires: the farewell turn has been requested and the
-        # next thing she says is the goodbye, after which we hang up. ending_at
-        # is the loop clock at that moment, so the watchdog can give up waiting.
+        # Set when the farewell response actually goes out: the next thing she
+        # says is the goodbye, after which we hang up. ending_at is the loop
+        # clock at end_call, so the watchdog can give up waiting for it.
         "ending": False,
         "ending_at": None,
         # Wall-clock call start, stamped once the call is accepted (see
@@ -1477,6 +1542,18 @@ async def _run_call(
         ) as ws:
             logger.info("Control WebSocket attached to call %s", call_id)
 
+            async def send_event(event: dict[str, Any]) -> None:
+                await ws.send(json.dumps(event, ensure_ascii=False))
+
+            gate = _ResponseGate(send_event)
+
+            def farewell_sent() -> None:
+                # Only once the goodbye is actually on its way does the next
+                # transcript belong to it. Marking this when end_call fired
+                # would let a trailing phase of that same response be mistaken
+                # for the farewell and cut her off mid-sentence.
+                session["ending"] = True
+
             # The session was already configured by the accept call, so just
             # trigger the (model-generated) greeting in the tenant's locale.
             await ws.send(json.dumps({
@@ -1489,7 +1566,7 @@ async def _run_call(
                     ],
                 },
             }))
-            await ws.send(json.dumps({"type": "response.create"}))
+            await gate.request()
             logger.info("Greeting triggered for call %s", call_id)
 
             session["last_speech_at"] = asyncio.get_event_loop().time()
@@ -1507,7 +1584,15 @@ async def _run_call(
                     msg = json.loads(raw)
                     etype = msg.get("type")
 
-                    if etype == "response.output_audio_transcript.done":
+                    if etype == "response.created":
+                        gate.opened()
+
+                    elif etype == "response.done":
+                        # The turn is over: anything queued mid-response — the
+                        # reply to a tool result, the farewell — goes out now.
+                        await gate.closed()
+
+                    elif etype == "response.output_audio_transcript.done":
                         session["last_speech_at"] = asyncio.get_event_loop().time()
                         text = msg.get("transcript", "").strip()
                         if text:
@@ -1546,7 +1631,7 @@ async def _run_call(
                                     }
                                 )
                             )
-                            await ws.send(json.dumps({"type": "response.create"}))
+                            await gate.request()
 
                         elif msg.get("name") == "get_listing_by_address":
                             fc_id = msg.get("call_id")
@@ -1569,7 +1654,7 @@ async def _run_call(
                                     ),
                                 },
                             }))
-                            await ws.send(json.dumps({"type": "response.create"}))
+                            await gate.request()
 
                         elif msg.get("name") == "mark_listing_interest":
                             fc_id = msg.get("call_id")
@@ -1593,7 +1678,7 @@ async def _run_call(
                                     "output": json.dumps({"recorded": bool(match)}),
                                 },
                             }))
-                            await ws.send(json.dumps({"type": "response.create"}))
+                            await gate.request()
 
                         elif msg.get("name") == "record_caller_info":
                             fc_id = msg.get("call_id")
@@ -1613,7 +1698,7 @@ async def _run_call(
                                     "output": json.dumps({"recorded": True}),
                                 },
                             }))
-                            await ws.send(json.dumps({"type": "response.create"}))
+                            await gate.request()
 
                         elif msg.get("name") == "leave_message":
                             fc_id = msg.get("call_id")
@@ -1631,7 +1716,7 @@ async def _run_call(
                                     "output": json.dumps({"status": "saved"}, ensure_ascii=False),
                                 },
                             }))
-                            await ws.send(json.dumps({"type": "response.create"}))
+                            await gate.request()
 
                         elif msg.get("name") == "end_call":
                             fc_id = msg.get("call_id")
@@ -1646,23 +1731,35 @@ async def _run_call(
                             }))
                             # She calls end_call silently; the goodbye is spoken
                             # by this separate, single-purpose response — see
-                            # _farewell_response_event.
-                            session["ending"] = True
-                            await ws.send(json.dumps(
-                                _farewell_response_event(content), ensure_ascii=False
-                            ))
+                            # _farewell_response_event. It queues behind the
+                            # response this tool call came from, so `ending` is
+                            # set when it actually goes out, not here.
+                            session["ending_at"] = asyncio.get_event_loop().time()
+                            await gate.request(
+                                _farewell_response_event(content),
+                                on_sent=farewell_sent,
+                            )
                             # Hang-up happens once the farewell transcript lands
                             # (see response.output_audio_transcript.done above),
                             # with the watchdog below as the backstop if that
                             # response never arrives.
-                            session["ending_at"] = asyncio.get_event_loop().time()
 
                     elif etype == "input_audio_buffer.speech_started":
                         session["last_speech_at"] = asyncio.get_event_loop().time()
                         logger.info("Caller speaking")
 
                     elif etype == "error":
-                        logger.error("OpenAI Realtime error: %s", msg)
+                        # Pull the code out rather than dumping the envelope:
+                        # a rejected response.create costs the caller a whole
+                        # turn, and that was invisible in a one-line log dump.
+                        err = msg.get("error") or {}
+                        logger.error(
+                            "OpenAI Realtime error [%s/%s]: %s — %s",
+                            err.get("type"),
+                            err.get("code"),
+                            err.get("message"),
+                            msg,
+                        )
 
             async def silence_watchdog() -> None:
                 while True:
