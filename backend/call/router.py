@@ -9,6 +9,7 @@ import re
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 import websockets
@@ -170,6 +171,9 @@ _SYSTEM_PROMPT_BODY = (
     "  non aggiungere invece riempitivi o esitazioni.\n"
     "- Fai UNA domanda alla volta e procedi al passo successivo solo dopo aver\n"
     "  ricevuto la risposta del chiamante.\n"
+    "- La descrizione di un immobile è SEMPRE una sola frase, con al massimo\n"
+    "  tre dati. Chi ascolta al telefono non trattiene un elenco, e un elenco\n"
+    "  lungo fa riattaccare.\n"
     "\n"
     "# Strumenti\n"
     "Usa solo gli strumenti effettivamente disponibili in questa sessione:\n"
@@ -209,7 +213,11 @@ _SYSTEM_PROMPT_BODY = (
     "   prima: 'Può darmi l'indirizzo o la via dell'immobile?'\n"
     "   Solo dopo aver ottenuto un indirizzo usa get_listing_by_address.\n"
     "2. Se trovato: usa subito mark_listing_interest con l'indirizzo esatto\n"
-    "   dell'immobile, poi conferma che è disponibile e descrivi brevemente.\n"
+    "   dell'immobile, poi conferma in UNA frase che è disponibile citando al\n"
+    "   massimo TRE dati essenziali (tipo, locali o metratura, prezzo).\n"
+    "   NON elencare le dotazioni (giardino, terrazzo, garage, box, cucina\n"
+    "   ristrutturata...) e non leggere ad alta voce il campo 'text': i\n"
+    "   dettagli si danno solo se il chiamante li chiede.\n"
     "3. PRIMA di fare domande, di' al chiamante che, per poter presentare\n"
     "   la sua richiesta all'agente immobiliare, hai bisogno di fargli\n"
     "   qualche domanda in più. Solo dopo questa frase di transizione\n"
@@ -246,9 +254,10 @@ _SYSTEM_PROMPT_BODY = (
     "   - Budget massimo?\n"
     "2. Usa search_listings con i parametri raccolti.\n"
     "3. Se nessun risultato: chiedi se vuole provare criteri diversi.\n"
-    "4. Se trovi risultati: descrivili in modo naturale, come farebbe un\n"
-    "   agente umano (non leggere tutti i campi), poi chiedi al chiamante\n"
-    "   se uno di questi immobili lo interessa.\n"
+    "4. Se trovi risultati: presentane UNO alla volta, in UNA frase con al\n"
+    "   massimo TRE dati (zona, locali o metratura, prezzo). Non elencare le\n"
+    "   dotazioni e non leggere tutti i campi. Poi chiedi al chiamante se\n"
+    "   quell'immobile lo interessa.\n"
     "5. Se risponde di sì: usa subito mark_listing_interest con l'indirizzo\n"
     "   esatto di quell'immobile. PRIMA di fare altre domande, di' al\n"
     "   chiamante che, per poter presentare la sua richiesta all'agente immobiliare,\n"
@@ -305,9 +314,11 @@ _SYSTEM_PROMPT_BODY = (
     "- Non terminare mai la chiamata di tua iniziativa, TRANNE nel caso\n"
     "  descritto sotto in '# Come chiudere la chiamata'.\n"
     "- Non inventare mai dati non presenti nei risultati degli strumenti.\n"
-    "- Il campo 'text' contiene la descrizione completa dell'immobile. Usalo per\n"
-    "  rispondere a domande specifiche del chiamante (piano, esposizione, condizioni,\n"
-    "  riscaldamento, ecc.)\n"
+    "- Il campo 'text' contiene la descrizione completa dell'immobile. Serve\n"
+    "  SOLO a rispondere a domande specifiche del chiamante (piano,\n"
+    "  esposizione, condizioni, riscaldamento, ecc.). Non usarlo mai per la\n"
+    "  descrizione iniziale e non recitarlo: al telefono un elenco di\n"
+    "  caratteristiche stanca il chiamante, che riattacca.\n"
     "- Non trasferire mai la chiamata.\n"
     "- Raccogli sempre il nome del chiamante.\n"
     "- NON anticipare mai i prossimi passi della conversazione (es. non dire\n"
@@ -363,6 +374,28 @@ _SYSTEM_PROMPT_BODY = (
 # habit is what leaked "ora chiudo la chiamata" into the goodbye no matter how
 # many times the prompt forbade it. A turn whose only instruction is "say
 # goodbye" has no announcing habit to fall back on.
+# Appended to the system prompt at call time, with the real date filled in.
+# The model otherwise has no clock: asked when the caller was free to visit, it
+# turned "tomorrow" into a guessed weekday ("piatok") and wrote that into the
+# lead. Relative dates are also why the caller's own words are kept — the agent
+# reads the email hours later, when "tomorrow" no longer means the same day.
+_DATETIME_SECTION = (
+    "\n\n# Data e ora\n"
+    "{now}\n"
+    "Questa è l'unica fonte corretta su data e ora: non indovinare mai il\n"
+    "giorno della settimana né la data.\n"
+    "- Quando il chiamante indica un momento in modo relativo ('domani',\n"
+    "  'lunedì', 'la settimana prossima'), calcolalo in base alla data qui\n"
+    "  sopra.\n"
+    "- Quando lo registri con uno strumento, riporta le parole del chiamante\n"
+    "  E la data concreta, es. 'domani (3/8)' o 'lunedì prossimo (5/8)'.\n"
+    "  L'agente legge l'email più tardi, quando 'domani' non è più lo stesso\n"
+    "  giorno.\n"
+    "- Se non è chiaro quale giorno intenda il chiamante, chiediglielo invece\n"
+    "  di supporlo.\n"
+)
+
+
 _FAREWELL_INSTRUCTION = (
     "Di' soltanto le parole di commiato al chiamante, nella lingua che il "
     "chiamante ha usato durante la conversazione, e nient'altro. Esempio in "
@@ -407,6 +440,13 @@ _IT_CONTENT: dict[str, Any] = {
         "Saluta il chiamante e chiedi come puoi aiutarlo."
     ),
     "farewell_instruction": _FAREWELL_INSTRUCTION,
+    "timezone": "Europe/Rome",
+    "weekdays": (
+        "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato",
+        "domenica",
+    ),
+    "now_template": "Oggi è {weekday} {date} e sono le {time}.",
+    "datetime_section": _DATETIME_SECTION,
     "caller_info_labels": _CALLER_INFO_LABELS,
     "summary_instruction": (
         "Sei l'assistente di un'agenzia immobiliare. "
@@ -474,12 +514,32 @@ def _content(locale: str | None) -> dict[str, Any]:
     return _CONTENT.get(locale or "it", _IT_CONTENT)
 
 
+def _now_line(content: dict[str, Any], now: datetime.datetime | None = None) -> str:
+    """Today's date and time, in the tenant's locale and timezone.
+
+    Without this the model has no clock at all, so a caller saying "tomorrow"
+    got a guessed weekday — "piatok" — written into the lead. The weekday comes
+    from a table rather than the platform locale so it reads the same on any
+    host, and the date stays ISO so there is nothing to misparse."""
+    now = now or datetime.datetime.now(ZoneInfo(content["timezone"]))
+    weekday = content["weekdays"][now.weekday()]
+    return content["now_template"].format(
+        weekday=weekday, date=now.strftime("%Y-%m-%d"), time=now.strftime("%H:%M")
+    )
+
+
 def _build_system_prompt(
-    content: dict[str, Any], agency_name: str | None, agent_name: str | None
+    content: dict[str, Any],
+    agency_name: str | None,
+    agent_name: str | None,
+    now: datetime.datetime | None = None,
 ) -> str:
     """Build the system prompt for a locale: inject the tenant's agency/agent
-    name into the first line; the body is the locale's full instruction set."""
-    body = content["system_prompt_body"]
+    name into the first line; the body is the locale's full instruction set,
+    followed by the current date so relative dates can be resolved."""
+    body = content["system_prompt_body"] + content["datetime_section"].format(
+        now=_now_line(content, now)
+    )
     if not agency_name:
         return content["first_line_default"] + body
     name = agent_name or "Apollonia"
@@ -602,7 +662,12 @@ _RECORD_CALLER_INFO_TOOL: dict[str, Any] = {
             },
             "move_in_date": {
                 "type": "string",
-                "description": "Desired move-in date — rentals",
+                "description": (
+                    "Desired move-in date — rentals. Keep the caller's own "
+                    "words and resolve any relative reference against the "
+                    "current date in your instructions, e.g. 'next month "
+                    "(Sept)'. Never guess a weekday or date."
+                ),
             },
             "has_mortgage_preapproval": {
                 "type": "string",
@@ -618,7 +683,14 @@ _RECORD_CALLER_INFO_TOOL: dict[str, Any] = {
             },
             "visit_availability": {
                 "type": "string",
-                "description": "When the caller is available for a viewing — purchases",
+                "description": (
+                    "When the caller is available for a viewing. Keep the "
+                    "caller's own words and resolve any relative reference "
+                    "against the current date in your instructions, e.g. "
+                    "'tomorrow (3 Aug)', 'next Monday (5 Aug)'. Never guess a "
+                    "weekday or date — if it is unclear which day the caller "
+                    "means, ask."
+                ),
             },
         },
         "required": [],

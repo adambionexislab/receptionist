@@ -9,3 +9,7 @@ websockets>=12.0
 twilio>=8.0
 python-multipart>=0.0.9
 stripe>=10.0.0
+# zoneinfo reads the OS tz database, which Linux has and Windows does not.
+# Pinning it here keeps the phone agent's "today is …" identical on Render and
+# on a dev machine instead of raising ZoneInfoNotFoundError on one of them.
+tzdata>=2024.1
