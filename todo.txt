@@ -81,3 +81,5 @@ test: minutes counter
 call bugs: didnt hang up
             listed a listing in presented listing even though she didnt mention it
             it searched for dom n Hlavnej v Pezinku and got 3 resluts including Hlavná 45, košice
+            to much verbosity, dont include examples of what to say
+            

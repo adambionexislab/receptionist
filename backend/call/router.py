@@ -702,9 +702,10 @@ _SESSION_UPDATE: dict[str, Any] = {
                 # does the model reply. threshold is how loud audio must be to
                 # count as speech: too high and quiet/short utterances never
                 # register, so she stays silent until the caller repeats. 0.5 is
-                # the API default; we sit just under 0.6 to catch more real
-                # speech while still ignoring line noise. silence_duration is how
-                # long a pause ends the turn — shorter = snappier replies.
+                # the API default. silence_duration is how long a pause ends the
+                # turn: shorter = snappier replies, but a caller who pauses to
+                # think mid-answer ends their turn early and then talks over the
+                # reply they just triggered.
                 "turn_detection": {
                     "type": "server_vad",
                     "threshold": 0.5,
@@ -855,7 +856,7 @@ async def _reject_call(call_id: str, status_code: int = 603) -> None:
     """Reject an incoming SIP call (default 603 Decline)."""
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            await client.post(
+            resp = await client.post(
                 f"{_OPENAI_REALTIME_BASE}/calls/{call_id}/reject",
                 headers={
                     "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
@@ -863,6 +864,14 @@ async def _reject_call(call_id: str, status_code: int = 603) -> None:
                 },
                 json={"status_code": status_code},
             )
+            # Same trap as the hangup: httpx does not raise on 4xx, so without
+            # this a rejection that never happened still logged as done.
+            if resp.status_code >= 400:
+                logger.error(
+                    "Reject failed for call %s: %s — %s",
+                    call_id, resp.status_code, resp.text,
+                )
+                return
         logger.info("Rejected SIP call %s (%s)", call_id, status_code)
     except Exception as exc:
         logger.error("Reject error for call %s: %s", call_id, exc)
@@ -872,6 +881,30 @@ async def _reject_call(call_id: str, status_code: int = 603) -> None:
 # regardless: generous for a one-sentence goodbye, short enough that a failed
 # response never leaves the caller listening to nothing.
 _FAREWELL_TIMEOUT_SECONDS = 12.0
+
+# How long after the caller stops talking we let silence run before asking for a
+# reply ourselves. Only ever reached when NO response is in flight (a response
+# still generating holds the gate open), so this cannot talk over her — it
+# catches the turn being dropped outright: a commit that produced no response, a
+# response that finished without audio, an interruption that cancelled the reply
+# and left nothing behind. On a phone call dead air is the worst failure mode,
+# and the caller having to prod her is a bug however it came about.
+_REPLY_NUDGE_SECONDS = 4.0
+
+
+def _should_nudge_reply(
+    session: dict[str, Any], response_active: bool, now: float
+) -> bool:
+    """Whether the caller has been left hanging long enough that we should ask
+    for a reply on their behalf.
+
+    Deliberately conservative — every condition here is a reason NOT to speak:
+    nothing is owed, she is already generating an answer, or the call is in the
+    middle of ending and the farewell owns the next turn."""
+    awaiting = session.get("awaiting_reply_since")
+    if not awaiting or response_active or session.get("ending_at"):
+        return False
+    return now - awaiting > _REPLY_NUDGE_SECONDS
 
 
 class _ResponseGate:
@@ -957,20 +990,58 @@ def _farewell_response_event(content: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def _hangup_call(call_id: str) -> None:
-    """Hang up a live SIP call via the OpenAI REST API."""
+# Hanging up is the one call we cannot afford to get wrong and not know about:
+# when it fails the line stays open, the caller has to hang up themselves, and
+# the tenant is billed for the time. So it is retried, and never reported as
+# done unless OpenAI actually accepted it.
+_HANGUP_ATTEMPTS = 3
+_HANGUP_RETRY_DELAY = 1.0
+
+
+async def _hangup_call(call_id: str) -> bool:
+    """Hang up a live SIP call via the OpenAI REST API.
+
+    Returns whether the call is actually down. httpx does not raise on 4xx/5xx,
+    so the previous version logged "Hung up call" on every response it got,
+    including rejections — which is why a call that carried on regardless left
+    a log that looked perfectly healthy."""
     if not call_id:
         logger.warning("Cannot hang up: no call_id")
-        return
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            await client.post(
-                f"{_OPENAI_REALTIME_BASE}/calls/{call_id}/hangup",
-                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+        return False
+    for attempt in range(1, _HANGUP_ATTEMPTS + 1):
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    f"{_OPENAI_REALTIME_BASE}/calls/{call_id}/hangup",
+                    headers={
+                        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                )
+            if resp.status_code == 404:
+                # Already gone — the caller hung up first, or OpenAI ended it.
+                logger.info("Call %s was already ended", call_id)
+                return True
+            if resp.status_code < 400:
+                logger.info("Hung up call %s", call_id)
+                return True
+            logger.error(
+                "Hangup rejected for call %s (attempt %d/%d): %s — %s",
+                call_id, attempt, _HANGUP_ATTEMPTS, resp.status_code, resp.text,
             )
-        logger.info("Hung up call %s", call_id)
-    except Exception as exc:
-        logger.error("Failed to hang up call %s: %s", call_id, exc)
+        except Exception as exc:
+            logger.error(
+                "Hangup error for call %s (attempt %d/%d): %s",
+                call_id, attempt, _HANGUP_ATTEMPTS, exc,
+            )
+        if attempt < _HANGUP_ATTEMPTS:
+            await asyncio.sleep(_HANGUP_RETRY_DELAY)
+    logger.error(
+        "Call %s is STILL UP after %d hangup attempts — the caller will have "
+        "to hang up themselves",
+        call_id, _HANGUP_ATTEMPTS,
+    )
+    return False
 
 
 @router.post("/incoming")
@@ -1084,6 +1155,9 @@ async def incoming_call(request: Request) -> Response:
         # clock at end_call, so the watchdog can give up waiting for it.
         "ending": False,
         "ending_at": None,
+        # Loop clock at which the caller finished a turn with no reply yet.
+        # None whenever nothing is owed. See _REPLY_NUDGE_SECONDS.
+        "awaiting_reply_since": None,
         # Wall-clock call start, stamped once the call is accepted (see
         # _run_call); used to compute duration_seconds when the call is persisted.
         "started_at": None,
@@ -1591,9 +1665,23 @@ async def _run_call(
                         # The turn is over: anything queued mid-response — the
                         # reply to a tool result, the farewell — goes out now.
                         await gate.closed()
+                        # A response that ends without speaking leaves the caller
+                        # in silence, so say so plainly rather than leaving a gap
+                        # in the log that looks like nothing happened at all.
+                        resp = msg.get("response") or {}
+                        status = resp.get("status")
+                        if status != "completed":
+                            logger.warning(
+                                "Response %s for call %s: %s",
+                                status,
+                                call_id,
+                                resp.get("status_details"),
+                            )
 
                     elif etype == "response.output_audio_transcript.done":
                         session["last_speech_at"] = asyncio.get_event_loop().time()
+                        # She answered, so nothing is owed to the caller.
+                        session["awaiting_reply_since"] = None
                         text = msg.get("transcript", "").strip()
                         if text:
                             logger.info("Apollonia: %s", text)
@@ -1746,7 +1834,18 @@ async def _run_call(
 
                     elif etype == "input_audio_buffer.speech_started":
                         session["last_speech_at"] = asyncio.get_event_loop().time()
+                        # Caller is talking again: whatever we were waiting on is
+                        # moot, and their new turn restarts the clock.
+                        session["awaiting_reply_since"] = None
                         logger.info("Caller speaking")
+
+                    elif etype == "input_audio_buffer.speech_stopped":
+                        # The caller's turn just ended, so a reply is now owed.
+                        # Logged because "Caller speaking" alone never showed
+                        # where a turn finished, which is exactly the boundary
+                        # a dropped reply goes missing at.
+                        session["awaiting_reply_since"] = asyncio.get_event_loop().time()
+                        logger.info("Caller finished speaking")
 
                     elif etype == "error":
                         # Pull the code out rather than dumping the envelope:
@@ -1777,6 +1876,21 @@ async def _run_call(
                         )
                         await _hangup_call(call_id)
                         break
+                    # The caller stopped talking and nothing came back. Ask for
+                    # the reply ourselves rather than making them prod her.
+                    # Skipped while a response is in flight (that is just her
+                    # thinking) and once end_call has fired (the farewell owns
+                    # what happens next).
+                    if _should_nudge_reply(session, gate.active, now):
+                        logger.warning(
+                            "No reply %.0fs after the caller finished — "
+                            "requesting one for call %s",
+                            _REPLY_NUDGE_SECONDS,
+                            call_id,
+                        )
+                        session["awaiting_reply_since"] = None
+                        await gate.request()
+
                     if now - session["last_speech_at"] > 100:
                         logger.info("100s silence — hanging up call %s", call_id)
                         await _hangup_call(call_id)
