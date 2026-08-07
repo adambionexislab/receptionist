@@ -93,6 +93,10 @@ class Settings(BaseSettings):
     ACQUISIZIONE_ENABLED: bool = False
     # Live streaming transcription model for the browser WebRTC meeting capture.
     REALTIME_TRANSCRIBE_MODEL: str = "gpt-realtime-whisper"
+    # Latency/accuracy tradeoff for that model: minimal|low|medium|high|xhigh.
+    # A seller meeting is transcribed for later extraction, not read live word
+    # by word, so we buy the model the most audio context it will take.
+    REALTIME_TRANSCRIBE_DELAY: str = "xhigh"
     # Property photo enhancement (declutter/relight/straighten).
     IMAGE_EDIT_MODEL: str = "gpt-image-2"
 

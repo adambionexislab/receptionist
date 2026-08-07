@@ -1,13 +1,5 @@
-change the silenece hang up time. right now 100 seconds
-apify scraping of immobiliare.it  - done (u will need paid apify account)
-change language when other language is detected - done - need to test
-have your phoneringing display an apollonIA button that will redirect the phonecall to apollonIA
-    - PROMPT FOR THIS: multitentant_prompt.txt
+
 the scraping is paused. you need to tell claude to unpause it in this session ( preferebly) : Replace GitHub CSV ...
-goe context - if i ask close to ..., lombardy, provincia, 
-handle ambiguity
-twilio upgrade
-stripe
 cookies
 analytics
 calling leads
@@ -25,14 +17,8 @@ requests (number of rooms, price, ...) When the scraping finds a new listing
  tell me how you plan to implemnet this feature.
  ----------------
 
-add more text to knowledge base for the demo
-finish the lead generation - insructions in the claude code chat: implement AI lead generation....
-filter the leads -send oly the ones that are usefull 
 you need to add this env to render: CALENDLY_LINK  ---more in: implement AI lead generation....
 
-add to terms and conditions that tennant is responsible for carrier forwarding charges
-
-in slovak: stripe slovak localization, scraping nehnutelnosti/reality, lead gen for slovakia
 prezzo su richiesta - deve sapere gestirlo
 
 confirmation email is now in english for both markets you need to change that
@@ -43,27 +29,18 @@ Signup field immobiliare_url is still required by the form + backend. A Slovak a
 in the apollonia knowledge base Sk mark down file used for demo in slovak the immobiliare.it is still mentioned
 immobiliare.it URL in the form in slovak (and italian)
 
-should ask about kids in rentals and time of visit
-
-fix faq, pricing and all the info on the landing page
-
-build the meeting summary and image editing in dashboard
-
 
 photo editing: for now one at a time later with higher openai tier i can do bulk
-photo editing: drag and drop
 
 landing page: add ai tools section and credits included in plans
 Landing page: funzionalita should explan that she checkes availabiliy, answers questions, takes messages an so on . ad these as new cards
 landing page: access to the tools for non subscribed
 
-the counter cards in dashboard are for calendar month and should be for the subscribtion month
+the minute cards in dashboard are for calendar month and should be for the subscribtion month
 
 video generation using runway gen-4.5 
-    helicopter reveal (with agency logo)
+    helicopter reveal (with agency logo) possibli other visual hooks to choose from
     walktrough from photos of the rooms
-
-manage agents in dashboard, his name and number, phone number and email@adress, then each listing needs to have a number of the agent
 
 agency description window so apollonia can answer any questions about the agency.
 
@@ -72,14 +49,20 @@ settings to add to the dashboard:
     - If the agency wants Cc of every email in agency mail
 
 Test: if caller is interested she starts qualifying questions and he interrupt her to ask if they have something else (he might be interesten in more listings)
-
+      removed the examples after questions. test it.
+      if the transcriptiion tool isnt too slow or buggy. if so consult increase transcription .... (session)
 in the overview have each call have a field to witch adress(agent) the email was sent
 
 if i open the dashboard on the phone. is the phone number in contacts clickcable ? 
 
 test: minutes counter
-call bugs: didnt hang up
+ad credits remaining to overview, overcharge that will be invoiced.
+
+add to ToS and landing page veverything about tools and credits.
+
+call bugs:
             listed a listing in presented listing even though she didnt mention it
             it searched for dom n Hlavnej v Pezinku and got 3 resluts including Hlavná 45, košice
-            to much verbosity, dont include examples of what to say
-            
+
+
+

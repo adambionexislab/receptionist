@@ -56,6 +56,9 @@ services:
         value: "false"
       - key: REALTIME_TRANSCRIBE_MODEL
         value: gpt-realtime-whisper
+      # minimal|low|medium|high|xhigh — accuracy over live immediacy.
+      - key: REALTIME_TRANSCRIBE_DELAY
+        value: xhigh
       # Text reasoning models — keep these two in step unless one task is
       # deliberately being pinned to a different model.
       - key: SUMMARY_MODEL

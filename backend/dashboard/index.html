@@ -278,9 +278,21 @@
   .acq-live-header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
   .acq-rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
   .acq-rec-dot.live { background: var(--red); animation: acq-pulse 1.4s ease-in-out infinite; }
+  /* Reconnecting, or recording nothing: steady amber, never the confident
+     pulsing red — the header must not claim to be capturing speech it isn't. */
+  .acq-rec-dot.warn { background: var(--amber); }
   @keyframes acq-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
   .acq-transcript { padding: 20px; min-height: 320px; max-height: 60vh; overflow-y: auto; white-space: pre-wrap; line-height: 1.7; font-size: .95rem; }
   .acq-transcript:empty::before { content: attr(data-placeholder); color: var(--text-dim); }
+  /* Primary action plus its "go back" escape hatch, on one row. */
+  .acq-step-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  /* Tail of the recovered transcript — enough for the agent to recognise which
+     meeting this was before deciding to resume it. */
+  .acq-resume-excerpt {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; margin-bottom: 16px; color: var(--text-dim); font-size: .85rem;
+    line-height: 1.6; max-height: 120px; overflow-y: auto; white-space: pre-wrap;
+  }
   #acq-review h3 { font-size: .95rem; margin: 22px 0 12px; }
   #acq-review h3:first-child { margin-top: 0; }
   .acq-tool-title { font-size: 1.05rem; margin: 32px 0 14px; }
@@ -596,6 +608,22 @@
       <h2 id="acq-title">Strumenti AI</h2>
 
       <h3 id="acq-meeting-title" class="acq-tool-title">ApollonIA Meeting</h3>
+
+      <!-- Only shown when the server still holds a meeting nobody finished:
+           a closed browser or a killed tab leaves the transcript on the
+           server but takes the agent's way back to it with the page. -->
+      <div id="acq-resume" class="card hidden">
+        <div class="acq-pad">
+          <p id="acq-resume-text" class="acq-consent-text"></p>
+          <div id="acq-resume-excerpt" class="acq-resume-excerpt"></div>
+          <div class="err" id="acq-resume-err"></div>
+          <div class="acq-step-actions">
+            <button class="btn" id="acq-resume-start-btn"></button>
+            <button class="btn ghost" id="acq-resume-discard-btn"></button>
+          </div>
+        </div>
+      </div>
+
       <div id="acq-consent" class="card">
         <div class="acq-pad">
           <p id="acq-consent-text" class="acq-consent-text"></p>
@@ -613,6 +641,7 @@
           <span class="acq-rec-dot" id="acq-rec-dot"></span>
           <span id="acq-status-text"></span>
           <div class="spacer"></div>
+          <button class="btn ghost" id="acq-cancel-btn"></button>
           <button class="btn ghost" id="acq-pause-btn"></button>
           <button class="btn" id="acq-finish-btn"></button>
         </div>
@@ -623,7 +652,10 @@
         <div class="acq-pad">
           <p id="acq-processing-text"></p>
           <div class="err" id="acq-finish-err"></div>
-          <button class="btn ghost hidden" id="acq-finish-retry-btn"></button>
+          <div class="acq-step-actions">
+            <button class="btn ghost hidden" id="acq-finish-retry-btn"></button>
+            <button class="btn ghost hidden" id="acq-finish-back-btn"></button>
+          </div>
         </div>
       </div>
 
@@ -647,7 +679,10 @@
           <textarea id="acq-notes" class="acq-textarea acq-notes"></textarea>
 
           <div class="err" id="acq-review-err"></div>
-          <button class="btn" id="acq-confirm-btn"></button>
+          <div class="acq-step-actions">
+            <button class="btn" id="acq-confirm-btn"></button>
+            <button class="btn ghost" id="acq-review-back-btn"></button>
+          </div>
         </div>
       </div>
 
@@ -847,6 +882,8 @@
       acq_start_btn: "Inizia",
       acq_status_recording: "Trascrizione in corso",
       acq_status_paused: "In pausa",
+      acq_status_reconnecting: "Connessione persa, riconnessione…",
+      acq_status_quiet: "Nessun parlato rilevato",
       acq_pause_btn: "Pausa",
       acq_resume_btn: "Riprendi",
       acq_finish_btn: "Termina riunione",
@@ -856,7 +893,17 @@
       acq_err_conn: "Impossibile avviare la trascrizione. Riprova.",
       acq_processing_text: "Elaborazione della trascrizione in corso…",
       acq_err_finish: "Elaborazione non riuscita.",
+      acq_err_empty: "Nessuna trascrizione: la riunione non ha registrato parlato. Avvia una nuova riunione.",
       acq_retry_btn: "Riprova",
+      acq_cancel_btn: "Annulla",
+      acq_back_btn: "Nuova riunione",
+      acq_discard_confirm: "Confermi?",
+      acq_resume_text:
+        "Una riunione precedente è rimasta aperta senza essere completata. " +
+        "Puoi riprenderla e continuare a trascrivere sopra il testo già raccolto.",
+      acq_resume_meeting_btn: "Riprendi riunione",
+      acq_resume_discard_btn: "Scarta",
+      acq_err_resume: "Impossibile riprendere la riunione. Riprova.",
       acq_review_agent_title: "Agente incaricato",
       acq_agent_label: "Chi gestisce questo immobile?",
       acq_agent_placeholder: "— Seleziona un agente —",
@@ -977,6 +1024,8 @@
       acq_start_btn: "Spustiť",
       acq_status_recording: "Prebieha prepis",
       acq_status_paused: "Pozastavené",
+      acq_status_reconnecting: "Spojenie prerušené, obnovuje sa…",
+      acq_status_quiet: "Nezaznamenaná žiadna reč",
       acq_pause_btn: "Pozastaviť",
       acq_resume_btn: "Pokračovať",
       acq_finish_btn: "Ukončiť stretnutie",
@@ -986,7 +1035,17 @@
       acq_err_conn: "Prepis sa nepodarilo spustiť. Skúste znova.",
       acq_processing_text: "Spracúva sa prepis…",
       acq_err_finish: "Spracovanie zlyhalo.",
+      acq_err_empty: "Žiadny prepis: stretnutie nezaznamenalo žiadnu reč. Spustite nové stretnutie.",
       acq_retry_btn: "Skúsiť znova",
+      acq_cancel_btn: "Zrušiť",
+      acq_back_btn: "Nové stretnutie",
+      acq_discard_confirm: "Potvrdiť?",
+      acq_resume_text:
+        "Predchádzajúce stretnutie zostalo otvorené a nebolo dokončené. " +
+        "Môžete v ňom pokračovať a nadviazať na už zaznamenaný text.",
+      acq_resume_meeting_btn: "Pokračovať v stretnutí",
+      acq_resume_discard_btn: "Zahodiť",
+      acq_err_resume: "Stretnutie sa nepodarilo obnoviť. Skúste znova.",
       acq_review_agent_title: "Zodpovedný maklér",
       acq_agent_label: "Kto bude túto nehnuteľnosť spravovať?",
       acq_agent_placeholder: "— Vyberte makléra —",
@@ -1077,7 +1136,11 @@
     "acq-consent-text": "acq_consent_text", "acq-consent-label": "acq_consent_label",
     "acq-start-btn": "acq_start_btn", "acq-finish-btn": "acq_finish_btn",
     "acq-new-btn": "acq_new_btn", "acq-processing-text": "acq_processing_text",
-    "acq-finish-retry-btn": "acq_retry_btn",
+    "acq-finish-retry-btn": "acq_retry_btn", "acq-cancel-btn": "acq_cancel_btn",
+    "acq-finish-back-btn": "acq_back_btn", "acq-review-back-btn": "acq_back_btn",
+    "acq-resume-text": "acq_resume_text",
+    "acq-resume-start-btn": "acq_resume_meeting_btn",
+    "acq-resume-discard-btn": "acq_resume_discard_btn",
     "acq-review-agent-title": "acq_review_agent_title",
     "acq-agent-label": "acq_agent_label",
     "acq-review-fields-title": "acq_review_fields_title",
@@ -1130,7 +1193,13 @@
       t.classList.toggle("active", t.dataset.view === name);
     // Coming back from the Agenti tab may mean a new agent to pick from in a
     // review that is still open.
-    if (name === "acquisizione") syncAcqAgentOptions();
+    if (name === "acquisizione") {
+      syncAcqAgentOptions();
+      // Opening the tool is the moment to offer back a meeting the browser
+      // lost — a closed tab leaves the transcript on the server with nothing
+      // pointing at it.
+      if (window.AcqCheckStranded) window.AcqCheckStranded();
+    }
   }
 
   async function loadSummary() {
@@ -1797,6 +1866,11 @@
     if (!section) return;
 
     const consentStep = $("acq-consent");
+    const resumeStep = $("acq-resume");
+    const resumeExcerpt = $("acq-resume-excerpt");
+    const resumeErr = $("acq-resume-err");
+    const resumeStartBtn = $("acq-resume-start-btn");
+    const resumeDiscardBtn = $("acq-resume-discard-btn");
     const liveStep = $("acq-live");
     const processingStep = $("acq-processing");
     const reviewStep = $("acq-review");
@@ -1806,12 +1880,16 @@
     const consentErr = $("acq-consent-err");
     const pauseBtn = $("acq-pause-btn");
     const finishBtn = $("acq-finish-btn");
+    const cancelBtn = $("acq-cancel-btn");
+    const finishBackBtn = $("acq-finish-back-btn");
+    const reviewBackBtn = $("acq-review-back-btn");
     const newBtn = $("acq-new-btn");
     const recDot = $("acq-rec-dot");
     const statusText = $("acq-status-text");
     const transcriptEl = $("acq-transcript");
     const finishErr = $("acq-finish-err");
     const finishRetryBtn = $("acq-finish-retry-btn");
+    const processingText = $("acq-processing-text");
     const fieldsGrid = $("acq-fields-grid");
     const fieldsToggleBtn = $("acq-fields-toggle");
     const listingTextArea = $("acq-listing-text");
@@ -1851,14 +1929,32 @@
     // input_audio_buffer.commit), so we commit on natural pauses in speech
     // instead of blindly on a timer, to avoid cutting words in half. A max
     // chunk length is a safety net for a caller who never pauses.
-    const SILENCE_MS = 700;
-    const MAX_CHUNK_MS = 15000;
+    //
+    // These are tuned for accuracy, not for live readability: every commit is
+    // a hard context boundary the model can't see across, so longer chunks
+    // (and pauses long enough to be sentence ends rather than mid-sentence
+    // breaths) mean fewer words mangled at the seams. The ceiling stays under
+    // ~30s, which is the audio window Whisper-family models work in.
+    const SILENCE_MS = 1200;
+    const MAX_CHUNK_MS = 25000;
     // Unconditional commit heartbeat — see the dc "open" handler in
-    // openSession() for why this can't just rely on the analyser.
-    const COMMIT_INTERVAL_MS = 4000;
+    // openSession() for why this can't just rely on the analyser. This is the
+    // real chunk length whenever the analyser never fires, so it's set long
+    // enough to be a usable chunk on its own, not just a liveness poke.
+    const COMMIT_INTERVAL_MS = 10000;
     const AUTOSAVE_MS = 8000;
     // Reconnect comfortably before the hard 60-minute session cap.
     const SESSION_MAX_MS = 55 * 60 * 1000;
+    // How often the live header re-evaluates whether it's telling the truth.
+    const HEALTH_TICK_MS = 2000;
+    // How long the header may claim to be recording without a single
+    // transcribed word before it says otherwise. Long enough that a lull in
+    // the conversation doesn't trip it, short enough that a dead mic gets
+    // noticed while the meeting can still be rescued.
+    const QUIET_WARN_MS = 45000;
+    // An ICE "disconnected" often heals itself within a few seconds; a "failed"
+    // or a closed data channel never does.
+    const DROP_GRACE_MS = 4000;
 
     let recordId = null;
     let meetingActive = false;
@@ -1869,21 +1965,65 @@
     let audioCtx = null, analyser = null, rafId = null;
     let hasPendingAudio = false, belowThresholdSince = null, lastCommitAt = 0;
     let commitSafetyTimer = null, autosaveTimer = null, reconnectTimer = null;
+    let healthTimer = null, dropTimer = null;
+    let reconnecting = false;      // a reopen is in flight; don't start another
+    let sessionDown = true;        // no working session yet; cleared once one opens
+    let reopenBackoffMs = 0;       // grows while reopens keep failing
+    let lastSavedTranscript = "";  // what the server already has, to skip no-op saves
+    let strandedRecord = null;     // the meeting /resumable offered back, if any
     let wakeLock = null, noSleepVideo = null, noSleepCanvasTimer = null;
     let currentMissing = [];
     let currentFields = {};   // the full extracted set, incl. fields not rendered
     let showAllFields = false;
     let itemDeltaText = {}; // item_id -> delta text seen so far, for the completed-event fallback
+    let lastTranscriptEventAt = 0; // drives the end-of-meeting flush wait below
+
+    // What the live header is actually entitled to claim. The red pulsing dot
+    // used to be unconditional, so a session that died mid-meeting looked
+    // exactly like one that was working: the agent kept talking, nothing was
+    // transcribed, and the loss only surfaced at Termina riunione.
+    function liveState() {
+      if (!meetingActive) return "recording";
+      if (paused) return "paused";
+      // sessionDown covers the gaps between retries: a peer connection that has
+      // already failed can still be holding a data channel that reads "open",
+      // so waiting on the next attempt must not look like a healthy session.
+      if (reconnecting || sessionDown || !dc || dc.readyState !== "open") return "reconnecting";
+      // Connected, but no speech is coming back — a muted or hijacked mic
+      // looks like this, and so does a genuinely silent room. Neither is
+      // "trascrizione in corso".
+      if (Date.now() - lastTranscriptEventAt > QUIET_WARN_MS) return "quiet";
+      return "recording";
+    }
 
     function updateLiveLabels() {
       const s = S();
-      if (statusText) statusText.textContent = paused ? s.acq_status_paused : s.acq_status_recording;
+      const state = liveState();
+      if (statusText) {
+        statusText.textContent = {
+          recording: s.acq_status_recording,
+          paused: s.acq_status_paused,
+          reconnecting: s.acq_status_reconnecting,
+          quiet: s.acq_status_quiet,
+        }[state];
+      }
       if (pauseBtn) pauseBtn.textContent = paused ? s.acq_resume_btn : s.acq_pause_btn;
-      if (recDot) recDot.classList.toggle("live", !paused);
+      if (recDot) {
+        recDot.classList.toggle("live", state === "recording");
+        recDot.classList.toggle("warn", state === "reconnecting" || state === "quiet");
+      }
     }
-    // applyStrings() calls this on every locale switch so the two dynamic
-    // labels (status/pause-resume) stay in sync with static TEXT_IDS strings.
-    window.AcqRefreshLiveLabels = updateLiveLabels;
+
+    // applyStrings() calls this on every locale switch so the dynamic labels
+    // stay in sync with the static TEXT_IDS ones — and so a half-confirmed
+    // discard can't survive under a freshly relabelled button, one stray click
+    // from throwing the meeting away. Deliberately not part of
+    // updateLiveLabels(): the health tick calls that every couple of seconds
+    // and would eat the confirmation before the agent could give it.
+    window.AcqRefreshLiveLabels = function () {
+      disarmDiscard();
+      updateLiveLabels();
+    };
 
     function renderTranscript() {
       transcriptEl.textContent = transcript;
@@ -1892,6 +2032,9 @@
 
     function resetToConsent() {
       consentStep.classList.remove("hidden");
+      resumeStep.classList.add("hidden");
+      resumeErr.textContent = "";
+      strandedRecord = null;
       liveStep.classList.add("hidden");
       processingStep.classList.add("hidden");
       reviewStep.classList.add("hidden");
@@ -1899,10 +2042,72 @@
       consentCheck.checked = false;
       startBtn.disabled = true;
       consentErr.textContent = "";
+      finishErr.textContent = "";
+      finishRetryBtn.classList.add("hidden");
+      finishBackBtn.classList.add("hidden");
+      processingText.classList.remove("hidden");
+      disarmDiscard();
       recordId = null;
       transcript = "";
       itemDeltaText = {};
       renderTranscript();
+    }
+
+    // ── "Go back": leave a meeting and return to the consent screen ────────
+    // Every step past consent needs a way out. Without one, a meeting whose
+    // extraction can never succeed — an empty transcript is the usual case,
+    // and no amount of retrying changes that — leaves the agent stuck on a
+    // dead card with no way to record the meeting again.
+    //
+    // Nothing is deleted server-side: the record stays as it is (still
+    // 'transcribing', never published), so an abandoned transcript remains in
+    // the DB rather than being silently destroyed from the browser.
+    let armedBtn = null;
+    let armTimer = null;
+
+    function disarmDiscard() {
+      if (armTimer) { clearTimeout(armTimer); armTimer = null; }
+      if (armedBtn) {
+        armedBtn.textContent = S()[armedBtn.dataset.label];
+        armedBtn = null;
+      }
+    }
+
+    function abandonMeeting() {
+      // Tell the server this one was walked away from on purpose, so it's
+      // never offered back as a meeting to resume. Best-effort and not
+      // awaited: the agent has already left this screen either way, and the
+      // record keeps its transcript regardless.
+      if (recordId) {
+        api("/acquisizione/" + recordId + "/abandon", { method: "POST" }).catch(() => {});
+      }
+      // Before cleanupConnection(), not after: closing the data channel fires
+      // the same events as a dropped session, and a teardown must not look
+      // like something to reconnect to.
+      meetingActive = false;
+      cleanupConnection();
+      releaseWakeLock();
+      paused = false;
+      resetToConsent();
+    }
+
+    // Two-click confirm rather than window.confirm(), matching how deleting a
+    // listing asks for a deliberate second click.
+    function wireDiscard(btn, labelKey) {
+      btn.dataset.label = labelKey;
+      btn.addEventListener("click", () => {
+        // Only transcribed speech is worth protecting — with nothing captured
+        // there's nothing to lose, so don't make the agent click twice.
+        if (transcript.trim() && armedBtn !== btn) {
+          disarmDiscard();
+          armedBtn = btn;
+          btn.textContent = S().acq_discard_confirm;
+          armTimer = setTimeout(disarmDiscard, 6000);
+          return;
+        }
+        disarmDiscard();
+        abandonMeeting();
+      });
     }
 
     // ── Wake Lock (+ fallback) ────────────────────────────────────────────
@@ -1960,6 +2165,9 @@
       if (document.visibilityState === "visible" && meetingActive && !paused) {
         acquireWakeLock();
       }
+      // Going away is the last reliable moment to save on mobile: a hidden tab
+      // may be killed without another event ever firing.
+      if (document.visibilityState === "hidden") flushTranscriptBeacon();
     });
 
     // ── Amplitude analyser: drives silence-triggered buffer commits ───────
@@ -2024,15 +2232,45 @@
 
     // ── Transcript autosave (defensive — a crash mid-meeting shouldn't lose it) ─
     async function autosaveTranscript() {
-      if (!recordId) return;
+      if (!recordId || transcript === lastSavedTranscript) return;
+      const pending = transcript;
       try {
-        await api("/acquisizione/" + recordId + "/transcript", {
+        const resp = await api("/acquisizione/" + recordId + "/transcript", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transcript }),
+          body: JSON.stringify({ transcript: pending }),
         });
+        // Only mark it saved if the server actually took it; otherwise the
+        // next tick tries again rather than assuming the words are safe.
+        if (resp.ok) lastSavedTranscript = pending;
       } catch (_) { /* best-effort; the next tick retries */ }
     }
+
+    // Last chance to save. A closing tab cancels an in-flight fetch, and on a
+    // phone a backgrounded tab can be killed outright without ever firing
+    // another event — sendBeacon is the one request the browser promises to
+    // deliver anyway. It can only POST, which is why the transcript endpoint
+    // accepts both verbs (see acquisizione/router.py).
+    function flushTranscriptBeacon() {
+      if (!recordId || !meetingActive || transcript === lastSavedTranscript) return;
+      try {
+        const body = new Blob([JSON.stringify({ transcript })], { type: "application/json" });
+        if (navigator.sendBeacon("/acquisizione/" + recordId + "/transcript", body)) {
+          lastSavedTranscript = transcript;
+        }
+      } catch (_) { /* there is nothing better to try at this point */ }
+    }
+
+    window.addEventListener("pagehide", flushTranscriptBeacon);
+
+    // Browsers ignore custom wording here, so the only thing that matters is
+    // that the prompt appears at all — for a live meeting, and for a finished
+    // one still sitting unconfirmed in the review form.
+    window.addEventListener("beforeunload", (e) => {
+      if (!meetingActive && reviewStep.classList.contains("hidden")) return;
+      e.preventDefault();
+      e.returnValue = "";
+    });
 
     // ── WebRTC session (open once, transparently reopened before the 60-min cap) ─
     async function openSession() {
@@ -2072,9 +2310,11 @@
         try { evt = JSON.parse(e.data); } catch (_) { return; }
         if (evt.type === "conversation.item.input_audio_transcription.delta" && evt.delta) {
           itemDeltaText[evt.item_id] = (itemDeltaText[evt.item_id] || "") + evt.delta;
+          lastTranscriptEventAt = Date.now();
           transcript += evt.delta;
           renderTranscript();
         } else if (evt.type === "conversation.item.input_audio_transcription.completed") {
+          lastTranscriptEventAt = Date.now();
           // Some chunks (e.g. very short ones, committed on the fixed
           // heartbeat rather than a natural pause) may never stream deltas
           // and instead arrive only as a single completed event with the
@@ -2098,14 +2338,26 @@
           console.log("Acquisizione event", evt.type, evt);
         }
       });
-      newDc.addEventListener("close", () => console.log("Acquisizione: data channel closed"));
+      newDc.addEventListener("close", () => {
+        console.log("Acquisizione: data channel closed");
+        handleDrop(newPc, "data channel closed", 0);
+      });
       newDc.addEventListener("error", (e) => console.error("Acquisizione: data channel error", e));
 
       const connected = new Promise((resolve, reject) => {
         newPc.onconnectionstatechange = () => {
-          console.log("Acquisizione: connection state =", newPc.connectionState);
-          if (newPc.connectionState === "connected") resolve();
-          else if (newPc.connectionState === "failed") reject(new Error("connection failed"));
+          const state = newPc.connectionState;
+          console.log("Acquisizione: connection state =", state);
+          if (state === "connected") resolve();
+          else if (state === "failed") {
+            // Before this session goes live the reject above ends the attempt;
+            // after it, the promise is already settled and this is a
+            // mid-meeting drop to recover from.
+            reject(new Error("connection failed"));
+            handleDrop(newPc, "connection failed", 0);
+          } else if (state === "disconnected") {
+            handleDrop(newPc, "connection disconnected", DROP_GRACE_MS);
+          }
         };
         newPc.oniceconnectionstatechange = () => {
           console.log("Acquisizione: ICE connection state =", newPc.iceConnectionState);
@@ -2145,15 +2397,55 @@
 
     function scheduleReconnect() {
       if (reconnectTimer) clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(() => {
-        if (!meetingActive) return;
-        openSession().catch((err) => {
-          // Keep the existing connection (if it's still alive) and retry
-          // shortly; a transient network drop shouldn't end the meeting.
-          console.error("Acquisizione reconnect failed, retrying", err);
-          reconnectTimer = setTimeout(() => { if (meetingActive) openSession().catch(() => {}); }, 5000);
-        });
-      }, SESSION_MAX_MS);
+      reconnectTimer = setTimeout(() => reopenSession("session age cap"), SESSION_MAX_MS);
+    }
+
+    // ── Surviving a session that dies mid-meeting ─────────────────────────
+    // A dropped connection used to be logged and nothing else: the agent went
+    // on talking to a dead session for the rest of the meeting and found out
+    // at Termina riunione, when the transcript came back short or empty. The
+    // reopen path already exists for the 60-minute cap and keeps the
+    // client-side transcript buffer, so recovery is the same move, just
+    // triggered by the drop.
+    function handleDrop(deadPc, reason, graceMs) {
+      // A session we've already replaced or torn down closes its own channel
+      // on the way out; that isn't a drop worth chasing.
+      if (!meetingActive || deadPc !== pc) return;
+      if (dropTimer) clearTimeout(dropTimer);
+      dropTimer = setTimeout(() => {
+        dropTimer = null;
+        if (!meetingActive || deadPc !== pc) return;
+        // Healed itself while we waited (the usual outcome of a brief ICE
+        // "disconnected") — leave the working session alone.
+        if (pc.connectionState === "connected" && dc && dc.readyState === "open") return;
+        reopenSession(reason);
+      }, graceMs);
+    }
+
+    async function reopenSession(reason) {
+      if (!meetingActive || reconnecting) return;
+      reconnecting = true;
+      // Stays set across the whole recovery, backoff gaps included, and is
+      // cleared only by a session that actually opens.
+      sessionDown = true;
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      console.log("Acquisizione: reopening session —", reason);
+      updateLiveLabels();  // the header stops claiming to be recording
+      try {
+        await openSession();
+        sessionDown = false;
+        reopenBackoffMs = 0;
+      } catch (err) {
+        console.error("Acquisizione: session reopen failed", err);
+        // Back off rather than hammering a network that's simply gone; the
+        // meeting stays open and the transcript buffer is untouched, so a
+        // later attempt still picks up where this one left off.
+        reopenBackoffMs = Math.min(reopenBackoffMs ? reopenBackoffMs * 2 : 2000, 30000);
+        reconnectTimer = setTimeout(() => reopenSession(reason), reopenBackoffMs);
+      } finally {
+        reconnecting = false;
+        updateLiveLabels();
+      }
     }
 
     function cleanupConnection() {
@@ -2161,6 +2453,10 @@
       if (commitSafetyTimer) { clearInterval(commitSafetyTimer); commitSafetyTimer = null; }
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       if (autosaveTimer) { clearInterval(autosaveTimer); autosaveTimer = null; }
+      if (healthTimer) { clearInterval(healthTimer); healthTimer = null; }
+      if (dropTimer) { clearTimeout(dropTimer); dropTimer = null; }
+      reopenBackoffMs = 0;
+      sessionDown = true;
       if (dc) { try { dc.close(); } catch (_) {} dc = null; }
       if (pc) { try { pc.close(); } catch (_) {} pc = null; }
       if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
@@ -2169,6 +2465,96 @@
     // ── UI wiring ──────────────────────────────────────────────────────────
     consentCheck.addEventListener("change", function () {
       startBtn.disabled = !this.checked;
+    });
+
+    // Mic, session and the timers that keep a meeting alive — shared by Inizia
+    // (a brand-new record) and Riprendi (one the browser lost). The caller owns
+    // recordId and the transcript buffer before calling in, so resuming picks
+    // up with the recovered text already in place.
+    async function beginSession() {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (_) {
+        throw { userMessage: S().acq_err_mic };
+      }
+
+      await openSession();
+
+      sessionDown = false;
+      paused = false;
+      meetingActive = true;
+      hasPendingAudio = false;
+      belowThresholdSince = null;
+      lastTranscriptEventAt = Date.now();
+      startAnalyser(micStream);
+      autosaveTimer = setInterval(autosaveTranscript, AUTOSAVE_MS);
+      healthTimer = setInterval(updateLiveLabels, HEALTH_TICK_MS);
+
+      consentStep.classList.add("hidden");
+      resumeStep.classList.add("hidden");
+      liveStep.classList.remove("hidden");
+      renderTranscript();
+      updateLiveLabels();
+    }
+
+    // ── Resuming a meeting the browser lost ───────────────────────────────
+    // Checked when the tab is opened: that's when the agent is looking, and
+    // the answer can't change while they're on another tab. Only ever offered
+    // over an idle consent screen — never on top of a meeting in progress.
+    async function checkStranded() {
+      if (meetingActive || recordId) return;
+      const busy = [liveStep, processingStep, reviewStep, confirmedStep]
+        .some((step) => !step.classList.contains("hidden"));
+      if (busy) return;
+      try {
+        const resp = await api("/acquisizione/resumable");
+        if (!resp.ok) return;
+        const record = (await resp.json()).record;
+        if (!record) return;
+        strandedRecord = record;
+        // The tail of the transcript: what was being said when it died is what
+        // identifies the meeting, and what the agent will carry on from.
+        const text = (record.transcript || "").trim();
+        resumeExcerpt.textContent = text.length > 220 ? "…" + text.slice(-220) : text;
+        resumeErr.textContent = "";
+        resumeStep.classList.remove("hidden");
+      } catch (_) { /* the consent screen is a fine place to land */ }
+    }
+    window.AcqCheckStranded = checkStranded;
+
+    resumeStartBtn.addEventListener("click", async () => {
+      if (!strandedRecord) return;
+      resumeErr.textContent = "";
+      resumeStartBtn.disabled = true;
+      // Same user-gesture rule as Inizia — the Wake Lock has to be requested
+      // from inside the click handler.
+      await acquireWakeLock();
+      try {
+        recordId = strandedRecord.id;
+        transcript = strandedRecord.transcript || "";
+        lastSavedTranscript = transcript;  // the server's copy is where this came from
+        itemDeltaText = {};
+        await beginSession();
+        strandedRecord = null;
+      } catch (err) {
+        console.error("Acquisizione: resume failed", err);
+        cleanupConnection();
+        releaseWakeLock();
+        recordId = null;
+        transcript = "";
+        resumeErr.textContent = (err && err.userMessage) || S().acq_err_resume;
+      } finally {
+        resumeStartBtn.disabled = false;
+      }
+    });
+
+    resumeDiscardBtn.addEventListener("click", () => {
+      const id = strandedRecord && strandedRecord.id;
+      strandedRecord = null;
+      resumeStep.classList.add("hidden");
+      // Marked abandoned rather than deleted: the transcript stays with the
+      // agency, it just stops being offered back every time the tab opens.
+      if (id) api("/acquisizione/" + id + "/abandon", { method: "POST" }).catch(() => {});
     });
 
     startBtn.addEventListener("click", async () => {
@@ -2187,28 +2573,11 @@
         if (!consentResp.ok) throw new Error("consent " + consentResp.status);
         const consentData = await consentResp.json();
         recordId = consentData.id;
-
-        try {
-          micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } catch (_) {
-          throw { userMessage: S().acq_err_mic };
-        }
-
-        await openSession();
-
         transcript = "";
+        lastSavedTranscript = "";
         itemDeltaText = {};
-        paused = false;
-        meetingActive = true;
-        hasPendingAudio = false;
-        belowThresholdSince = null;
-        startAnalyser(micStream);
-        autosaveTimer = setInterval(autosaveTranscript, AUTOSAVE_MS);
 
-        consentStep.classList.add("hidden");
-        liveStep.classList.remove("hidden");
-        renderTranscript();
-        updateLiveLabels();
+        await beginSession();
       } catch (err) {
         console.error("Acquisizione: start failed", err);
         cleanupConnection();
@@ -2554,31 +2923,83 @@
     async function attemptFinish() {
       finishErr.textContent = "";
       finishRetryBtn.classList.add("hidden");
+      finishBackBtn.classList.add("hidden");
+      processingText.classList.remove("hidden");
       processingStep.classList.remove("hidden");
       try {
         const resp = await api("/acquisizione/" + recordId + "/finish", { method: "POST" });
+        // 400 is the one failure a retry cannot fix: the meeting captured no
+        // speech at all (muted mic, ended too early), so extraction would run
+        // against the same empty transcript and fail identically.
+        if (resp.status === 400) throw { empty: true };
         if (!resp.ok) throw new Error("finish " + resp.status);
         renderReview(await resp.json());
-      } catch (_) {
-        // The record reverted server-side to 'transcribing' on failure — the
+      } catch (err) {
+        const empty = !!(err && err.empty);
+        processingText.classList.add("hidden");
+        finishErr.textContent = empty ? S().acq_err_empty : S().acq_err_finish;
+        // Otherwise the record reverted server-side to 'transcribing' — the
         // transcript is intact, so retrying just re-runs extraction on it.
-        finishErr.textContent = S().acq_err_finish;
-        finishRetryBtn.classList.remove("hidden");
+        finishRetryBtn.classList.toggle("hidden", empty);
+        finishBackBtn.classList.remove("hidden");
       }
+    }
+
+    // The tail of the meeting is still in flight when the agent hits Termina
+    // riunione: the model holds several seconds of audio for context before it
+    // emits anything (see REALTIME_TRANSCRIBE_DELAY server-side), so closing
+    // the peer connection right away silently drops the last utterance —
+    // usually the closing remarks. Wait for transcript events to go quiet
+    // first, with a cap so a noisy room can't stall the handoff forever.
+    const FLUSH_QUIET_MS = 4000;
+    const FLUSH_MAX_MS = 20000;
+
+    function waitForFinalTranscripts() {
+      if (!dc || dc.readyState !== "open") return Promise.resolve();
+      return new Promise((resolve) => {
+        const startedAt = Date.now();
+        const poll = setInterval(() => {
+          const now = Date.now();
+          if (now - lastTranscriptEventAt > FLUSH_QUIET_MS || now - startedAt > FLUSH_MAX_MS) {
+            clearInterval(poll);
+            resolve();
+          }
+        }, 250);
+      });
     }
 
     finishBtn.addEventListener("click", async () => {
       finishBtn.disabled = true;
+      // Nothing from here on is a session worth reconnecting to: the drain and
+      // teardown below close the channel deliberately.
+      meetingActive = false;
+      // Close the mic first so the wait below drains what was already said
+      // rather than picking up post-meeting chatter, then commit whatever is
+      // still sitting in the buffer so it gets transcribed at all.
+      if (micStream) micStream.getAudioTracks().forEach((t) => { t.enabled = false; });
+      commitBuffer();
+      // Always wait out at least one quiet window: that final commit's
+      // transcript hasn't come back yet.
+      lastTranscriptEventAt = Date.now();
+      // Show "elaborazione…" now — the drain is dead time the agent would
+      // otherwise spend looking at a frozen Termina riunione button.
+      liveStep.classList.add("hidden");
+      processingText.classList.remove("hidden");
+      processingStep.classList.remove("hidden");
+      await waitForFinalTranscripts();
       await autosaveTranscript(); // final flush before tearing the session down
       cleanupConnection();
       releaseWakeLock();
       meetingActive = false;
-      liveStep.classList.add("hidden");
       finishBtn.disabled = false;
       await attemptFinish();
     });
 
     finishRetryBtn.addEventListener("click", attemptFinish);
+
+    wireDiscard(cancelBtn, "acq_cancel_btn");
+    wireDiscard(finishBackBtn, "acq_back_btn");
+    wireDiscard(reviewBackBtn, "acq_back_btn");
 
     confirmBtn.addEventListener("click", async () => {
       reviewErr.textContent = "";

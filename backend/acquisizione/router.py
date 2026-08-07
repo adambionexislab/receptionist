@@ -55,14 +55,18 @@ class TranscriptUpdate(BaseModel):
     transcript: str
 
 
-@router.patch("/{record_id}/transcript")
+@router.api_route("/{record_id}/transcript", methods=["PATCH", "POST"])
 async def autosave_transcript(
     record_id: str, data: TranscriptUpdate, tenant: dict = Depends(current_tenant)
 ):
     """Periodic defensive autosave of the accumulated transcript, so a crash
     mid-meeting doesn't lose everything. A 404 also covers the record having
     already moved past 'transcribing' (finished/reviewed) — the frontend stops
-    calling this after Termina riunione, so that's not expected in practice."""
+    calling this after Termina riunione, so that's not expected in practice.
+
+    POST is the same call: the browser's last-chance flush as the tab goes away
+    uses navigator.sendBeacon (the only request that reliably survives a page
+    being closed or killed), and a beacon can only POST."""
     ok = await asyncio.to_thread(db.update_transcript, record_id, tenant["id"], data.transcript)
     if not ok:
         raise HTTPException(status_code=404, detail="Not found")
@@ -99,7 +103,9 @@ async def session_token(record_id: str, tenant: dict = Depends(current_tenant)):
                 "transcription": {
                     "model": settings.REALTIME_TRANSCRIBE_MODEL,
                     "language": record["market"],
-                    "delay": "low",
+                    # Accuracy over immediacy — nobody reads this transcript as
+                    # it streams; it's extracted after Termina riunione.
+                    "delay": settings.REALTIME_TRANSCRIBE_DELAY,
                 },
             }
         },
@@ -132,6 +138,19 @@ async def session_token(record_id: str, tenant: dict = Depends(current_tenant)):
     # `model=` query param for a transcription session — see the frontend's
     # openSession(), which deliberately omits it.
     return resp.json()
+
+
+@router.post("/{record_id}/abandon")
+async def abandon_meeting(record_id: str, tenant: dict = Depends(current_tenant)):
+    """The agent deliberately walked away from this meeting (the go-back button
+    in the dashboard, or dismissing the offer to resume it). Keeps the record
+    and its transcript, and stops /resumable offering it back.
+
+    Never raises: this is fired on the way out of a screen, and a record that
+    has already moved on (or doesn't exist) is not a problem the agent can act
+    on — it just reports ok=False."""
+    ok = await asyncio.to_thread(db.abandon, record_id, tenant["id"])
+    return {"ok": ok}
 
 
 @router.post("/{record_id}/finish")
@@ -275,6 +294,18 @@ async def list_records(tenant: dict = Depends(current_tenant)):
     logged-in tenant's id."""
     records = await asyncio.to_thread(db.list_for_tenant, tenant["id"])
     return {"records": records}
+
+
+# Declared before /{record_id}: routes match in declaration order, so the
+# literal path has to come first or it gets swallowed as a record id.
+@router.get("/resumable")
+async def resumable_record(tenant: dict = Depends(current_tenant)):
+    """A meeting this agency left mid-transcription and never came back to —
+    the browser was closed, the phone killed the tab. Returns the whole record
+    (transcript included) so the dashboard can restore the buffer it lost, or
+    {"record": null} when there's nothing to offer."""
+    record = await asyncio.to_thread(db.get_resumable, tenant["id"])
+    return {"record": record}
 
 
 @router.get("/{record_id}")

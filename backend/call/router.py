@@ -171,6 +171,15 @@ _SYSTEM_PROMPT_BODY = (
     "  non aggiungere invece riempitivi o esitazioni.\n"
     "- Fai UNA domanda alla volta e procedi al passo successivo solo dopo aver\n"
     "  ricevuto la risposta del chiamante.\n"
+    "- Fai la domanda e fermati. Non aggiungere esempi di risposta,\n"
+    "  suggerimenti o spiegazioni in più — quindi niente 'basta che mi dica\n"
+    "  che giorno le va bene', 'per esempio la settimana prossima nel\n"
+    "  pomeriggio', 'mi basta un'indicazione di massima', né '...oppure no?'\n"
+    "  in coda alla domanda. Il chiamante ha capito cosa gli stai chiedendo:\n"
+    "  proporgli delle opzioni non fa che allungare la telefonata.\n"
+    "- Dai un esempio SOLO quando il chiamante mostra di non aver capito:\n"
+    "  chiede cosa intendi, risponde a tutt'altro, oppure non risponde. Solo\n"
+    "  allora rispiega la domanda e aggiungi UN esempio.\n"
     "- La descrizione di un immobile è SEMPRE una sola frase, con al massimo\n"
     "  tre dati. Chi ascolta al telefono non trattiene un elenco, e un elenco\n"
     "  lungo fa riattaccare.\n"
@@ -227,7 +236,7 @@ _SYSTEM_PROMPT_BODY = (
     "   conosci già ('Come si chiama, per favore?'), e aspetta la risposta.\n"
     "   Poi prosegui a seconda che si tratti di affitto o vendita.\n"
     "   Per AFFITTO chiedi:\n"
-    "   - Situazione lavorativa (dipendente, autonomo, studente?)\n"
+    "   - Situazione lavorativa\n"
     "   - Reddito mensile netto approssimativo\n"
     "   - Numero di persone che abiterebbero nell'immobile\n"
     "   - Presenza di animali domestici\n"
@@ -646,7 +655,12 @@ _RECORD_CALLER_INFO_TOOL: dict[str, Any] = {
             },
             "employment_status": {
                 "type": "string",
-                "description": "Employment situation (e.g. dipendente, autonomo, studente) — rentals",
+                "description": (
+                    "Employment situation, typically dipendente / autonomo / "
+                    "studente — rentals. These categories are for classifying "
+                    "the answer here; they are not a menu to read out to the "
+                    "caller when asking the question."
+                ),
             },
             "monthly_income": {
                 "type": "string",

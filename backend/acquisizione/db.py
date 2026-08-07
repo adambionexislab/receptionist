@@ -160,6 +160,48 @@ def list_for_tenant(tenant_id: str, limit: int = 200) -> list[dict[str, Any]]:
     return [_row_to_dict(r) for r in rows]
 
 
+def get_resumable(tenant_id: str, max_age_hours: int = 6) -> Optional[dict[str, Any]]:
+    """The most recent meeting this tenant left mid-transcription with words
+    already captured — a closed browser, a phone that killed the tab, a crash.
+
+    Deliberate exits are marked 'abandoned' (see abandon) and never come back,
+    so what's left here is only work nobody meant to lose. Ordered by
+    updated_at, not created_at: the last autosave is when the meeting actually
+    stopped, which is what 'recent' has to mean for a long meeting.
+    """
+    cutoff = (
+        datetime.datetime.now(datetime.timezone.utc)
+        - datetime.timedelta(hours=max_age_hours)
+    ).isoformat()
+    row = _conn().execute(
+        "SELECT * FROM intake_records "
+        "WHERE tenant_id = ? AND status = 'transcribing' AND transcript != '' "
+        "AND updated_at >= ? ORDER BY updated_at DESC LIMIT 1",
+        (tenant_id, cutoff),
+    ).fetchone()
+    return _row_to_dict(row) if row else None
+
+
+def abandon(record_id: str, tenant_id: str) -> bool:
+    """Mark a live meeting as deliberately given up on — the agent pressed the
+    go-back button, or dismissed the offer to resume it.
+
+    Nothing is deleted: the transcript stays on the row, exactly as it was. The
+    status is what changes, so the record stops being offered back by
+    get_resumable. Only transitions from 'transcribing'; anything further along
+    returns False and is left alone."""
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    conn = _conn()
+    with _tenants_db.write_lock:
+        cur = conn.execute(
+            "UPDATE intake_records SET status = 'abandoned', updated_at = ? "
+            "WHERE id = ? AND tenant_id = ? AND status = 'transcribing'",
+            (now, record_id, tenant_id),
+        )
+        conn.commit()
+    return cur.rowcount > 0
+
+
 def update_transcript(record_id: str, tenant_id: str, transcript: str) -> bool:
     """Autosave the accumulated transcript. Only while still in 'transcribing'
     status. Returns False if the record doesn't exist / isn't owned by the
