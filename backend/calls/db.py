@@ -19,17 +19,11 @@ call after deploy (see call/router._persist_call).
 import datetime
 import logging
 from typing import Any, Optional
-from zoneinfo import ZoneInfo
 
+from billing.period import month_bounds_utc
 from tenants import db as _tenants_db
 
 logger = logging.getLogger(__name__)
-
-# The "calendar month" for the minutes metric is a Rome month (same offset as
-# Bratislava, so it's correct for both IT and SK tenants). started_at is stored
-# as a UTC ISO string, so we compare against UTC bounds derived from the Rome
-# month — the strings share the "+00:00" offset, keeping the comparison sound.
-_ROME = ZoneInfo("Europe/Rome")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS call_sessions (
@@ -161,31 +155,16 @@ def add_contact(
         return cur.lastrowid
 
 
-def _month_bounds_utc(
-    now: Optional[datetime.datetime] = None,
-) -> tuple[int, int, str, str]:
-    """(year, month, start_utc_iso, next_month_utc_iso) for the Rome calendar
-    month containing `now` (defaults to the current instant). The two ISO bounds
-    are UTC so they compare directly against the stored started_at strings."""
-    now = now or datetime.datetime.now(datetime.timezone.utc)
-    now_rome = now.astimezone(_ROME)
-    start_rome = now_rome.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    if start_rome.month == 12:
-        next_rome = start_rome.replace(year=start_rome.year + 1, month=1)
-    else:
-        next_rome = start_rome.replace(month=start_rome.month + 1)
-    start_utc = start_rome.astimezone(datetime.timezone.utc).isoformat()
-    next_utc = next_rome.astimezone(datetime.timezone.utc).isoformat()
-    return start_rome.year, start_rome.month, start_utc, next_utc
-
-
 def monthly_call_stats(
     tenant_id: str, now: Optional[datetime.datetime] = None
 ) -> dict[str, int]:
-    """Total call seconds and call count for ONE tenant in the current calendar
-    month. Strictly scoped by tenant_id. Data only exists from go-live forward —
-    there is no history before call persistence shipped."""
-    year, month, start_utc, next_utc = _month_bounds_utc(now)
+    """Total call seconds and call count for ONE tenant in the current billing
+    period (billing/period.py — the same window the AI-tool credits reset on).
+    started_at is stored as a UTC ISO string and the bounds come back as UTC ISO
+    strings, so the comparison is a plain string comparison. Strictly scoped by
+    tenant_id. Data only exists from go-live forward — there is no history
+    before call persistence shipped."""
+    year, month, start_utc, next_utc = month_bounds_utc(now)
     conn = _conn()
     row = conn.execute(
         "SELECT COALESCE(SUM(duration_seconds), 0) AS secs, COUNT(*) AS calls "

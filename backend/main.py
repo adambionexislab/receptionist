@@ -29,6 +29,7 @@ from listings.store import ListingsStore, store, tenant_stores
 from routers.leads import router as leads_router
 from signup.router import router as signup_router
 from tenants import db
+from usage import db as usage_db
 
 logging.basicConfig(
     level=logging.INFO,
@@ -137,6 +138,7 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(acquisizione_db.init)
     await asyncio.to_thread(agents_db.init)
     await asyncio.to_thread(listings_db.init)
+    await asyncio.to_thread(usage_db.init)
     await _load_all_tenant_listings()
     task = asyncio.create_task(_sync_loop())
     try:

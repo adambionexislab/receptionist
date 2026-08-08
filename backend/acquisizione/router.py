@@ -29,12 +29,28 @@ from agents import db as agents_db
 from config import settings
 from dashboard.router import current_tenant
 from listings import db as listings_db
+from usage import db as usage_db
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/acquisizione")
 
 _OPENAI_CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets"
+
+
+async def _meter(tenant_id: str, tool: str, ref: str | None = None) -> None:
+    """Charge one use of an AI tool against the tenant's monthly credits
+    (usage/db.py). Called only once the tool has actually done its work.
+
+    Never raises. By the time this runs the agent already has their transcript
+    or their photo, and failing the request now would report a broken tool that
+    isn't broken. A metering failure is logged loudly instead — the alternative
+    is charging for work we didn't deliver.
+    """
+    try:
+        await asyncio.to_thread(usage_db.record, tenant_id, tool, ref)
+    except Exception:
+        logger.exception("Failed to meter %s use for tenant %s", tool, tenant_id)
 
 
 class ConsentRequest(BaseModel):
@@ -131,6 +147,13 @@ async def session_token(record_id: str, tenant: dict = Depends(current_tenant)):
     except Exception as exc:
         logger.error("OpenAI client_secrets (transcription) error: %s", exc)
         raise HTTPException(status_code=502, detail="Failed to start transcription session")
+
+    # A minted session is the moment this meeting starts costing something, so
+    # it is what the credit is charged on — not /consent, which fires before
+    # the agent has even granted mic permission. Keyed on the record id, so the
+    # later mints (60-minute session cap, dropped connection, resuming a
+    # stranded meeting) don't charge the same meeting again.
+    await _meter(tenant["id"], "meeting", record_id)
 
     # GA shape: {"value": "ek_...", "expires_at": ..., "session": {...}}.
     # Returned as-is; the browser uses `value` for the WebRTC SDP handshake.
@@ -284,6 +307,11 @@ async def enhance_photo(
     except photos.PhotoEnhanceError as exc:
         logger.error("Photo enhancement failed: %s", exc)
         raise HTTPException(status_code=502, detail="Photo enhancement failed, please retry")
+
+    # Charged per delivered photo, and only here — a failed enhancement raised
+    # above and costs the agency nothing. No ref: each photo is its own use,
+    # including a second pass over the same image.
+    await _meter(tenant["id"], "photo")
 
     return Response(content=edited, media_type="image/png")
 

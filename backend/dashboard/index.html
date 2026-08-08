@@ -123,13 +123,33 @@
   }
 
   .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 28px; }
-  @media (max-width: 720px) { .stats { grid-template-columns: 1fr; } }
+  /* Credits get their own 2-up row rather than two more columns above: what
+     Apollonia handled and what the AI tools cost are different questions, and
+     five equal cards in a strip read as one undifferentiated list. */
+  .stats.stats-credits { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 720px) {
+    .stats, .stats.stats-credits { grid-template-columns: 1fr; }
+  }
   .stat {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); padding: 18px 20px;
+    display: flex; flex-direction: column;
   }
   .stat .num { font-size: 2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  /* Overage: real money the agency will be invoiced for, so it stops looking
+     like just another counter the moment it goes above zero. */
+  .stat .num.warn { color: var(--amber); }
   .stat .lbl { color: var(--text-dim); font-size: .82rem; margin-top: 6px; }
+  /* Bottom-aligned so the two credit cards line up despite only one of them
+     carrying a progress bar. */
+  .stat .sub { color: var(--text-dim); font-size: .78rem; margin-top: auto; padding-top: 12px; }
+  /* Share of the monthly allowance already spent. */
+  .stat .bar {
+    margin-top: 14px; height: 5px; border-radius: 3px;
+    background: var(--surface-2); overflow: hidden;
+  }
+  .stat .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .35s ease; }
+  .stat .bar > i.full { background: var(--amber); }
 
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
@@ -562,6 +582,22 @@
           <div class="lbl" id="stat-contacts-lbl">Contatti questo mese</div>
         </div>
       </div>
+      <!-- AI-tool credits included with the plan. Hidden for agencies without
+           the tools (the same flag that hides their tab) — a balance for
+           something they can't use is noise. -->
+      <div class="stats stats-credits hidden" id="credit-stats">
+        <div class="stat">
+          <div class="num" id="stat-credits">—</div>
+          <div class="lbl" id="stat-credits-lbl">Crediti rimanenti</div>
+          <div class="bar"><i id="stat-credits-bar"></i></div>
+          <div class="sub" id="stat-credits-sub"></div>
+        </div>
+        <div class="stat">
+          <div class="num" id="stat-overage">—</div>
+          <div class="lbl" id="stat-overage-lbl">Extra questo mese</div>
+          <div class="sub" id="stat-overage-sub"></div>
+        </div>
+      </div>
       <div class="card">
         <div class="table-wrap">
           <table id="contacts-table">
@@ -821,6 +857,18 @@
       stat_minutes: "Minuti questo mese",
       stat_calls: "Chiamate questo mese",
       stat_contacts: "Contatti questo mese",
+      // Strumenti AI: crediti inclusi nel piano (€0,50 a foto, €1 a riunione).
+      stat_credits: "Crediti rimanenti",
+      stat_credits_of: "su {total} inclusi nel piano",
+      stat_overage: "Extra questo mese",
+      stat_overage_none: "Nessun costo extra",
+      stat_overage_billed: "Verrà fatturato a fine mese",
+      credits_photos: "{n} foto",
+      credits_photos_few: "{n} foto",
+      credits_photos_one: "1 foto",
+      credits_meetings: "{n} riunioni",
+      credits_meetings_few: "{n} riunioni",
+      credits_meetings_one: "1 riunione",
       th_date: "Data", th_name: "Nome", th_phone: "Telefono",
       th_summary: "Riepilogo", th_outcome: "Esito", th_assigned: "Inoltrato a",
       contacts_empty: "Nessun contatto ancora.",
@@ -966,6 +1014,17 @@
       stat_minutes: "Minúty tento mesiac",
       stat_calls: "Hovory tento mesiac",
       stat_contacts: "Kontakty tento mesiac",
+      stat_credits: "Zostávajúce kredity",
+      stat_credits_of: "z {total} v programe",
+      stat_overage: "Navyše tento mesiac",
+      stat_overage_none: "Žiadne poplatky navyše",
+      stat_overage_billed: "Bude fakturované na konci mesiaca",
+      credits_photos: "{n} fotiek",
+      credits_photos_few: "{n} fotky",
+      credits_photos_one: "1 fotka",
+      credits_meetings: "{n} stretnutí",
+      credits_meetings_few: "{n} stretnutia",
+      credits_meetings_one: "1 stretnutie",
       th_date: "Dátum", th_name: "Meno", th_phone: "Telefón",
       th_summary: "Zhrnutie", th_outcome: "Výsledok", th_assigned: "Odoslané",
       contacts_empty: "Zatiaľ žiadne kontakty.",
@@ -1121,6 +1180,7 @@
     "tab-contacts": "contacts", "tab-listings": "listings", "logout-btn": "logout",
     "stat-minutes-lbl": "stat_minutes", "stat-calls-lbl": "stat_calls",
     "stat-contacts-lbl": "stat_contacts",
+    "stat-credits-lbl": "stat_credits", "stat-overage-lbl": "stat_overage",
     "contacts-title": "contacts",
     "th-date": "th_date", "th-name": "th_name", "th-phone": "th_phone",
     "th-summary": "th_summary", "th-outcome": "th_outcome",
@@ -1178,7 +1238,11 @@
     $("agency-name").textContent = me.agency_name || "";
     LOCALE = me.locale || "it";
     applyStrings();
-    $("tab-acquisizione").classList.toggle("hidden", !(me.features && me.features.acquisizione));
+    // The tools and the credits they spend are the same feature: show both or
+    // neither.
+    const hasTools = !!(me.features && me.features.acquisizione);
+    $("tab-acquisizione").classList.toggle("hidden", !hasTools);
+    $("credit-stats").classList.toggle("hidden", !hasTools);
     loadSummary();
     loadContacts();
     // Agents first: every listing card names the agent handling it, so the
@@ -1210,7 +1274,52 @@
       $("stat-minutes").textContent = (s.minutes ?? 0).toLocaleString(LOCALE === "sk" ? "sk-SK" : "it-IT");
       $("stat-calls").textContent = s.calls ?? 0;
       $("stat-contacts").textContent = s.contacts ?? 0;
+      renderCredits(s.credits);
     } catch (_) { /* leave the placeholder dashes on a transient error */ }
+  }
+
+  // Re-read the overview after an AI tool runs, so the credit cards reflect
+  // what the agent just spent without a page reload. Global because the
+  // Acquisizione tab lives in its own IIFE further down.
+  window.RefreshSummary = loadSummary;
+
+  // Credits travel as integer euro cents (see /dashboard/api/summary) — this is
+  // the only place they turn into money, at the last moment, for display.
+  function fmtEur(cents) {
+    return new Intl.NumberFormat(intlTag(), {
+      style: "currency", currency: "EUR",
+      minimumFractionDigits: 2, maximumFractionDigits: 2,
+    }).format((cents || 0) / 100);
+  }
+
+  // "3 foto · 1 riunione" — what this month's credits actually went on.
+  function creditUses(uses) {
+    const u = uses || {};
+    return pluralize("credits_photos", u.photo || 0)
+      + " · " + pluralize("credits_meetings", u.meeting || 0);
+  }
+
+  function renderCredits(c) {
+    if (!c) return;
+    const s = S();
+    const allowance = c.allowance_cents || 0;
+    const overage = c.overage_cents || 0;
+
+    $("stat-credits").textContent = fmtEur(c.remaining_cents);
+    // Nothing stops working when the allowance runs out — the bar filling and
+    // turning amber is the only warning the agency gets before the extra
+    // charges start, so it has to be legible at a glance.
+    const spent = allowance > 0 ? Math.min(1, (c.used_cents || 0) / allowance) : 1;
+    const bar = $("stat-credits-bar");
+    bar.style.width = Math.round(spent * 100) + "%";
+    bar.classList.toggle("full", overage > 0);
+    $("stat-credits-sub").textContent =
+      s.stat_credits_of.replace("{total}", fmtEur(allowance)) + " · " + creditUses(c.uses);
+
+    $("stat-overage").textContent = fmtEur(overage);
+    $("stat-overage").classList.toggle("warn", overage > 0);
+    $("stat-overage-sub").textContent =
+      overage > 0 ? s.stat_overage_billed : s.stat_overage_none;
   }
 
   function fmtDate(iso) {
@@ -2578,6 +2687,8 @@
         itemDeltaText = {};
 
         await beginSession();
+        // The meeting is live and has been charged against the plan's credits.
+        if (window.RefreshSummary) window.RefreshSummary();
       } catch (err) {
         console.error("Acquisizione: start failed", err);
         cleanupConnection();
@@ -2812,6 +2923,8 @@
         photoDownloadLink.download = "enhanced-" + (photoFile.name || "photo.png");
         photoDownloadLink.textContent = "↓ " + S().acq_photo_download;
         photoDownloadLink.classList.remove("hidden");
+        // A delivered photo has just been charged against the plan's credits.
+        if (window.RefreshSummary) window.RefreshSummary();
       } catch (_) {
         photoLoader.classList.add("hidden");
         photoAfterEmpty.classList.remove("hidden");

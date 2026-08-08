@@ -25,6 +25,7 @@ from config import settings
 from dashboard import session as sess
 from listings import db as listings_db
 from tenants import db
+from usage import db as usage_db
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +92,15 @@ def contacts(tenant: dict = Depends(current_tenant)):
 
 @router.get("/dashboard/api/summary")
 def summary(tenant: dict = Depends(current_tenant)):
-    """This calendar month's call minutes for THIS tenant. Counts only calls
-    handled since call persistence went live (there is no earlier history).
-    Strictly scoped to the logged-in tenant's id."""
+    """This billing period's numbers for THIS tenant: call minutes, and the AI-
+    tool credits the plan includes. Calls are counted only since call
+    persistence went live (there is no earlier history); credits are summed
+    over the same window, so both reset together. Strictly scoped to the
+    logged-in tenant's id.
+
+    Money is sent as integer euro cents — the browser divides for display, and
+    nothing that gets invoiced is ever rounded through a float on the way here.
+    """
     stats = calls_db.monthly_call_stats(tenant["id"])
     return {
         "year": stats["year"],
@@ -102,6 +109,7 @@ def summary(tenant: dict = Depends(current_tenant)):
         "seconds": stats["seconds"],
         "calls": stats["calls"],
         "contacts": stats["contacts"],
+        "credits": usage_db.monthly_credits(tenant["id"], tenant.get("plan")),
     }
 
 
