@@ -1387,7 +1387,10 @@ def _persist_call(session: dict[str, Any]) -> None:
     # otherwise duration would also count the post-call summary + email HTTP
     # calls that run before this, inflating every call by up to tens of seconds.
     ended = session.get("ended_at") or datetime.datetime.now(datetime.timezone.utc)
-    duration = int((ended - started).total_seconds()) if started else 0
+    # Rounded, not truncated: int() drops every call's fractional tail, which
+    # is a systematic ~0.5s undercount per call once these are summed for
+    # billing (see usage.db.billable_minutes).
+    duration = round((ended - started).total_seconds()) if started else 0
     ended_iso = ended.isoformat()
 
     callback = _resolve_callback_number(session)

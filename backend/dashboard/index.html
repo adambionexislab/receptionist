@@ -123,12 +123,14 @@
   }
 
   .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 28px; }
-  /* Credits get their own 2-up row rather than two more columns above: what
-     Apollonia handled and what the AI tools cost are different questions, and
-     five equal cards in a strip read as one undifferentiated list. */
-  .stats.stats-credits { grid-template-columns: repeat(2, 1fr); }
+  /* Billing gets its own 2-up row rather than two more columns above: what
+     Apollonia handled and what it will cost are different questions, and five
+     equal cards in a strip read as one undifferentiated list. Drops to 1-up
+     when the agency has no AI tools and the credits card is gone with them. */
+  .stats.stats-billing { grid-template-columns: repeat(2, 1fr); }
+  .stats.stats-billing.stats-one { grid-template-columns: 1fr; }
   @media (max-width: 720px) {
-    .stats, .stats.stats-credits { grid-template-columns: 1fr; }
+    .stats, .stats.stats-billing { grid-template-columns: 1fr; }
   }
   .stat {
     background: var(--surface); border: 1px solid var(--border);
@@ -143,6 +145,9 @@
   /* Bottom-aligned so the two credit cards line up despite only one of them
      carrying a progress bar. */
   .stat .sub { color: var(--text-dim); font-size: .78rem; margin-top: auto; padding-top: 12px; }
+  /* Where an overage came from. Sits directly under the amount rather than at
+     the bottom: it explains the number above it, not the card. */
+  .stat .split { color: var(--text-dim); font-size: .78rem; margin-top: 10px; }
   /* Share of the monthly allowance already spent. */
   .stat .bar {
     margin-top: 14px; height: 5px; border-radius: 3px;
@@ -159,6 +164,13 @@
   tbody tr:last-child { border-bottom: none; }
   td.nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
   td.dim { color: var(--text-dim); }
+  /* Tap-to-dial caller number: underlined so it reads as an action on a phone,
+     where there is no hover to reveal it, without recolouring the table. */
+  .tel-link {
+    color: inherit; text-decoration: underline;
+    text-decoration-color: var(--border); text-underline-offset: 3px;
+  }
+  .tel-link:hover { color: var(--accent); text-decoration-color: var(--accent); }
 
   .badge {
     display: inline-block; padding: 3px 10px; border-radius: 999px;
@@ -572,6 +584,8 @@
         <div class="stat">
           <div class="num" id="stat-minutes">—</div>
           <div class="lbl" id="stat-minutes-lbl">Minuti questo mese</div>
+          <div class="bar"><i id="stat-minutes-bar"></i></div>
+          <div class="sub" id="stat-minutes-sub"></div>
         </div>
         <div class="stat">
           <div class="num" id="stat-calls">—</div>
@@ -582,11 +596,13 @@
           <div class="lbl" id="stat-contacts-lbl">Contatti questo mese</div>
         </div>
       </div>
-      <!-- AI-tool credits included with the plan. Hidden for agencies without
-           the tools (the same flag that hides their tab) — a balance for
-           something they can't use is noise. -->
-      <div class="stats stats-credits hidden" id="credit-stats">
-        <div class="stat">
+      <!-- What the plan's allowances have cost beyond what they include. The
+           credits card is dropped for agencies without the AI tools (the same
+           flag that hides their tab) — a balance for something they can't use
+           is noise — but the overage card stays: minutes are billed past the
+           plan whether or not an agency has the tools. -->
+      <div class="stats stats-billing" id="billing-stats">
+        <div class="stat" id="credits-card">
           <div class="num" id="stat-credits">—</div>
           <div class="lbl" id="stat-credits-lbl">Crediti rimanenti</div>
           <div class="bar"><i id="stat-credits-bar"></i></div>
@@ -595,6 +611,7 @@
         <div class="stat">
           <div class="num" id="stat-overage">—</div>
           <div class="lbl" id="stat-overage-lbl">Extra questo mese</div>
+          <div class="split hidden" id="stat-overage-split"></div>
           <div class="sub" id="stat-overage-sub"></div>
         </div>
       </div>
@@ -857,12 +874,17 @@
       stat_minutes: "Minuti questo mese",
       stat_calls: "Chiamate questo mese",
       stat_contacts: "Contatti questo mese",
+      // Minuti inclusi nel piano, poi €0,25 al minuto.
+      stat_minutes_of: "su {n} inclusi nel piano",
       // Strumenti AI: crediti inclusi nel piano (€0,50 a foto, €1 a riunione).
       stat_credits: "Crediti rimanenti",
       stat_credits_of: "su {total} inclusi nel piano",
       stat_overage: "Extra questo mese",
       stat_overage_none: "Nessun costo extra",
       stat_overage_billed: "Verrà fatturato a fine mese",
+      // Da cosa arriva l'extra — mostrato solo per le voci sopra il piano.
+      stat_overage_minutes: "{n} min extra: {amount}",
+      stat_overage_tools: "strumenti: {amount}",
       credits_photos: "{n} foto",
       credits_photos_few: "{n} foto",
       credits_photos_one: "1 foto",
@@ -1014,11 +1036,14 @@
       stat_minutes: "Minúty tento mesiac",
       stat_calls: "Hovory tento mesiac",
       stat_contacts: "Kontakty tento mesiac",
+      stat_minutes_of: "z {n} v programe",
       stat_credits: "Zostávajúce kredity",
       stat_credits_of: "z {total} v programe",
       stat_overage: "Navyše tento mesiac",
       stat_overage_none: "Žiadne poplatky navyše",
       stat_overage_billed: "Bude fakturované na konci mesiaca",
+      stat_overage_minutes: "{n} min navyše: {amount}",
+      stat_overage_tools: "nástroje: {amount}",
       credits_photos: "{n} fotiek",
       credits_photos_few: "{n} fotky",
       credits_photos_one: "1 fotka",
@@ -1239,10 +1264,13 @@
     LOCALE = me.locale || "it";
     applyStrings();
     // The tools and the credits they spend are the same feature: show both or
-    // neither.
+    // neither. The overage card beside it stays either way — minutes are
+    // billed past the plan whether or not this agency has the tools — so the
+    // row goes 1-up rather than leaving a hole.
     const hasTools = !!(me.features && me.features.acquisizione);
     $("tab-acquisizione").classList.toggle("hidden", !hasTools);
-    $("credit-stats").classList.toggle("hidden", !hasTools);
+    $("credits-card").classList.toggle("hidden", !hasTools);
+    $("billing-stats").classList.toggle("stats-one", !hasTools);
     loadSummary();
     loadContacts();
     // Agents first: every listing card names the agent handling it, so the
@@ -1299,25 +1327,54 @@
       + " · " + pluralize("credits_meetings", u.meeting || 0);
   }
 
+  // How full an allowance is, 0–1. An allowance of zero reads as spent rather
+  // than as a division by zero.
+  function fillBar(id, used, included, over) {
+    const bar = $(id);
+    bar.style.width =
+      Math.round((included > 0 ? Math.min(1, used / included) : 1) * 100) + "%";
+    // Nothing stops working when an allowance runs out — the bar filling and
+    // turning amber is the only warning the agency gets before the extra
+    // charges start, so it has to be legible at a glance.
+    bar.classList.toggle("full", over > 0);
+  }
+
   function renderCredits(c) {
     if (!c) return;
     const s = S();
-    const allowance = c.allowance_cents || 0;
+    const tools = c.tools || {};
+    const mins = c.minutes || {};
     const overage = c.overage_cents || 0;
 
-    $("stat-credits").textContent = fmtEur(c.remaining_cents);
-    // Nothing stops working when the allowance runs out — the bar filling and
-    // turning amber is the only warning the agency gets before the extra
-    // charges start, so it has to be legible at a glance.
-    const spent = allowance > 0 ? Math.min(1, (c.used_cents || 0) / allowance) : 1;
-    const bar = $("stat-credits-bar");
-    bar.style.width = Math.round(spent * 100) + "%";
-    bar.classList.toggle("full", overage > 0);
-    $("stat-credits-sub").textContent =
-      s.stat_credits_of.replace("{total}", fmtEur(allowance)) + " · " + creditUses(c.uses);
+    // Included call minutes, and how far into them this month has got.
+    const included = mins.included || 0;
+    fillBar("stat-minutes-bar", mins.used || 0, included, mins.over || 0);
+    $("stat-minutes-sub").textContent =
+      s.stat_minutes_of.replace("{n}", included.toLocaleString(intlTag()));
 
+    // AI-tool credits.
+    const allowance = tools.allowance_cents || 0;
+    $("stat-credits").textContent = fmtEur(tools.remaining_cents);
+    fillBar("stat-credits-bar", tools.used_cents || 0, allowance, tools.overage_cents || 0);
+    $("stat-credits-sub").textContent =
+      s.stat_credits_of.replace("{total}", fmtEur(allowance)) + " · " + creditUses(tools.uses);
+
+    // One invoice, so one number — with the split underneath, since minutes
+    // and tools run out independently and "€21,50" alone explains nothing.
     $("stat-overage").textContent = fmtEur(overage);
     $("stat-overage").classList.toggle("warn", overage > 0);
+    const parts = [];
+    if ((mins.overage_cents || 0) > 0) {
+      parts.push(s.stat_overage_minutes
+        .replace("{n}", (mins.over || 0).toLocaleString(intlTag()))
+        .replace("{amount}", fmtEur(mins.overage_cents)));
+    }
+    if ((tools.overage_cents || 0) > 0) {
+      parts.push(s.stat_overage_tools.replace("{amount}", fmtEur(tools.overage_cents)));
+    }
+    const split = $("stat-overage-split");
+    split.textContent = parts.join(" · ");
+    split.classList.toggle("hidden", parts.length === 0);
     $("stat-overage-sub").textContent =
       overage > 0 ? s.stat_overage_billed : s.stat_overage_none;
   }
@@ -1344,6 +1401,20 @@
     return n;
   }
 
+  // The caller's number as a tap-to-dial cell, so a phone opens the dialer with
+  // it already filled in. tel: only understands dialling characters, so the
+  // href drops the spacing/punctuation the number is displayed with; a value we
+  // can't reduce to digits is left as plain text.
+  function telCell(phone, label) {
+    const dial = String(phone || "").replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "");
+    if (!dial) return el("td", "nowrap", phone || "—", label);
+    const td = el("td", "nowrap", null, label);
+    const a = el("a", "tel-link", phone);
+    a.href = "tel:" + dial;
+    td.appendChild(a);
+    return td;
+  }
+
   function renderContacts(rows) {
     const body = $("contacts-body");
     const empty = $("contacts-empty");
@@ -1361,7 +1432,7 @@
       const tr = document.createElement("tr");
       tr.appendChild(el("td", "nowrap dim", fmtDate(c.created_at), s.th_date));
       tr.appendChild(el("td", null, c.name || "—", s.th_name));
-      tr.appendChild(el("td", "nowrap", c.phone || "—", s.th_phone));
+      tr.appendChild(telCell(c.phone, s.th_phone));
       tr.appendChild(el("td", null, c.summary || c.interest || "—", s.th_summary));
       // Where the lead email actually went: the agent handling the property the
       // caller wanted, or the agency inbox when nothing was assigned.

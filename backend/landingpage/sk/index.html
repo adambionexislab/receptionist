@@ -233,6 +233,36 @@
     .price-cta.is-solid { background: var(--accent); color: #0c0c0d; border: 1px solid var(--accent); }
     .price-cta.is-solid:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
+    /* AI tools */
+    .tool-card { position: relative; border-radius: 1.5rem; padding: 1.75rem; background: rgba(255,255,255,.02); border: 1px solid var(--border); transition: border-color .3s ease, box-shadow .3s ease; }
+    .tool-card:hover { border-color: rgba(139,105,20,.55); box-shadow: 0 12px 48px rgba(139,105,20,.14); }
+    @media (min-width: 1024px) { .tool-card { padding: 2.75rem; } }
+    .tool-badge { display: inline-flex; align-items: center; gap: 7px; padding: 6px 14px; border-radius: 9999px; font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); background: rgba(139,105,20,.12); border: 1px solid rgba(139,105,20,.35); }
+    .tool-highlight { display: flex; gap: 14px; padding: 15px 16px; border-radius: .9rem; background: rgba(255,255,255,.03); border: 1px solid var(--border); }
+    .tool-highlight svg { flex-shrink: 0; margin-top: 2px; color: var(--accent); }
+    .tool-highlight-title { font-size: 14px; font-weight: 600; color: var(--fg); }
+    .tool-highlight-desc { margin-top: 4px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+    .tool-hint { display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+    /* Same frame as .reveal-compare, so both tool cards line up. */
+    .tool-media { position: relative; aspect-ratio: 4 / 3; border-radius: 1rem; overflow: hidden; border: 1px solid var(--border); background: rgba(255,255,255,.02); }
+    .tool-media img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+    /* Before/after reveal slider */
+    .reveal-compare { position: relative; aspect-ratio: 4 / 3; border-radius: 1rem; overflow: hidden; border: 1px solid var(--border); background: rgba(255,255,255,.02); cursor: ew-resize; user-select: none; -webkit-user-select: none; touch-action: pan-y; }
+    .reveal-compare:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .reveal-layer { position: absolute; inset: 0; }
+    .reveal-layer img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; }
+    .reveal-divider { position: absolute; top: 0; bottom: 0; z-index: 10; width: 3px; background: var(--fg); transform: translateX(-50%); box-shadow: 0 0 18px rgba(0,0,0,.55); }
+    .reveal-handle { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 9999px; background: var(--fg); border: 2px solid var(--accent); color: var(--accent); box-shadow: 0 6px 22px rgba(0,0,0,.5); transition: transform .18s ease; }
+    .reveal-compare.is-dragging .reveal-handle { transform: translate(-50%,-50%) scale(1.1); }
+    .reveal-label { position: absolute; z-index: 20; top: 14px; padding: 6px 14px; border-radius: 9999px; font-size: 12px; font-weight: 500; color: var(--fg); background: rgba(12,12,13,.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1px solid var(--border); }
+    .reveal-label.is-before { left: 14px; }
+    .reveal-label.is-after  { right: 14px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal-handle { transition: none; }
+    }
+
     /* FAQ accordion */
     .faq-list { border-radius: .75rem; overflow: hidden; background: rgba(255,255,255,.02); border: 1px solid var(--border); }
     .faq-item { position: relative; border-bottom: 1px solid var(--border); }
@@ -377,27 +407,27 @@
             "name": "Program Base",
             "price": "145",
             "priceCurrency": "EUR",
-            "description": "500 minút hovorov mesačne, záujemcovia e-mailom v reálnom čase, pozná vaše ponuky a odpovie na otázky. 145 €/mesiac (125 €/mesiac pri ročnej fakturácii)."
+            "description": "500 minút hovorov mesačne, záujemcovia e-mailom v reálnom čase, pozná vaše ponuky a odpovie na otázky, v cene kredity 15 € na AI nástroje. 145 €/mesiac (125 €/mesiac pri ročnej fakturácii)."
           },
           {
             "@type": "Offer",
             "name": "Program Pro",
             "price": "395",
             "priceCurrency": "EUR",
-            "description": "Všetko z programu Base s 1 000 minútami hovorov mesačne. 395 €/mesiac (335 €/mesiac pri ročnej fakturácii)."
+            "description": "Všetko z programu Base s 1 000 minútami hovorov mesačne a kreditmi 30 € na AI nástroje v cene. 395 €/mesiac (335 €/mesiac pri ročnej fakturácii)."
           },
           {
             "@type": "Offer",
             "name": "Program Max",
             "price": "795",
             "priceCurrency": "EUR",
-            "description": "Všetko z programu Pro s 2 000 minútami hovorov mesačne. 795 €/mesiac (675 €/mesiac pri ročnej fakturácii)."
+            "description": "Všetko z programu Pro s 2 000 minútami hovorov mesačne a kreditmi 60 € na AI nástroje v cene. 795 €/mesiac (675 €/mesiac pri ročnej fakturácii)."
           },
           {
             "@type": "Offer",
             "name": "Program Studio",
             "priceCurrency": "EUR",
-            "description": "Individuálny program pre kancelárie, ktoré potrebujú viac minút než program Max: neobmedzené čísla a agenti, individuálne zaškolenie. Cena na mieru podľa objemu hovorov."
+            "description": "Individuálny program pre kancelárie, ktoré potrebujú viac minút než program Max: neobmedzené čísla a agenti, individuálne zaškolenie, kredity na AI nástroje na mieru. Cena na mieru podľa objemu hovorov."
           }
         ]
       },
@@ -757,6 +787,158 @@
       </div>
     </section>
 
+    <!-- ── AI TOOLS ──────────────────────────────────────────────────────── -->
+    <section id="ai-nastroje" class="max-w-[1400px] mx-auto px-6 lg:px-12 py-24 lg:py-32" style="border-top:1px solid var(--border)">
+      <p class="text-[11px] font-medium uppercase tracking-[.2em] mb-10" style="color:var(--muted)">AI nástroje</p>
+      <div class="reveal max-w-3xl mb-16">
+        <h2 class="text-4xl md:text-5xl font-light tracking-tight leading-[1.08]" style="color:var(--fg)">
+          Každý mesiac kredity na použitie AI nástrojov z našej ponuky
+        </h2>
+      </div>
+
+      <div class="flex flex-col gap-6">
+
+        <!-- ApollonIA Photo -->
+        <article class="reveal tool-card">
+          <div class="grid gap-9 lg:grid-cols-12 lg:items-center lg:gap-12">
+
+            <div class="flex flex-col gap-4 lg:col-span-5">
+              <div>
+                <span class="tool-badge">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+                  Fotky ponúk
+                </span>
+              </div>
+
+              <h3 class="text-2xl md:text-3xl font-medium tracking-tight" style="color:var(--fg)">ApollonIA Photo</h3>
+
+              <p class="text-base leading-relaxed" style="color:var(--muted)">
+                Fotky upraví tak, aby vyzerali profesionálne — výsledkom je dokonalé osvetlenie a štylizácia. Odstráni predmety, ktoré na fotke nemajú čo robiť. Nepotrebujete profesionálneho fotografa, stačí vám smartfón.
+              </p>
+
+              <div class="mt-2 grid gap-3">
+                <div class="tool-highlight">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+                  <div class="min-w-0">
+                    <p class="tool-highlight-title">Profesionálne osvetlenie a štylizácia</p>
+                    <p class="tool-highlight-desc">Dokonalé svetlo a štýl ako z profesionálneho fotenia.</p>
+                  </div>
+                </div>
+                <div class="tool-highlight">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
+                  <div class="min-w-0">
+                    <p class="tool-highlight-title">Preč s tým, čo tam nepatrí</p>
+                    <p class="tool-highlight-desc">Odstráni predmety, ktoré na fotke nemajú čo robiť.</p>
+                  </div>
+                </div>
+                <div class="tool-highlight">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>
+                  <div class="min-w-0">
+                    <p class="tool-highlight-title">Stačí vám smartfón</p>
+                    <p class="tool-highlight-desc">Nepotrebujete fotografa: odfotíte telefónom a zverejníte.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="lg:col-span-7">
+              <div class="reveal-compare" data-reveal-compare data-start="50"
+                   role="slider" tabindex="0"
+                   aria-label="Porovnajte fotku pred a po ApollonIA Photo"
+                   aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" aria-valuetext="50 % pred">
+
+                <!-- After (full, bottom layer) -->
+                <div class="reveal-layer">
+                  <img src="/assets/photo-tool-after.jpg" width="1600" height="1206" loading="lazy" decoding="async"
+                       alt="Tá istá kuchyňa po ApollonIA Photo: upravené svetlo, prirodzené farby a uprataný priestor" />
+                </div>
+
+                <!-- Before (clipped, top layer) -->
+                <div class="reveal-layer" data-reveal-clip style="clip-path:inset(0 50% 0 0)">
+                  <img src="/assets/photo-tool-before.jpg" width="1600" height="1205" loading="lazy" decoding="async"
+                       alt="Tá istá kuchyňa odfotená telefónom: ploché svetlo a predmety, ktoré tam nepatria" />
+                </div>
+
+                <div class="reveal-divider" data-reveal-divider style="left:50%">
+                  <span class="reveal-handle">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="9" cy="19" r="1.4"/><circle cx="15" cy="5" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="15" cy="19" r="1.4"/></svg>
+                  </span>
+                </div>
+
+                <span class="reveal-label is-before">Pred</span>
+                <span class="reveal-label is-after">Po</span>
+              </div>
+
+              <span class="tool-hint">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 8 4 4-4 4"/><path d="M2 12h20"/><path d="m6 8-4 4 4 4"/></svg>
+                Potiahnite a porovnajte
+              </span>
+            </div>
+
+          </div>
+        </article>
+
+        <!-- ApollonIA Meeting -->
+        <article class="reveal d1 tool-card">
+          <div class="grid gap-9 lg:grid-cols-12 lg:items-center lg:gap-12">
+
+            <div class="flex flex-col gap-4 lg:col-span-5">
+              <div>
+                <span class="tool-badge">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                  Stretnutia s predávajúcimi
+                </span>
+              </div>
+
+              <h3 class="text-2xl md:text-3xl font-medium tracking-tight" style="color:var(--fg)">ApollonIA Meeting</h3>
+
+              <p class="text-base leading-relaxed" style="color:var(--muted)">
+                Počas stretnutia s predávajúcim zapnite tento nástroj na svojom smartfóne a na konci stretnutia dostanete popis nehnuteľnosti do inzerátu a poznámky zo stretnutia. Nemusíte si písať poznámky, venujete sa klientovi a predsa vám nič podstatné neunikne.
+              </p>
+
+              <div class="mt-2 grid gap-3">
+                <div class="tool-highlight">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+                  <div class="min-w-0">
+                    <p class="tool-highlight-title">Popis nehnuteľnosti do inzerátu</p>
+                    <p class="tool-highlight-desc">Na konci stretnutia dostanete text pripravený na zverejnenie.</p>
+                  </div>
+                </div>
+                <div class="tool-highlight">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg>
+                  <div class="min-w-0">
+                    <p class="tool-highlight-title">Poznámky píše za vás</p>
+                    <p class="tool-highlight-desc">Nemusíte si písať poznámky: poznámky zo stretnutia prídu samy.</p>
+                  </div>
+                </div>
+                <div class="tool-highlight">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                  <div class="min-w-0">
+                    <p class="tool-highlight-title">Venujete sa klientovi</p>
+                    <p class="tool-highlight-desc">Rozprávate sa s predávajúcim a nič podstatné vám neunikne.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="lg:col-span-7">
+              <div class="tool-media">
+                <img src="/assets/meeting-tool.jpg" width="1024" height="768" loading="lazy" decoding="async"
+                     alt="Smartfón položený na stole počas stretnutia so zapnutým ApollonIA Meeting na obrazovke" />
+              </div>
+
+              <span class="tool-hint">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>
+                Zapnete ho v smartfóne počas stretnutia
+              </span>
+            </div>
+
+          </div>
+        </article>
+
+      </div>
+    </section>
+
     <!-- ── FAQ ───────────────────────────────────────────────────────────── -->
     <section id="faq" class="max-w-3xl mx-auto px-6 py-24 lg:py-32" style="border-top:1px solid var(--border)">
       <div class="reveal mb-10">
@@ -965,6 +1147,7 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> 500 minút hovorov mesačne</li>
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Záujemcovia e-mailom v reálnom čase</li>
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Pozná vaše ponuky a odpovie na otázky</li>
+              <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> V cene kredity 15 &euro; na AI nástroje</li>
             </ul>
             <div class="mt-auto pt-8">
               <a href="#" onclick="openSignup('Base');return false;" class="price-cta is-outline">Vybrať</a>
@@ -988,6 +1171,7 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
             <ul class="mt-8 space-y-3 text-sm leading-relaxed text-left" style="color:var(--muted)">
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Všetko z programu Base</li>
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> 1 000 minút hovorov mesačne</li>
+              <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> V cene kredity 30 &euro; na AI nástroje</li>
             </ul>
             <div class="mt-auto pt-8">
               <a href="#" onclick="openSignup('Pro');return false;" class="price-cta is-solid">Vybrať</a>
@@ -1007,6 +1191,7 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
             <ul class="mt-8 space-y-3 text-sm leading-relaxed text-left" style="color:var(--muted)">
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Všetko z programu Pro</li>
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> 2 000 minút hovorov mesačne</li>
+              <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> V cene kredity 60 &euro; na AI nástroje</li>
             </ul>
             <div class="mt-auto pt-8">
               <a href="#" onclick="openSignup('Max');return false;" class="price-cta is-outline">Vybrať</a>
@@ -1027,6 +1212,7 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Viac minút ako program Max</li>
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Neobmedzené čísla a agenti</li>
               <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Individuálne zaškolenie</li>
+              <li class="flex gap-x-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0;margin-top:2px" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Kredity na AI nástroje na mieru</li>
             </ul>
             <div class="mt-auto pt-8">
               <a href="#contatti" class="price-cta is-outline">Vybrať</a>
@@ -1691,6 +1877,59 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
       disconnectBtn.addEventListener('click', disconnect);
       retryBtn.addEventListener('click', connect);
       window.addEventListener('beforeunload', cleanup);
+    })();
+
+    // ── Before/after reveal slider (AI tools)
+    (function () {
+      document.querySelectorAll('[data-reveal-compare]').forEach(function (box) {
+        var clip    = box.querySelector('[data-reveal-clip]');
+        var divider = box.querySelector('[data-reveal-divider]');
+        if (!clip || !divider) return;
+
+        var beforeLabel = (box.querySelector('.reveal-label.is-before') || {}).textContent || 'before';
+        var pos = parseFloat(box.getAttribute('data-start') || '50');
+
+        function set(next) {
+          pos = Math.max(0, Math.min(100, next));
+          // The BEFORE layer sits on top and is clipped from the right edge.
+          clip.style.clipPath = 'inset(0 ' + (100 - pos) + '% 0 0)';
+          divider.style.left  = pos + '%';
+          box.setAttribute('aria-valuenow', Math.round(pos));
+          box.setAttribute('aria-valuetext', Math.round(pos) + ' % ' + beforeLabel.trim().toLowerCase());
+        }
+
+        function fromClientX(x) {
+          var r = box.getBoundingClientRect();
+          if (!r.width) return;
+          set(((x - r.left) / r.width) * 100);
+        }
+
+        box.addEventListener('pointerdown', function (e) {
+          box.setPointerCapture(e.pointerId);
+          box.classList.add('is-dragging');
+          fromClientX(e.clientX);
+        });
+        box.addEventListener('pointermove', function (e) {
+          if (!box.classList.contains('is-dragging')) return;
+          e.preventDefault();
+          fromClientX(e.clientX);
+        });
+        ['pointerup', 'pointercancel'].forEach(function (evt) {
+          box.addEventListener(evt, function () { box.classList.remove('is-dragging'); });
+        });
+
+        box.addEventListener('keydown', function (e) {
+          var step = e.shiftKey ? 10 : 4;
+          if      (e.key === 'ArrowLeft'  || e.key === 'ArrowDown') set(pos - step);
+          else if (e.key === 'ArrowRight' || e.key === 'ArrowUp')   set(pos + step);
+          else if (e.key === 'Home') set(0);
+          else if (e.key === 'End')  set(100);
+          else return;
+          e.preventDefault();
+        });
+
+        set(pos);
+      });
     })();
 
     // ── FAQ accordion (single open)

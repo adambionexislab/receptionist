@@ -92,24 +92,30 @@ def contacts(tenant: dict = Depends(current_tenant)):
 
 @router.get("/dashboard/api/summary")
 def summary(tenant: dict = Depends(current_tenant)):
-    """This billing period's numbers for THIS tenant: call minutes, and the AI-
-    tool credits the plan includes. Calls are counted only since call
-    persistence went live (there is no earlier history); credits are summed
-    over the same window, so both reset together. Strictly scoped to the
+    """This billing period's numbers for THIS tenant: call activity, and the
+    two allowances the plan includes (minutes and AI-tool credits) with what
+    the excess will be invoiced. Calls are counted only since call persistence
+    went live (there is no earlier history); tool credits are summed over the
+    same window, so both allowances reset together. Strictly scoped to the
     logged-in tenant's id.
+
+    The minutes the dashboard displays are the minutes billed: the period's
+    seconds are converted once (usage_db.billable_minutes) and that one number
+    feeds both the card and the credits block, so they can't disagree.
 
     Money is sent as integer euro cents — the browser divides for display, and
     nothing that gets invoiced is ever rounded through a float on the way here.
     """
     stats = calls_db.monthly_call_stats(tenant["id"])
+    minutes = usage_db.billable_minutes(stats["seconds"])
     return {
         "year": stats["year"],
         "month": stats["month"],
-        "minutes": round(stats["seconds"] / 60),
+        "minutes": minutes,
         "seconds": stats["seconds"],
         "calls": stats["calls"],
         "contacts": stats["contacts"],
-        "credits": usage_db.monthly_credits(tenant["id"], tenant.get("plan")),
+        "credits": usage_db.monthly_credits(tenant["id"], tenant.get("plan"), minutes),
     }
 
 

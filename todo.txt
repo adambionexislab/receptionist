@@ -51,11 +51,7 @@ settings to add to the dashboard:
 Test: if caller is interested she starts qualifying questions and he interrupt her to ask if they have something else (he might be interesten in more listings)
       removed the examples after questions. test it.
       if the transcriptiion tool isnt too slow or buggy. if so consult increase transcription .... (session)
-in the overview have each call have a field to witch adress(agent) the email was sent
-
-if i open the dashboard on the phone. is the phone number in contacts clickcable ? 
-
-test: minutes counter
+    minutes counter
 ad credits remaining to overview, overcharge that will be invoiced.
 
 add to ToS and landing page veverything about tools and credits.
