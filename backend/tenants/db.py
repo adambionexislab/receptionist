@@ -53,6 +53,12 @@ CREATE TABLE IF NOT EXISTS tenants (
 _ADDED_COLUMNS = {
     "locale": "TEXT NOT NULL DEFAULT 'it'",
     "access_code": "TEXT",
+    # The date this tenant's subscription renews, as an ISO timestamp. Only the
+    # day of the month is read (see billing/period.py) — it anchors the monthly
+    # window their minutes and tool credits reset on. Left NULL for everyone
+    # until the team records the real Stripe billing date; the period falls
+    # back to created_at, which is when provisioning happened.
+    "billing_anchor": "TEXT",
 }
 
 _COLUMNS = {
@@ -69,6 +75,7 @@ _COLUMNS = {
     "management_mode",
     "locale",
     "access_code",
+    "billing_anchor",
     "active",
 }
 

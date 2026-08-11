@@ -31,7 +31,6 @@ import datetime
 import logging
 from typing import Any, Optional
 
-from billing.period import month_bounds_utc
 from tenants import db as _tenants_db
 
 logger = logging.getLogger(__name__)
@@ -187,18 +186,16 @@ def record(tenant_id: str, tool: str, ref: Optional[str] = None) -> bool:
     return charged
 
 
-def monthly_usage(
-    tenant_id: str, now: Optional[datetime.datetime] = None
-) -> dict[str, Any]:
-    """What ONE tenant spent on AI tools in the current billing period, with a
-    per-tool count. Strictly scoped by tenant_id."""
-    year, month, start_utc, next_utc = month_bounds_utc(now)
+def monthly_usage(tenant_id: str, start_utc: str, end_utc: str) -> dict[str, Any]:
+    """What ONE tenant spent on AI tools between two UTC ISO instants — their
+    subscription month, resolved by the caller (see billing/period.py) — with a
+    per-tool count. `end_utc` is exclusive. Strictly scoped by tenant_id."""
     rows = _conn().execute(
         "SELECT tool, COUNT(*) AS uses, COALESCE(SUM(cost_cents), 0) AS cents "
         "FROM tool_usage "
         "WHERE tenant_id = ? AND created_at >= ? AND created_at < ? "
         "GROUP BY tool",
-        (tenant_id, start_utc, next_utc),
+        (tenant_id, start_utc, end_utc),
     ).fetchall()
 
     # Every known tool is present at zero, so the dashboard doesn't have to
@@ -211,29 +208,30 @@ def monthly_usage(
         # bill, it just has no slot in the breakdown.
         if row["tool"] in uses:
             uses[row["tool"]] = int(row["uses"] or 0)
-    return {"year": year, "month": month, "used_cents": used_cents, "uses": uses}
+    return {"used_cents": used_cents, "uses": uses}
 
 
 def monthly_credits(
     tenant_id: str,
     plan: Optional[str],
-    minutes: int = 0,
-    now: Optional[datetime.datetime] = None,
+    minutes: int,
+    start_utc: str,
+    end_utc: str,
 ) -> dict[str, Any]:
     """This period's bill for ONE tenant: both allowances, what's left of each,
     and what the excess adds up to.
 
     `minutes` is the tenant's call minutes for the same period, counted by
-    calls/db.py and passed in — the exact number the dashboard shows on its
-    minutes card, so the card and the invoice can never disagree about how
-    many minutes were charged.
+    calls/db.py over these same bounds and passed in — the exact number the
+    dashboard shows on its minutes card, so the card and the invoice can never
+    disagree about how many minutes were charged.
 
     Within each allowance, remaining and over are floored at zero and never
     both positive: together they say "you have X left" or "you're X over".
     The top-level overage_cents is what actually gets invoiced — both kinds of
     excess, in one number, because the agency is billed once.
     """
-    usage = monthly_usage(tenant_id, now)
+    usage = monthly_usage(tenant_id, start_utc, end_utc)
     tool_allowance = allowance_cents(plan)
     tool_used = usage["used_cents"]
     tool_over = max(0, tool_used - tool_allowance)
@@ -245,8 +243,8 @@ def monthly_credits(
 
     return {
         "plan": normalize_plan(plan).capitalize(),
-        "year": usage["year"],
-        "month": usage["month"],
+        "period_start": start_utc,
+        "period_end": end_utc,
         "tools": {
             "allowance_cents": tool_allowance,
             "used_cents": tool_used,

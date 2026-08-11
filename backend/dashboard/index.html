@@ -115,6 +115,7 @@
   header .agency { color: var(--text-dim); font-size: .9rem; }
   main { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
   main h2 { font-size: 1.25rem; margin: 0 0 16px; }
+  .period { color: var(--text-dim); font-size: .82rem; margin: -10px 0 18px; }
   .empty { padding: 48px; text-align: center; color: var(--text-dim); }
 
   .card {
@@ -580,6 +581,10 @@
   <main>
     <section id="view-contacts" class="view active">
       <h2 id="contacts-title">Contatti</h2>
+      <!-- Which window every number below covers. Not decoration: the period
+           is the subscription month, so it rarely lines up with the calendar
+           one and "questo mese" would otherwise be a guess. -->
+      <p class="period" id="period-range"></p>
       <div class="stats">
         <div class="stat">
           <div class="num" id="stat-minutes">—</div>
@@ -874,6 +879,9 @@
       stat_minutes: "Minuti questo mese",
       stat_calls: "Chiamate questo mese",
       stat_contacts: "Contatti questo mese",
+      // Il mese di abbonamento, non quello di calendario: le soglie si
+      // rinnovano il giorno dell'addebito.
+      period_range: "Periodo di fatturazione: {start} – {end}",
       // Minuti inclusi nel piano, poi €0,25 al minuto.
       stat_minutes_of: "su {n} inclusi nel piano",
       // Strumenti AI: crediti inclusi nel piano (€0,50 a foto, €1 a riunione).
@@ -1036,6 +1044,7 @@
       stat_minutes: "Minúty tento mesiac",
       stat_calls: "Hovory tento mesiac",
       stat_contacts: "Kontakty tento mesiac",
+      period_range: "Fakturačné obdobie: {start} – {end}",
       stat_minutes_of: "z {n} v programe",
       stat_credits: "Zostávajúce kredity",
       stat_credits_of: "z {total} v programe",
@@ -1302,6 +1311,7 @@
       $("stat-minutes").textContent = (s.minutes ?? 0).toLocaleString(LOCALE === "sk" ? "sk-SK" : "it-IT");
       $("stat-calls").textContent = s.calls ?? 0;
       $("stat-contacts").textContent = s.contacts ?? 0;
+      $("period-range").textContent = fmtPeriod(s.period_start, s.period_end);
       renderCredits(s.credits);
     } catch (_) { /* leave the placeholder dashes on a transient error */ }
   }
@@ -1310,6 +1320,21 @@
   // what the agent just spent without a page reload. Global because the
   // Acquisizione tab lives in its own IIFE further down.
   window.RefreshSummary = loadSummary;
+
+  // "Periodo di fatturazione: 22 ago – 21 set". period_end is exclusive — the
+  // instant the next period begins — so the last day shown is the day before
+  // it. Dates are formatted in Rome, the timezone the boundaries were cut on,
+  // so an agent abroad doesn't see the range shift by a day.
+  function fmtPeriod(startIso, endIso) {
+    if (!startIso || !endIso) return "";
+    const start = new Date(startIso);
+    const last = new Date(Date.parse(endIso) - 86400000);
+    if (isNaN(start) || isNaN(last)) return "";
+    const day = (d) => d.toLocaleDateString(intlTag(), {
+      day: "numeric", month: "short", timeZone: "Europe/Rome",
+    });
+    return S().period_range.replace("{start}", day(start)).replace("{end}", day(last));
+  }
 
   // Credits travel as integer euro cents (see /dashboard/api/summary) — this is
   // the only place they turn into money, at the last moment, for display.

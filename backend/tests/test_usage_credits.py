@@ -13,16 +13,24 @@ import sqlite3
 
 import pytest
 
+from billing import period
 from tenants import db as tenants_db
 from usage import db as usage_db
 
 TENANT = "tenant-a"
 OTHER_TENANT = "tenant-b"
 
-# Mid-month in Rome, well inside the same month in UTC — so a test that charges
-# "now" and one that charges at this instant land in the same period.
-AUGUST = datetime.datetime(2026, 8, 15, 12, 0, tzinfo=datetime.timezone.utc)
-SEPTEMBER = datetime.datetime(2026, 9, 2, 12, 0, tzinfo=datetime.timezone.utc)
+# A subscription that renews on the 22nd, and two instants inside consecutive
+# periods of it: mid-period, and a fortnight later after it has rolled over.
+ANCHOR = 22
+IN_AUGUST = datetime.datetime(2026, 9, 5, 12, 0, tzinfo=datetime.timezone.utc)
+IN_SEPTEMBER = datetime.datetime(2026, 9, 25, 12, 0, tzinfo=datetime.timezone.utc)
+
+
+def bounds(now=None, anchor=ANCHOR):
+    """The subscription month containing `now` — what the dashboard resolves
+    before asking either data module anything."""
+    return period.subscription_month_utc(anchor, now)
 
 
 @pytest.fixture(autouse=True)
@@ -55,7 +63,7 @@ def test_each_tool_costs_its_own_price():
     usage_db.record(TENANT, "photo")
     usage_db.record(TENANT, "meeting", "rec-1")
 
-    usage = usage_db.monthly_usage(TENANT)
+    usage = usage_db.monthly_usage(TENANT, *bounds())
     # €0.50 + €0.50 + €1.00
     assert usage["used_cents"] == 200
     assert usage["uses"] == {"photo": 2, "meeting": 1}
@@ -68,10 +76,10 @@ def test_a_meeting_is_charged_once_however_often_its_session_reopens():
     assert usage_db.record(TENANT, "meeting", "rec-1") is False
     assert usage_db.record(TENANT, "meeting", "rec-1") is False
 
-    assert usage_db.monthly_usage(TENANT)["used_cents"] == 100
+    assert usage_db.monthly_usage(TENANT, *bounds())["used_cents"] == 100
     # A different meeting is a different charge.
     assert usage_db.record(TENANT, "meeting", "rec-2") is True
-    assert usage_db.monthly_usage(TENANT)["used_cents"] == 200
+    assert usage_db.monthly_usage(TENANT, *bounds())["used_cents"] == 200
 
 
 def test_every_photo_is_charged_even_for_the_same_image():
@@ -79,7 +87,7 @@ def test_every_photo_is_charged_even_for_the_same_image():
     (equally paid-for) generation, not a duplicate of the first."""
     assert usage_db.record(TENANT, "photo") is True
     assert usage_db.record(TENANT, "photo") is True
-    assert usage_db.monthly_usage(TENANT)["uses"]["photo"] == 2
+    assert usage_db.monthly_usage(TENANT, *bounds())["uses"]["photo"] == 2
 
 
 def test_allowances_follow_the_plan():
@@ -111,7 +119,7 @@ def test_remaining_counts_down_from_the_plan_allowance():
         usage_db.record(TENANT, "photo")        # 4 × €0.50 = €2.00
     usage_db.record(TENANT, "meeting", "rec-1")  # + €1.00
 
-    credits = usage_db.monthly_credits(TENANT, "Base", minutes=120)
+    credits = usage_db.monthly_credits(TENANT, "Base", 120, *bounds())
     assert credits["tools"]["allowance_cents"] == 1500
     assert credits["tools"]["used_cents"] == 300
     assert credits["tools"]["remaining_cents"] == 1200
@@ -124,14 +132,14 @@ def test_spending_past_the_credit_allowance_becomes_overage():
     # Base is €15: thirty photos spend it exactly, and the tools keep working.
     for _ in range(30):
         usage_db.record(TENANT, "photo")
-    exhausted = usage_db.monthly_credits(TENANT, "Base")
+    exhausted = usage_db.monthly_credits(TENANT, "Base", 0, *bounds())
     assert exhausted["tools"]["remaining_cents"] == 0
     assert exhausted["overage_cents"] == 0
 
     usage_db.record(TENANT, "meeting", "rec-1")
     usage_db.record(TENANT, "photo")
 
-    over = usage_db.monthly_credits(TENANT, "Base")
+    over = usage_db.monthly_credits(TENANT, "Base", 0, *bounds())
     assert over["tools"]["used_cents"] == 1650
     # Remaining floors at zero rather than going negative — the cards read
     # "nothing left" and "€1.50 over", never "-€1.50 left".
@@ -164,12 +172,12 @@ def test_half_minutes_always_round_the_same_way():
 
 def test_minutes_past_the_plan_are_billed_by_the_minute():
     # Pro includes 1000 minutes; the 1000th is still included.
-    at_limit = usage_db.monthly_credits(TENANT, "Pro", minutes=1000)
+    at_limit = usage_db.monthly_credits(TENANT, "Pro", 1000, *bounds())
     assert at_limit["minutes"]["over"] == 0
     assert at_limit["minutes"]["remaining"] == 0
     assert at_limit["overage_cents"] == 0
 
-    over = usage_db.monthly_credits(TENANT, "Pro", minutes=1080)
+    over = usage_db.monthly_credits(TENANT, "Pro", 1080, *bounds())
     assert over["minutes"]["over"] == 80
     # 80 × €0.25
     assert over["minutes"]["overage_cents"] == 2000
@@ -182,7 +190,7 @@ def test_one_invoice_adds_up_minutes_and_tools():
     for _ in range(31):
         usage_db.record(TENANT, "photo")  # €15.50 against Base's €15.00
 
-    credits = usage_db.monthly_credits(TENANT, "Base", minutes=540)
+    credits = usage_db.monthly_credits(TENANT, "Base", 540, *bounds())
 
     assert credits["tools"]["overage_cents"] == 50     # €0.50 of tools
     assert credits["minutes"]["overage_cents"] == 1000  # 40 min × €0.25
@@ -194,28 +202,46 @@ def test_an_unused_allowance_is_never_a_negative_charge():
     for _ in range(31):
         usage_db.record(TENANT, "photo")
 
-    credits = usage_db.monthly_credits(TENANT, "Base", minutes=10)
+    credits = usage_db.monthly_credits(TENANT, "Base", 10, *bounds())
 
     assert credits["minutes"]["remaining"] == 490
     assert credits["minutes"]["overage_cents"] == 0
     assert credits["overage_cents"] == 50
 
 
-def test_credits_reset_with_the_billing_period():
-    charged_at(AUGUST, tool="meeting", ref="rec-1")
-    charged_at(AUGUST, tool="photo")
+def test_credits_reset_on_the_subscription_day_not_the_first():
+    """This subscription renews on the 22nd. Usage on 5 September belongs to
+    the period that opened on 22 August, and is gone from the one that opens on
+    22 September — a calendar month would have wiped it four days early."""
+    charged_at(IN_AUGUST, tool="meeting", ref="rec-1")
+    charged_at(IN_AUGUST, tool="photo")
 
-    august = usage_db.monthly_credits(TENANT, "Pro", now=AUGUST)
-    assert august["tools"]["used_cents"] == 150
-    assert august["tools"]["remaining_cents"] == 2850
+    current = usage_db.monthly_credits(TENANT, "Pro", 0, *bounds(IN_AUGUST))
+    assert current["period_start"].startswith("2026-08-21T22:00")  # 22 Aug, Rome
+    assert current["tools"]["used_cents"] == 150
+    assert current["tools"]["remaining_cents"] == 2850
 
-    # September starts from a full allowance without any reset job having run,
-    # and August stays readable for invoicing.
-    september = usage_db.monthly_credits(TENANT, "Pro", now=SEPTEMBER)
-    assert september["tools"]["used_cents"] == 0
-    assert september["tools"]["remaining_cents"] == 3000
-    assert september["tools"]["uses"] == {"photo": 0, "meeting": 0}
-    assert usage_db.monthly_credits(TENANT, "Pro", now=AUGUST)["tools"]["used_cents"] == 150
+    # The next period starts from a full allowance without any reset job having
+    # run, and the previous one stays readable for invoicing.
+    nxt = usage_db.monthly_credits(TENANT, "Pro", 0, *bounds(IN_SEPTEMBER))
+    assert nxt["period_start"].startswith("2026-09-21T22:00")  # 22 Sep, Rome
+    assert nxt["tools"]["used_cents"] == 0
+    assert nxt["tools"]["remaining_cents"] == 3000
+    assert nxt["tools"]["uses"] == {"photo": 0, "meeting": 0}
+    assert usage_db.monthly_credits(
+        TENANT, "Pro", 0, *bounds(IN_AUGUST)
+    )["tools"]["used_cents"] == 150
+
+
+def test_a_calendar_month_boundary_does_not_reset_anything():
+    """The 1st is just another day for a subscription anchored on the 22nd."""
+    late_august = datetime.datetime(2026, 8, 30, 12, tzinfo=datetime.timezone.utc)
+    early_september = datetime.datetime(2026, 9, 3, 12, tzinfo=datetime.timezone.utc)
+    charged_at(late_august, tool="photo")
+
+    assert bounds(late_august) == bounds(early_september)
+    after = usage_db.monthly_credits(TENANT, "Pro", 0, *bounds(early_september))
+    assert after["tools"]["used_cents"] == 50
 
 
 def test_usage_is_scoped_to_one_tenant():
@@ -225,9 +251,9 @@ def test_usage_is_scoped_to_one_tenant():
     # meeting can never suppress another's charge.
     assert usage_db.record(OTHER_TENANT, "meeting", "rec-1") is True
 
-    assert usage_db.monthly_usage(TENANT)["used_cents"] == 150
-    assert usage_db.monthly_usage(OTHER_TENANT)["used_cents"] == 100
-    assert usage_db.monthly_credits(OTHER_TENANT, "Max")["tools"]["uses"] == {
+    assert usage_db.monthly_usage(TENANT, *bounds())["used_cents"] == 150
+    assert usage_db.monthly_usage(OTHER_TENANT, *bounds())["used_cents"] == 100
+    assert usage_db.monthly_credits(OTHER_TENANT, "Max", 0, *bounds())["tools"]["uses"] == {
         "photo": 0, "meeting": 1,
     }
 
@@ -235,4 +261,4 @@ def test_usage_is_scoped_to_one_tenant():
 def test_an_unknown_tool_is_rejected_rather_than_billed_at_zero():
     with pytest.raises(ValueError):
         usage_db.record(TENANT, "video")
-    assert usage_db.monthly_usage(TENANT)["used_cents"] == 0
+    assert usage_db.monthly_usage(TENANT, *bounds())["used_cents"] == 0

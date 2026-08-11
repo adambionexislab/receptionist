@@ -16,11 +16,9 @@ call after deploy (see call/router._persist_call).
                   (a name and/or a callback number). Backs the contacts list.
 """
 
-import datetime
 import logging
 from typing import Any, Optional
 
-from billing.period import month_bounds_utc
 from tenants import db as _tenants_db
 
 logger = logging.getLogger(__name__)
@@ -155,31 +153,29 @@ def add_contact(
         return cur.lastrowid
 
 
-def monthly_call_stats(
-    tenant_id: str, now: Optional[datetime.datetime] = None
-) -> dict[str, int]:
-    """Total call seconds and call count for ONE tenant in the current billing
-    period (billing/period.py — the same window the AI-tool credits reset on).
-    started_at is stored as a UTC ISO string and the bounds come back as UTC ISO
-    strings, so the comparison is a plain string comparison. Strictly scoped by
-    tenant_id. Data only exists from go-live forward — there is no history
-    before call persistence shipped."""
-    year, month, start_utc, next_utc = month_bounds_utc(now)
+def monthly_call_stats(tenant_id: str, start_utc: str, end_utc: str) -> dict[str, int]:
+    """Total call seconds and call count for ONE tenant between two UTC ISO
+    instants — the tenant's subscription month, resolved by the caller (see
+    billing/period.py) and passed in, so this and the AI-tool credits are
+    always measured over the identical window.
+
+    started_at is stored as a UTC ISO string and the bounds are UTC ISO
+    strings, so the comparison is a plain string comparison. `end_utc` is
+    exclusive. Strictly scoped by tenant_id. Data only exists from go-live
+    forward — there is no history before call persistence shipped."""
     conn = _conn()
     row = conn.execute(
         "SELECT COALESCE(SUM(duration_seconds), 0) AS secs, COUNT(*) AS calls "
         "FROM call_sessions "
         "WHERE tenant_id = ? AND started_at >= ? AND started_at < ?",
-        (tenant_id, start_utc, next_utc),
+        (tenant_id, start_utc, end_utc),
     ).fetchone()
     crow = conn.execute(
         "SELECT COUNT(*) AS c FROM contacts "
         "WHERE tenant_id = ? AND created_at >= ? AND created_at < ?",
-        (tenant_id, start_utc, next_utc),
+        (tenant_id, start_utc, end_utc),
     ).fetchone()
     return {
-        "year": year,
-        "month": month,
         "seconds": int(row["secs"] or 0),
         "calls": int(row["calls"] or 0),
         "contacts": int(crow["c"] or 0),

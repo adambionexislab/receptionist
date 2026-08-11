@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from agents import db as agents_db
+from billing import period
 from calls import db as calls_db
 from config import settings
 from dashboard import session as sess
@@ -94,10 +95,13 @@ def contacts(tenant: dict = Depends(current_tenant)):
 def summary(tenant: dict = Depends(current_tenant)):
     """This billing period's numbers for THIS tenant: call activity, and the
     two allowances the plan includes (minutes and AI-tool credits) with what
-    the excess will be invoiced. Calls are counted only since call persistence
-    went live (there is no earlier history); tool credits are summed over the
-    same window, so both allowances reset together. Strictly scoped to the
-    logged-in tenant's id.
+    the excess will be invoiced. Strictly scoped to the logged-in tenant's id.
+
+    The period is the tenant's subscription month, resolved once here and
+    passed to both data modules, so every number on the page covers exactly the
+    same window and both allowances reset on the day the agency is charged.
+    Calls are counted only since call persistence went live — there is no
+    earlier history.
 
     The minutes the dashboard displays are the minutes billed: the period's
     seconds are converted once (usage_db.billable_minutes) and that one number
@@ -106,16 +110,19 @@ def summary(tenant: dict = Depends(current_tenant)):
     Money is sent as integer euro cents — the browser divides for display, and
     nothing that gets invoiced is ever rounded through a float on the way here.
     """
-    stats = calls_db.monthly_call_stats(tenant["id"])
+    start_utc, end_utc = period.tenant_month_utc(tenant)
+    stats = calls_db.monthly_call_stats(tenant["id"], start_utc, end_utc)
     minutes = usage_db.billable_minutes(stats["seconds"])
     return {
-        "year": stats["year"],
-        "month": stats["month"],
+        "period_start": start_utc,
+        "period_end": end_utc,
         "minutes": minutes,
         "seconds": stats["seconds"],
         "calls": stats["calls"],
         "contacts": stats["contacts"],
-        "credits": usage_db.monthly_credits(tenant["id"], tenant.get("plan"), minutes),
+        "credits": usage_db.monthly_credits(
+            tenant["id"], tenant.get("plan"), minutes, start_utc, end_utc
+        ),
     }
 
 

@@ -32,8 +32,6 @@ immobiliare.it URL in the form in slovak (and italian)
 
 photo editing: for now one at a time later with higher openai tier i can do bulk
 
-landing page: add ai tools section and credits included in plans
-Landing page: funzionalita should explan that she checkes availabiliy, answers questions, takes messages an so on . ad these as new cards
 landing page: access to the tools for non subscribed
 
 the minute cards in dashboard are for calendar month and should be for the subscribtion month
