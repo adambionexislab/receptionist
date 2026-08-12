@@ -29,6 +29,11 @@
     --red:       #f4675b;
     --radius:    10px;
     --shadow:    0 6px 24px rgba(0,0,0,.35);
+    /* Card outlines. On dark they're just --border; on light the cream border
+       nearly vanishes against the white surfaces, so cards get a near-black
+       edge instead to keep them readable as separate blocks. Only the card
+       containers use this — inputs, tables and dividers stay on --border. */
+    --card-border: var(--border);
     color-scheme: dark;
     font-size: 15px;
 
@@ -44,6 +49,7 @@
     --amber-light:     #b45309;
     --red-light:       #c9372b;
     --shadow-light:    0 6px 24px rgba(0,0,0,.08);
+    --card-border-light: #1c1a14;
   }
   @media (prefers-color-scheme: light) {
     /* Only auto-apply light when the user hasn't made an explicit choice —
@@ -54,7 +60,7 @@
       --border: var(--border-light); --text: var(--text-light); --text-dim: var(--text-dim-light);
       --accent: var(--accent-light); --accent-2: var(--accent-2-light);
       --green: var(--green-light); --amber: var(--amber-light); --red: var(--red-light);
-      --shadow: var(--shadow-light);
+      --shadow: var(--shadow-light); --card-border: var(--card-border-light);
     }
   }
   :root[data-theme="light"] {
@@ -63,7 +69,7 @@
     --border: var(--border-light); --text: var(--text-light); --text-dim: var(--text-dim-light);
     --accent: var(--accent-light); --accent-2: var(--accent-2-light);
     --green: var(--green-light); --amber: var(--amber-light); --red: var(--red-light);
-    --shadow: var(--shadow-light);
+    --shadow: var(--shadow-light); --card-border: var(--card-border-light);
   }
   /* No :root[data-theme="dark"] block needed — that's just the base :root. */
   * { box-sizing: border-box; }
@@ -76,7 +82,7 @@
   /* ── login ──────────────────────────────────────────── */
   .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
   .login-card {
-    background: var(--surface); border: 1px solid var(--border);
+    background: var(--surface); border: 1px solid var(--card-border);
     border-radius: var(--radius); box-shadow: var(--shadow);
     padding: 32px; width: 400px; max-width: 100%;
   }
@@ -119,7 +125,7 @@
   .empty { padding: 48px; text-align: center; color: var(--text-dim); }
 
   .card {
-    background: var(--surface); border: 1px solid var(--border);
+    background: var(--surface); border: 1px solid var(--card-border);
     border-radius: var(--radius); overflow: hidden;
   }
 
@@ -134,7 +140,7 @@
     .stats, .stats.stats-billing { grid-template-columns: 1fr; }
   }
   .stat {
-    background: var(--surface); border: 1px solid var(--border);
+    background: var(--surface); border: 1px solid var(--card-border);
     border-radius: var(--radius); padding: 18px 20px;
     display: flex; flex-direction: column;
   }
@@ -200,7 +206,7 @@
   /* ── listings cards ─────────────────────────────────────────────────── */
   .listings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
   .listing-card {
-    background: var(--surface); border: 1px solid var(--border);
+    background: var(--surface); border: 1px solid var(--card-border);
     border-radius: var(--radius); padding: 16px 18px;
     display: flex; flex-direction: column; gap: 10px;
   }
@@ -244,7 +250,7 @@
   .agents-toolbar { display: flex; margin-bottom: 16px; }
   .agents-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
   .agent-card {
-    background: var(--surface); border: 1px solid var(--border);
+    background: var(--surface); border: 1px solid var(--card-border);
     border-radius: var(--radius); padding: 16px 18px;
     display: flex; flex-direction: column; gap: 12px;
   }
@@ -472,7 +478,7 @@
     table, tbody, tr, td { display: block; width: 100%; }
     thead { display: none; }
     tbody tr {
-      border: 1px solid var(--border); border-radius: 8px;
+      border: 1px solid var(--card-border); border-radius: 8px;
       padding: 4px 12px; margin-bottom: 10px; background: var(--surface-2);
     }
     tbody tr:last-child { margin-bottom: 0; }
