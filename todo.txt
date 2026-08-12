@@ -52,11 +52,15 @@ Test: if caller is interested she starts qualifying questions and he interrupt h
     minutes counter
 ad credits remaining to overview, overcharge that will be invoiced.
 
-add to ToS and landing page veverything about tools and credits.
 
 call bugs:
             listed a listing in presented listing even though she didnt mention it
             it searched for dom n Hlavnej v Pezinku and got 3 resluts including Hlavná 45, košice
+
+billing_anchor is nullable and nothing sets it yet. Until it's populated, periods anchor on created_at — the manual-provisioning timestamp.
+If your team provisions a day or two after payment, each agency's allowance window is offset from their Stripe invoice by that much. 
+There's no admin endpoint for tenant edits, so setting it today means direct SQL: UPDATE tenants SET billing_anchor = '2026-07-22T00:00:00+00:00' WHERE id = .... 
+Worth doing for live tenants before you invoice on these numbers.
 
 
 

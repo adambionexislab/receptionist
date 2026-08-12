@@ -1613,14 +1613,16 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
 
       function showPattern(idx) {
         var next = generators[idx]();
+        // makeSVG() gives each pattern its own dim opacity inline; read it before
+        // overwriting it for the fade, so the fade lands on that value and not on
+        // full strength.
+        var base = next.style.opacity || '1';
         next.style.opacity    = '0';
         next.style.transition = 'opacity 2s ease';
         bg.appendChild(next);
         // Double rAF ensures transition fires after paint
         requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            next.style.opacity = String(parseFloat(next.getAttribute('style').match(/opacity:([\d.]+)/)[1]) || 1);
-          });
+          requestAnimationFrame(function () { next.style.opacity = base; });
         });
         if (activeSVG) {
           var old = activeSVG;
@@ -1632,13 +1634,10 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
       }
 
       showPattern(current);
-      // Restore correct opacity after transition (it was set inline above)
-      setTimeout(function () { if (activeSVG) activeSVG.style.opacity = ''; }, 2300);
 
       setInterval(function () {
         current = (current + 1) % PATTERNS.length;
         showPattern(current);
-        setTimeout(function () { if (activeSVG) activeSVG.style.opacity = ''; }, 2300);
       }, 12000);
     })();
 
@@ -1665,11 +1664,16 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
 
       var pc = null, micStream = null, audioEl = null;
       var audioCtx = null, analyser = null, rafId = null;
+      var micAnalyser = null, micWatchTimer = null, micCheckTimer = null, micHeard = false;
 
-      // Cost guardrails for this public demo: end after 10s of true silence
+      // Cost guardrails for this public demo: end after 15s of true silence
       // (neither side talking), and cap any single session at 5 minutes.
-      var IDLE_MS = 10000;
+      var IDLE_MS = 15000;
       var MAX_MS  = 5 * 60 * 1000;
+      // A mic muted in the OS still hands us a live track that only ever carries
+      // silence, so the session used to just time out and look broken. If nothing
+      // at all has been heard by then, say so instead of hanging up quietly.
+      var MIC_GRACE_MS = 12000;
       var idleInterval = null, maxTimer = null;
       var lastActivityAt = 0, userSpeaking = false;
 
@@ -1688,8 +1692,9 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
       function bumpActivity() { lastActivityAt = Date.now(); }
 
       function clearTimers() {
-        if (idleInterval) { clearInterval(idleInterval); idleInterval = null; }
-        if (maxTimer)     { clearTimeout(maxTimer);      maxTimer = null; }
+        if (idleInterval)  { clearInterval(idleInterval); idleInterval = null; }
+        if (maxTimer)      { clearTimeout(maxTimer);      maxTimer = null; }
+        if (micCheckTimer) { clearTimeout(micCheckTimer);  micCheckTimer = null; }
       }
 
       function startSessionTimers() {
@@ -1697,6 +1702,12 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
         userSpeaking = false;
         bumpActivity();
         maxTimer = setTimeout(function () { disconnect(); }, MAX_MS);
+        micCheckTimer = setTimeout(function () {
+          if (!micHeard) {
+            fail('Z vášho mikrofónu sme nič nepočuli. Skontrolujte, či nie je' +
+                 ' stlmený a či k nemu má prehliadač prístup, a skúste znova.');
+          }
+        }, MIC_GRACE_MS);
         // Poll for true mutual silence: the visitor isn't mid-utterance and
         // there's been no audio or server-event activity for IDLE_MS.
         idleInterval = setInterval(function () {
@@ -1708,6 +1719,9 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
       function cleanup() {
         clearTimers();
         if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+        if (micWatchTimer) { clearInterval(micWatchTimer); micWatchTimer = null; }
+        if (micAnalyser) { try { micAnalyser.disconnect(); } catch (e) {} micAnalyser = null; }
+        micHeard = false;
         if (analyser) { try { analyser.disconnect(); } catch (e) {} analyser = null; }
         if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
         if (pc) {
@@ -1731,16 +1745,47 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
         show('error');
       }
 
+      function ensureAudioCtx() {
+        if (audioCtx) return audioCtx;
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        audioCtx = new AC();
+        if (audioCtx.resume) audioCtx.resume();
+        return audioCtx;
+      }
+
+      // Watch the microphone itself (the visualizer below watches Apollonia's
+      // voice). getUserMedia succeeds even when the mic is muted at the OS level,
+      // so actual audio energy is the only proof the visitor can be heard.
+      function startMicWatch(stream) {
+        try {
+          var ctx = ensureAudioCtx();
+          if (!ctx) { micHeard = true; return; } // can't measure — don't blame the mic
+          micAnalyser = ctx.createAnalyser();
+          micAnalyser.fftSize = 1024;
+          ctx.createMediaStreamSource(stream).connect(micAnalyser);
+          var data = new Uint8Array(micAnalyser.fftSize);
+          // setInterval rather than rAF: rAF stops in a background tab, which
+          // would make a perfectly good mic look dead.
+          micWatchTimer = setInterval(function () {
+            micAnalyser.getByteTimeDomainData(data);
+            for (var i = 0; i < data.length; i++) {
+              if (Math.abs(data[i] - 128) > 3) { micHeard = true; return; }
+            }
+          }, 120);
+        } catch (e) {
+          micHeard = true;
+        }
+      }
+
       function startVisualizer(stream) {
         try {
-          var AC = window.AudioContext || window.webkitAudioContext;
-          if (!AC) return;
-          audioCtx = new AC();
-          if (audioCtx.resume) audioCtx.resume();
-          analyser = audioCtx.createAnalyser();
+          var ctx = ensureAudioCtx();
+          if (!ctx) return;
+          analyser = ctx.createAnalyser();
           analyser.fftSize = 64;
           analyser.smoothingTimeConstant = 0.75;
-          audioCtx.createMediaStreamSource(stream).connect(analyser);
+          ctx.createMediaStreamSource(stream).connect(analyser);
           var data = new Uint8Array(analyser.frequencyBinCount);
           var n = bars.length;
           visualizer.classList.remove('is-anim'); // drive heights from live audio
@@ -1770,6 +1815,7 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
             fail('Na rozhovor s Apollonia je potrebný prístup k mikrofónu. Povoľte ho a skúste znova.');
             return;
           }
+          startMicWatch(micStream);
 
           // 2. Ephemeral token from our backend (API key stays server-side).
           //    locale=sk → Slovak system prompt + Slovak knowledge base.
@@ -1827,7 +1873,9 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
             bumpActivity();
             var evt;
             try { evt = JSON.parse(e.data); } catch (err) { return; }
-            if (evt.type === 'input_audio_buffer.speech_started') userSpeaking = true;
+            // speech_started is OpenAI's own VAD confirming it can hear the
+            // visitor — the ground truth the local level check approximates.
+            if (evt.type === 'input_audio_buffer.speech_started') { userSpeaking = true; micHeard = true; }
             else if (evt.type === 'input_audio_buffer.speech_stopped') userSpeaking = false;
           });
 
