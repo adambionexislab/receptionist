@@ -69,6 +69,9 @@ services:
         value: gpt-image-2
       - key: GOOGLE_PLACES_API_KEY
         sync: false
+      # Shared staff password for /leadgen. Without it nobody can log in.
+      - key: LEADGEN_PASSWORD
+        sync: false
       - key: OUTREACH_FROM_EMAIL
         sync: false
       - key: CALENDLY_LINK

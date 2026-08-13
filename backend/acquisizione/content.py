@@ -103,6 +103,9 @@ IT: dict = {
     "email_no_text": "(nessuna descrizione)",
     "email_yes": "sì",
     "email_no": "no",
+    # tipo_annuncio is stored as an untranslated token (see schema.py's note);
+    # this is how that token is spelled out for the agency reading the email.
+    "listing_type_values": {"vendita": "Vendita", "affitto": "Affitto"},
     "field_labels": {
         "tipo_annuncio": "Tipo di annuncio",
         "tipologia": "Tipologia",

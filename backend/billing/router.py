@@ -140,26 +140,162 @@ async def _send_email(to: str, subject: str, body: str) -> None:
         resp.raise_for_status()
 
 
+# Column width for the "Label:              value" rows of the notification email.
+_LABEL_WIDTH = 20
+
+_INTERVAL_LABELS = {"day": "giorno", "week": "settimana", "month": "mese", "year": "anno"}
+
+
+def _row(label: str, *values) -> list[str]:
+    """One aligned "Label: value" line; empty values collapse to an em dash.
+
+    Passing several values (e.g. the lines of an address) prints one per line,
+    the continuation lines indented to sit under the first.
+    """
+    lines = [str(v) for v in values if v not in (None, "")]
+    if not lines:
+        lines = ["—"]
+    head = f"{label + ':':<{_LABEL_WIDTH}}{lines[0]}"
+    return [head] + [f"{'':<{_LABEL_WIDTH}}{line}" for line in lines[1:]]
+
+
+def _money(amount: Optional[int], currency: Optional[str]) -> Optional[str]:
+    """Format a Stripe minor-unit amount (14900 → "149.00 EUR").
+
+    Both markets bill in EUR, so the 100 divisor is safe here; it would be
+    wrong for a zero-decimal currency (JPY) if we ever sold in one.
+    """
+    if amount is None:
+        return None
+    return f"{amount / 100:,.2f} {(currency or '').upper()}".strip()
+
+
+def _id_of(value) -> Optional[str]:
+    """Stripe returns a related object as an ID string unless it was expanded."""
+    if isinstance(value, dict):
+        return value.get("id")
+    return value
+
+
+def _address_lines(address: Optional[dict]) -> list[str]:
+    """Flatten a Stripe address into printable lines (empty if not collected)."""
+    if not address:
+        return []
+    street = " ".join(p for p in (address.get("line1"), address.get("line2")) if p)
+    town = " ".join(
+        p for p in (address.get("postal_code"), address.get("city"), address.get("state")) if p
+    )
+    return [line for line in (street, town, address.get("country")) if line]
+
+
+def _tax_id_line(details: dict) -> Optional[str]:
+    """The VAT/tax IDs collected by tax_id_collection, e.g. "eu_vat IT01234567890"."""
+    ids = details.get("tax_ids") or []
+    parts = [
+        f"{t.get('type') or '?'} {t.get('value')}" for t in ids if t.get("value")
+    ]
+    return ", ".join(parts) or None
+
+
+def _line_item_lines(session: dict) -> list[str]:
+    """Describe what was bought — only present when the session was expanded."""
+    items = ((session.get("line_items") or {}).get("data")) or []
+    lines = []
+    for item in items:
+        price = item.get("price") or {}
+        interval = (price.get("recurring") or {}).get("interval")
+        text = f"{item.get('description') or '—'} × {item.get('quantity') or 1}"
+        amount = _money(item.get("amount_total"), item.get("currency") or session.get("currency"))
+        if amount:
+            text += f" — {amount}"
+        if interval:
+            text += f" / {_INTERVAL_LABELS.get(interval, interval)}"
+        lines.append(text)
+    return lines
+
+
+def _renewal_date(subscription) -> Optional[str]:
+    """Next billing date, when the subscription came back expanded.
+
+    Stripe's 2025-03-31 API version moved current_period_end off the
+    subscription onto its items; no api_version is pinned, so read both.
+    """
+    if not isinstance(subscription, dict):
+        return None
+    end = subscription.get("current_period_end")
+    if not end:
+        ends = [
+            item.get("current_period_end")
+            for item in (subscription.get("items") or {}).get("data") or []
+            if item.get("current_period_end")
+        ]
+        end = min(ends) if ends else None
+    if not end:
+        return None
+    return datetime.datetime.fromtimestamp(end, _ROME).strftime("%d/%m/%Y")
+
+
 async def _send_signup_notification(session: dict, meta: dict, email: Optional[str]) -> None:
-    """Notify the platform owner (LEAD_EMAIL) that a checkout completed."""
+    """Notify the platform owner (LEAD_EMAIL) that a checkout completed.
+
+    Reports everything the Checkout Session carries — billing details and VAT
+    ID collected on the hosted page, the amounts actually charged, and the
+    Stripe object IDs — so the number can be provisioned and invoiced without
+    opening the Dashboard.
+    """
     if not settings.LEAD_EMAIL:
         logger.warning("LEAD_EMAIL not configured — payment notification skipped")
         return
 
     plan = meta.get("plan_label") or meta.get("plan") or "?"
     studio = meta.get("studio_name") or "—"
-    body = "\n".join([
-        "Nuovo pagamento ApollonIA\n",
-        f"Piano:              {plan}",
-        f"Email cliente:      {email or '—'}",
-        f"Studio:             {studio}",
-        f"Telefono:           {meta.get('phone') or '—'}",
-        f"Stripe session:     {session.get('id')}",
-        f"Stripe customer:    {session.get('customer') or '—'}",
-        f"Subscription:       {session.get('subscription') or '—'}",
-        f"\nTimestamp: {datetime.datetime.now(_ROME).strftime('%d/%m/%Y %H:%M')} (Rome)",
-        "\nContatta lo studio entro 24 ore per configurare il numero Apollonia.",
-    ])
+    details = session.get("customer_details") or {}
+    totals = session.get("total_details") or {}
+    currency = session.get("currency")
+
+    body_lines = ["Nuovo pagamento ApollonIA", "", "— PIANO —"]
+    body_lines += _row("Piano", plan)
+    body_lines += _row("Articoli", *_line_item_lines(session))
+    body_lines += _row("Subtotale", _money(session.get("amount_subtotal"), currency))
+    # Only worth a line when non-zero — a "0.00 EUR" discount row is noise.
+    if totals.get("amount_discount"):
+        body_lines += _row("Sconto", f"-{_money(totals['amount_discount'], currency)}")
+    if totals.get("amount_tax"):
+        body_lines += _row("IVA", _money(totals["amount_tax"], currency))
+    body_lines += _row("Totale pagato", _money(session.get("amount_total"), currency))
+    body_lines += _row("Stato pagamento", session.get("payment_status"))
+    body_lines += _row("Prossimo rinnovo", _renewal_date(session.get("subscription")))
+
+    body_lines += ["", "— CLIENTE (da Stripe) —"]
+    body_lines += _row("Email", email)
+    body_lines += _row("Intestatario", details.get("name"))
+    body_lines += _row("Telefono", details.get("phone"))
+    body_lines += _row("Partita IVA", _tax_id_line(details))
+    # "reverse" means the EU VAT ID shifted the tax liability to the customer.
+    if (details.get("tax_exempt") or "none") != "none":
+        body_lines += _row("Regime IVA", details.get("tax_exempt"))
+    body_lines += _row("Indirizzo", *_address_lines(details.get("address")))
+
+    body_lines += ["", "— DAL FORM —"]
+    body_lines += _row("Studio", studio)
+    body_lines += _row("Telefono", meta.get("phone"))
+    body_lines += _row("Piano scelto", meta.get("plan"))
+    body_lines += _row("Pagamento", meta.get("pagamento"))
+    body_lines += _row("Lingua", meta.get("locale"))
+
+    body_lines += ["", "— STRIPE —"]
+    body_lines += _row("Session", session.get("id"))
+    body_lines += _row("Customer", _id_of(session.get("customer")))
+    body_lines += _row("Subscription", _id_of(session.get("subscription")))
+    body_lines += _row("Invoice", _id_of(session.get("invoice")))
+
+    body_lines += [
+        "",
+        f"Timestamp: {datetime.datetime.now(_ROME).strftime('%d/%m/%Y %H:%M')} (Rome)",
+        "",
+        "Contatta lo studio entro 24 ore per configurare il numero Apollonia.",
+    ]
+    body = "\n".join(body_lines)
     try:
         await _send_email(
             settings.LEAD_EMAIL,
@@ -239,6 +375,26 @@ async def _send_customer_confirmation(meta: dict, email: Optional[str]) -> None:
         logger.error("Failed to send customer confirmation to %s: %s", email, exc)
 
 
+def _expand_session(session: dict) -> dict:
+    """Re-fetch the session with the parts Stripe leaves out of webhook events.
+
+    Webhook payloads carry no line_items at all and reference the subscription
+    by ID, so the purchased items and the renewal date need an explicit
+    retrieve. A failure here must not cost us the notification: fall back to
+    the event's own copy, which still has the billing details and the totals.
+    """
+    if not settings.STRIPE_SECRET_KEY:
+        return session
+    try:
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        return stripe.checkout.Session.retrieve(
+            session["id"], expand=["line_items", "subscription"]
+        )
+    except Exception as exc:
+        logger.warning("Could not expand checkout session %s: %s", session.get("id"), exc)
+        return session
+
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
     if not settings.STRIPE_WEBHOOK_SECRET:
@@ -260,7 +416,7 @@ async def stripe_webhook(request: Request):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
+        session = _expand_session(event["data"]["object"])
         meta = session.get("metadata") or {}
         email = (
             session.get("customer_email")

@@ -1,0 +1,1854 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ApollonIA · Lead Generation</title>
+<style>
+  :root {
+    /* Retheme by editing these — everything else derives from them. */
+    --bg:        #0e1116;
+    --surface:   #171b22;
+    --surface-2: #1f242d;
+    --border:    #2a313c;
+    --text:      #e7ebf0;
+    --text-dim:  #9aa4b2;
+    --accent:    #5b8cff;
+    --accent-2:  #3a6bf0;
+    --green:     #3ecf8e;
+    --amber:     #f0b429;
+    --red:       #f4675b;
+    --radius:    10px;
+    --shadow:    0 6px 24px rgba(0,0,0,.35);
+    font-size: 15px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  a { color: var(--accent); }
+
+  /* ── top nav ─────────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; gap: 24px;
+    padding: 0 24px; height: 60px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .brand { font-weight: 700; font-size: 1.15rem; letter-spacing: .3px; }
+  .brand span { color: var(--accent); }
+  nav { display: flex; gap: 4px; }
+  .tab {
+    background: none; border: none; color: var(--text-dim);
+    padding: 8px 16px; border-radius: var(--radius); cursor: pointer;
+    font-size: .95rem; font-weight: 600;
+  }
+  .tab:hover { color: var(--text); background: var(--surface-2); }
+  .tab.active { color: var(--text); background: var(--surface-2); }
+  .spacer { flex: 1; }
+
+  /* ── login gate ─────────────────────────────────────── */
+  /* <body> starts locked so no dashboard chrome is ever painted before the
+     session check answers; every panel behind it is hidden, not just covered. */
+  body.locked header, body.locked main, body.locked .view { display: none !important; }
+  #loginScreen { display: none; position: fixed; inset: 0; align-items: center; justify-content: center; padding: 24px; }
+  body.locked #loginScreen { display: flex; }
+  .login-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 28px; width: 360px; max-width: 100%;
+    box-shadow: var(--shadow);
+  }
+  .login-card .brand { font-weight: 700; font-size: 1.15rem; letter-spacing: .3px; }
+  .login-card .brand span { color: var(--accent); }
+  .login-card p { margin: 6px 0 0; font-size: .9rem; }
+  .login-card .field { margin: 20px 0 4px; }
+  .login-card input, .login-card button { width: 100%; }
+  .login-err { color: var(--red); font-size: .85rem; min-height: 1.3em; margin: 8px 0 12px; }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  h2 { font-size: 1.25rem; margin: 0 0 16px; }
+  .muted { color: var(--text-dim); }
+
+  /* ── create bar ─────────────────────────────────────── */
+  .bar {
+    display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; margin-bottom: 24px;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: .78rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; }
+  input, select {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 12px; border-radius: 8px; font-size: .95rem; min-width: 200px;
+  }
+  input[type=number] { min-width: 110px; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  textarea {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 12px 14px; border-radius: 8px; font-size: .95rem; width: 100%;
+    font-family: inherit; line-height: 1.6; resize: vertical; min-height: 240px;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  code {
+    background: var(--surface-2); color: var(--accent);
+    padding: 2px 7px; border-radius: 5px; font-size: .85em;
+  }
+  .full { width: 100%; }
+
+  button.btn {
+    background: var(--accent-2); color: #fff; border: none;
+    padding: 11px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;
+    font-size: .95rem;
+  }
+  button.btn:hover { background: var(--accent); }
+  button.btn.ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+  button.btn.ghost:hover { border-color: var(--accent); }
+  button.btn:disabled { opacity: .5; cursor: default; }
+  button.btn.sm { padding: 6px 12px; font-size: .82rem; }
+
+  /* ── tables ─────────────────────────────────────────── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 12px 16px; font-size: .9rem; }
+  th { color: var(--text-dim); font-weight: 600; text-transform: uppercase; font-size: .72rem; letter-spacing: .4px; border-bottom: 1px solid var(--border); }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover { background: var(--surface-2); }
+  .empty { padding: 40px; text-align: center; color: var(--text-dim); }
+
+  /* ── badges ─────────────────────────────────────────── */
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+  }
+  .b-pending,   .b-none      { background: #2a313c; color: var(--text-dim); }
+  .b-running,   .b-interested{ background: rgba(91,140,255,.16); color: var(--accent); }
+  .b-completed, .b-sent,
+  .b-booked                  { background: rgba(62,207,142,.16); color: var(--green); }
+  .b-paused,    .b-no_email,
+  .b-replied                 { background: rgba(240,180,41,.16); color: var(--amber); }
+  .b-bounced,   .b-not_interested { background: rgba(244,103,91,.16); color: var(--red); }
+  .b-duplicate               { background: #2a313c; color: var(--text-dim); }
+  .b-positive                { background: rgba(62,207,142,.16); color: var(--green); }
+  .b-neutral                 { background: #2a313c; color: var(--text-dim); }
+  .b-negative                { background: rgba(244,103,91,.16); color: var(--red); }
+
+  /* ── detail view ────────────────────────────────────── */
+  .detail-head { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .detail-head h2 { margin: 0; }
+  .back { background: none; border: none; color: var(--accent); cursor: pointer; font-size: .9rem; padding: 0; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px;
+  }
+  .stat .num { font-size: 1.9rem; font-weight: 700; }
+  .stat .lbl { color: var(--text-dim); font-size: .82rem; margin-top: 4px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2,1fr); } }
+
+  .section-title { display: flex; align-items: center; justify-content: space-between; margin: 0 0 12px; }
+  .section-title h3 { margin: 0; font-size: 1rem; }
+
+  .log-feed { max-height: 460px; overflow-y: auto; padding: 6px 0; }
+  .log-row { display: flex; gap: 10px; padding: 8px 16px; font-size: .85rem; border-bottom: 1px solid var(--border); }
+  .log-row:last-child { border-bottom: none; }
+  .log-time { color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .log-event { font-weight: 700; color: var(--accent); white-space: nowrap; }
+  .log-detail { color: var(--text); overflow-wrap: anywhere; white-space: pre-wrap; }
+  .log-event.ev-error { color: var(--red); }
+  .log-event.ev-email_sent, .log-event.ev-response_received { color: var(--green); }
+
+  .filters { display: flex; gap: 8px; align-items: center; }
+  .filters select { min-width: 150px; padding: 6px 10px; }
+
+  .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; box-shadow: 0 0 0 rgba(62,207,142,.6); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(62,207,142,.5);} 70%{box-shadow:0 0 0 8px rgba(62,207,142,0);} 100%{box-shadow:0 0 0 0 rgba(62,207,142,0);} }
+
+  /* ── modal ──────────────────────────────────────────── */
+  .modal-bg {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    align-items: center; justify-content: center; z-index: 50;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px; width: 420px; max-width: 92vw;
+    box-shadow: var(--shadow);
+  }
+  .modal h3 { margin: 0 0 4px; }
+  .modal .sub { color: var(--text-dim); font-size: .85rem; margin-bottom: 16px; }
+  .modal .field { margin-bottom: 14px; }
+  .modal textarea {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 10px 12px; width: 100%; resize: vertical; min-height: 70px; font-family: inherit;
+  }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+
+  /* ── meeting notes (voice → structured note) ────────── */
+  .hidden { display: none !important; }
+  .nt-pad { padding: 18px; }
+  .nt-intro { max-width: 720px; }
+  .nt-live-head {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 14px 16px; border-bottom: 1px solid var(--border);
+  }
+  .nt-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-dim); flex: none; }
+  .nt-dot.live { background: var(--red); animation: recpulse 1.5s infinite; }
+  .nt-dot.warn { background: var(--amber); }
+  @keyframes recpulse {
+    0%   { box-shadow: 0 0 0 0 rgba(244,103,91,.55); }
+    70%  { box-shadow: 0 0 0 9px rgba(244,103,91,0); }
+    100% { box-shadow: 0 0 0 0 rgba(244,103,91,0); }
+  }
+  .nt-transcript {
+    max-height: 320px; overflow-y: auto; padding: 16px;
+    white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; font-size: .92rem;
+  }
+  .nt-transcript:empty::before { content: attr(data-empty); color: var(--text-dim); }
+  .nt-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .nt-field label { font-size: .78rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; }
+  .nt-field .hint { text-transform: none; letter-spacing: 0; font-size: .8rem; }
+  .nt-field input, .nt-field select, .nt-field textarea { width: 100%; min-width: 0; }
+  .nt-field textarea { min-height: 96px; }
+  .nt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  @media (max-width: 760px) { .nt-grid { grid-template-columns: 1fr; } }
+  .nt-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .nt-err { color: var(--red); font-size: .88rem; min-height: 1.2em; margin-bottom: 10px; }
+  .nt-excerpt {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; margin: 10px 0 16px; color: var(--text-dim);
+    font-size: .88rem; white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .nt-raw { margin-top: 8px; }
+  .nt-raw summary { cursor: pointer; color: var(--text-dim); font-size: .85rem; }
+  .nt-raw .nt-excerpt { max-height: 240px; overflow-y: auto; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+    padding: 12px 20px; border-radius: 10px; box-shadow: var(--shadow);
+    opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { border-color: var(--red); }
+</style>
+</head>
+<body class="locked">
+
+<div id="loginScreen">
+  <form class="login-card" id="loginForm" onsubmit="return doLogin(event)">
+    <div class="brand">Apollon<span>IA</span> · Lead Gen</div>
+    <p class="muted">Area riservata.</p>
+    <div class="field">
+      <label for="loginPw">Password</label>
+      <input id="loginPw" type="password" autocomplete="current-password" />
+    </div>
+    <div class="login-err" id="loginErr"></div>
+    <button class="btn" type="submit" id="loginBtn">Entra</button>
+  </form>
+</div>
+
+<header>
+  <div class="brand">Apollon<span>IA</span> · Lead Gen</div>
+  <nav>
+    <button class="tab active" id="tab-campaigns" onclick="showView('campaigns')">Campagne</button>
+    <button class="tab" id="tab-template" onclick="showView('template')">Email</button>
+    <button class="tab" id="tab-notes" onclick="showView('notes')">Note riunioni</button>
+    <button class="tab" id="tab-detail" onclick="showView('detail')" style="display:none">Dettaglio</button>
+  </nav>
+  <div class="spacer"></div>
+  <button class="btn ghost sm" id="logoutBtn" onclick="logout()">Esci</button>
+</header>
+
+<main>
+  <!-- ── VIEW 1: CAMPAIGNS ─────────────────────────────── -->
+  <section class="view active" id="view-campaigns">
+    <h2>Nuova campagna</h2>
+    <div class="bar">
+      <div class="field">
+        <label for="city">Città</label>
+        <input id="city" type="text" placeholder="es. Milano" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="maxResults">Max lead</label>
+        <input id="maxResults" type="number" value="60" min="1" max="60" />
+      </div>
+      <button class="btn" id="startBtn" onclick="createCampaign()">Avvia Campagna</button>
+    </div>
+
+    <h2>Campagne</h2>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Città</th><th>Stato</th><th>Creata</th>
+            <th>Trovati</th><th>Email</th><th>Risposte</th><th>Demo</th>
+          </tr>
+        </thead>
+        <tbody id="campaignsBody">
+          <tr><td class="empty" colspan="7">Caricamento…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── VIEW 2: DETAIL ────────────────────────────────── -->
+  <section class="view" id="view-detail">
+    <button class="back" onclick="showView('campaigns')">← Tutte le campagne</button>
+    <div class="detail-head">
+      <h2 id="d-city">—</h2>
+      <span id="d-status" class="badge b-pending">—</span>
+      <span id="d-live"></span>
+      <div class="spacer"></div>
+      <button class="btn ghost sm" id="d-toggle" onclick="toggleCampaign()">Avvia</button>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="num" id="s-found">0</div><div class="lbl">Trovati</div></div>
+      <div class="stat"><div class="num" id="s-emailed">0</div><div class="lbl">Email inviate</div></div>
+      <div class="stat"><div class="num" id="s-responded">0</div><div class="lbl">Risposte</div></div>
+      <div class="stat"><div class="num" id="s-booked">0</div><div class="lbl">Demo prenotate</div></div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <div class="section-title">
+          <h3>Lead</h3>
+          <div class="filters">
+            <select id="leadFilter" onchange="loadLeads()">
+              <option value="">Tutti</option>
+              <option value="pending">Email: in attesa</option>
+              <option value="sent">Email: inviata</option>
+              <option value="no_email">Email: assente</option>
+              <option value="bounced">Email: bounced</option>
+              <option value="duplicate">Email: duplicata</option>
+              <option value="replied">Risposta: ha risposto</option>
+              <option value="interested">Risposta: interessato</option>
+              <option value="not_interested">Risposta: non interessato</option>
+              <option value="booked">Risposta: demo prenotata</option>
+            </select>
+          </div>
+        </div>
+        <div class="card">
+          <table>
+            <thead>
+              <tr><th>Agenzia</th><th>Email</th><th>Stato</th><th>Risposta</th><th></th></tr>
+            </thead>
+            <tbody id="leadsBody">
+              <tr><td class="empty" colspan="5">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title"><h3>Log attività</h3><span class="muted" id="logHint"></span></div>
+        <div class="card"><div class="log-feed" id="logFeed"><div class="empty">—</div></div></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ── VIEW 3: EMAIL TEMPLATE ─────────────────────────────── -->
+  <section class="view" id="view-template">
+    <h2>Template email di outreach</h2>
+    <p class="muted">
+      Questo testo viene usato per tutte le email inviate alle agenzie.
+      Placeholder disponibili: <code>{agency_name}</code> <code>{city}</code> <code>{calendly_link}</code>
+    </p>
+    <div class="card" style="padding:18px; margin-bottom:24px;">
+      <div class="field" style="margin-bottom:16px;">
+        <label for="tplSubject">Oggetto</label>
+        <input id="tplSubject" class="full" type="text" />
+      </div>
+      <div class="field" style="margin-bottom:16px;">
+        <label for="tplBody">Corpo</label>
+        <textarea id="tplBody"></textarea>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="btn" id="tplSaveBtn" onclick="saveTemplate()">Salva</button>
+        <button class="btn ghost" onclick="resetTemplate()">Ripristina predefinito</button>
+        <div class="spacer"></div>
+        <span class="muted" id="tplHint"></span>
+      </div>
+    </div>
+
+    <div class="section-title"><h3>Anteprima</h3><span class="muted">esempio: Studio Rossi · Milano</span></div>
+    <div class="card" style="padding:18px; margin-bottom:24px;">
+      <div class="muted" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.4px;">Oggetto</div>
+      <div id="prevSubject" style="font-weight:600; margin:4px 0 16px;">—</div>
+      <div class="muted" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.4px;">Corpo</div>
+      <div id="prevBody" style="white-space:pre-wrap; margin-top:4px;">—</div>
+    </div>
+
+    <h2>Invia email di prova</h2>
+    <p class="muted">
+      Invia il testo qui sopra (anche non salvato) a un indirizzo a tua scelta — così vedi
+      com'è in arrivo e puoi provare a rispondere. Le risposte arrivano alla casella del mittente.
+    </p>
+    <div class="card" style="padding:18px; margin-bottom:24px;">
+      <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+        <div class="field" style="flex:1; min-width:240px;">
+          <label for="testTo">Invia a</label>
+          <input id="testTo" class="full" type="email" placeholder="tua@email.com" />
+        </div>
+        <button class="btn" id="testBtn" onclick="sendTestEmail()">Invia prova</button>
+      </div>
+      <div class="muted" id="testHint" style="margin-top:10px;"></div>
+    </div>
+
+    <h2>Agenzie da escludere</h2>
+    <p class="muted">
+      Le agenzie il cui <strong>nome</strong> contiene una di queste parole non verranno
+      contattate (verifica senza distinzione tra maiuscole/minuscole, prima di spendere
+      crediti Google). Separa le parole con una virgola. Lascia vuoto per non escludere nulla.
+    </p>
+    <div class="card" style="padding:18px;">
+      <div class="field" style="margin-bottom:16px;">
+        <label for="exclKeywords">Parole chiave (es. tecnocasa, tempocasa)</label>
+        <input id="exclKeywords" class="full" type="text" placeholder="tecnocasa, tempocasa" />
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="btn" id="exclSaveBtn" onclick="saveExclusions()">Salva</button>
+        <div class="spacer"></div>
+        <span class="muted" id="exclHint"></span>
+      </div>
+    </div>
+  </section>
+
+<!-- ── VIEW 4: MEETING NOTES ──────────────────────────────── -->
+  <section class="view" id="view-notes">
+    <h2>Note riunioni</h2>
+    <p class="muted nt-intro">
+      Subito dopo ogni riunione, avvia la registrazione e racconta a voce com'è andata:
+      cosa ha funzionato, cosa no, cosa ha obiettato il cliente. Al termine la nota viene
+      strutturata e resta modificabile. Si registra solo la tua voce — la riunione no.
+    </p>
+
+    <!-- Only shown when the server still holds a recording nobody finished:
+         a closed browser or a killed tab leaves the transcript on the server
+         but takes the way back to it with the page. -->
+    <div class="card hidden" id="nt-resume" style="margin-bottom:24px;">
+      <div class="nt-pad">
+        <strong>C'è una registrazione rimasta a metà.</strong>
+        <div class="nt-excerpt" id="nt-resume-excerpt"></div>
+        <div class="nt-err" id="nt-resume-err"></div>
+        <div class="nt-actions">
+          <button class="btn" id="nt-resume-btn">Riprendi</button>
+          <button class="btn ghost" id="nt-resume-discard-btn">Ignora</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="bar" id="nt-start">
+      <div class="field">
+        <label for="nt-language">Lingua della riunione</label>
+        <select id="nt-language">
+          <option value="it">Italiano</option>
+          <option value="sk">Slovenčina</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+      <button class="btn" id="nt-start-btn">Avvia registrazione</button>
+      <div class="nt-err" id="nt-start-err" style="margin:0;"></div>
+    </div>
+
+    <div class="card hidden" id="nt-live" style="margin-bottom:24px;">
+      <div class="nt-live-head">
+        <span class="nt-dot" id="nt-dot"></span>
+        <span id="nt-status">Registrazione in corso…</span>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" id="nt-cancel-btn">Annulla</button>
+        <button class="btn ghost sm" id="nt-pause-btn">Pausa</button>
+        <button class="btn sm" id="nt-finish-btn">Termina e struttura</button>
+      </div>
+      <div class="nt-transcript" id="nt-transcript" data-empty="La trascrizione appare qui mentre parli…"></div>
+    </div>
+
+    <div class="card hidden" id="nt-processing" style="margin-bottom:24px;">
+      <div class="nt-pad">
+        <p id="nt-processing-text">Sto strutturando la nota…</p>
+        <div class="nt-err" id="nt-processing-err"></div>
+        <div class="nt-actions">
+          <button class="btn ghost hidden" id="nt-retry-btn">Riprova</button>
+          <button class="btn ghost hidden" id="nt-processing-back-btn">Annulla</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- The editable note: shown after extraction, and again whenever a saved
+         note is reopened from the table below. -->
+    <div class="card hidden" id="nt-review" style="margin-bottom:24px;">
+      <div class="nt-pad">
+        <div class="section-title">
+          <h3 id="nt-review-title">Nota della riunione</h3>
+          <span class="muted" id="nt-review-meta"></span>
+        </div>
+
+        <div class="nt-grid">
+          <div class="nt-field">
+            <label for="nt-f-title">Titolo</label>
+            <input id="nt-f-title" type="text" />
+          </div>
+          <div class="nt-field">
+            <label for="nt-f-customer">Cliente</label>
+            <input id="nt-f-customer" type="text" />
+          </div>
+        </div>
+
+        <div class="nt-field" style="max-width:280px;">
+          <label for="nt-f-outcome">Esito</label>
+          <select id="nt-f-outcome">
+            <option value="">—</option>
+            <option value="positive">Positivo</option>
+            <option value="neutral">Neutro</option>
+            <option value="negative">Negativo</option>
+          </select>
+        </div>
+
+        <div class="nt-field">
+          <label for="nt-f-summary">Sintesi</label>
+          <textarea id="nt-f-summary"></textarea>
+        </div>
+
+        <div class="nt-grid">
+          <div class="nt-field">
+            <label for="nt-f-went_well">Cosa è andato bene <span class="hint muted">— una riga per punto</span></label>
+            <textarea id="nt-f-went_well"></textarea>
+          </div>
+          <div class="nt-field">
+            <label for="nt-f-went_wrong">Cosa è andato male <span class="hint muted">— una riga per punto</span></label>
+            <textarea id="nt-f-went_wrong"></textarea>
+          </div>
+          <div class="nt-field">
+            <label for="nt-f-objections">Obiezioni del cliente <span class="hint muted">— una riga per obiezione</span></label>
+            <textarea id="nt-f-objections"></textarea>
+          </div>
+          <div class="nt-field">
+            <label for="nt-f-next_steps">Prossimi passi <span class="hint muted">— una riga per punto</span></label>
+            <textarea id="nt-f-next_steps"></textarea>
+          </div>
+        </div>
+
+        <details class="nt-raw">
+          <summary>Trascrizione</summary>
+          <div class="nt-excerpt" id="nt-raw-transcript"></div>
+        </details>
+
+        <div class="nt-err" id="nt-review-err" style="margin-top:16px;"></div>
+        <div class="nt-actions">
+          <button class="btn" id="nt-save-btn">Salva nota</button>
+          <button class="btn ghost" id="nt-review-close-btn">Chiudi</button>
+          <div class="spacer"></div>
+          <button class="btn ghost sm" id="nt-delete-btn">Elimina</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">
+      <h3>Note salvate</h3>
+      <span class="muted" id="nt-list-hint"></span>
+    </div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr><th>Data</th><th>Titolo</th><th>Cliente</th><th>Esito</th><th>Obiezioni</th><th></th></tr>
+        </thead>
+        <tbody id="nt-list-body">
+          <tr><td class="empty" colspan="6">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+<!-- ── response modal ──────────────────────────────────── -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3>Segna risposta</h3>
+    <div class="sub" id="modalLead">—</div>
+    <div class="field">
+      <label for="respType">Tipo di risposta</label>
+      <select id="respType">
+        <option value="interested">Interessato</option>
+        <option value="not_interested">Non interessato</option>
+        <option value="booked">Demo prenotata</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="respNotes">Note (opzionale)</label>
+      <textarea id="respNotes" placeholder="…"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal()">Annulla</button>
+      <button class="btn" onclick="submitResponse()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+const CONFIG = {
+  // Same origin: this page is served by the API itself (see leadgen/router.py),
+  // which is what makes the session cookie first-party and therefore survive on
+  // iPhone Safari. Requests below are relative, and the browser attaches the
+  // cookie automatically.
+  API_BASE: ""
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
+let state = {
+  view: "campaigns",
+  campaignId: null,
+  campaign: null,
+  logTimer: null,
+  modalLeadId: null,
+};
+
+// ── login gate ───────────────────────────────────────────
+// One shared staff password, exchanged for a 30-day signed cookie, so the
+// device stays logged in: the rep records a note straight after a meeting and
+// a password prompt at that moment is a note that never gets recorded.
+function showLogin(message) {
+  document.body.classList.add("locked");
+  document.getElementById("loginErr").textContent = message || "";
+  const pw = document.getElementById("loginPw");
+  pw.value = "";
+  pw.focus();
+}
+
+function unlock() {
+  document.body.classList.remove("locked");
+  document.getElementById("loginPw").value = "";
+  loadCampaigns();
+}
+
+async function doLogin(event) {
+  event.preventDefault();
+  const password = document.getElementById("loginPw").value;
+  const btn = document.getElementById("loginBtn");
+  const err = document.getElementById("loginErr");
+  err.textContent = "";
+  btn.disabled = true; btn.textContent = "Accesso…";
+  try {
+    const res = await fetch(CONFIG.API_BASE + "/leadgen/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (res.ok) { unlock(); return false; }
+    // Each of these means something different to whoever is standing there:
+    // wrong password, locked out, or nobody set the password on the server.
+    err.textContent = {
+      401: "Password errata.",
+      429: "Troppi tentativi. Riprova tra qualche minuto.",
+      503: "Login non configurato sul server (LEADGEN_PASSWORD).",
+    }[res.status] || ("Errore " + res.status);
+  } catch (e) {
+    err.textContent = "Connessione fallita: " + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = "Entra";
+  }
+  return false;
+}
+
+async function logout() {
+  // Logging out mid-recording would kill the autosave and strand the debrief.
+  if (window.NotesRecording && window.NotesRecording()) {
+    toast("Termina prima la registrazione in corso", true);
+    return;
+  }
+  try { await fetch(CONFIG.API_BASE + "/leadgen/logout", { method: "POST" }); } catch (_) {}
+  showLogin();
+}
+
+async function boot() {
+  try {
+    const me = await (await fetch(CONFIG.API_BASE + "/leadgen/api/me")).json();
+    if (me.authenticated) { unlock(); return; }
+  } catch (_) { /* offline or server down — the login screen is the honest landing */ }
+  showLogin();
+}
+
+// ── tiny helpers ─────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(CONFIG.API_BASE + path, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  if (res.status === 401) {
+    // The session expired or was cleared elsewhere. Back to the login screen,
+    // rather than letting every panel on the page fill up with red errors.
+    showLogin("Sessione scaduta. Accedi di nuovo.");
+    throw new Error("Sessione scaduta");
+  }
+  if (!res.ok) {
+    let msg = res.status + " " + res.statusText;
+    try { const j = await res.json(); if (j.detail) msg = j.detail; } catch (e) {}
+    throw new Error(msg);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+function toast(msg, isErr = false) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (isErr ? " err" : "");
+  setTimeout(() => { t.className = "toast"; }, 3000);
+}
+
+function fmtDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
+  if (isNaN(d)) return iso;
+  return d.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+function fmtTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
+  if (isNaN(d)) return iso;
+  return d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+const BADGE_LABELS = {
+  pending: "in attesa", running: "in corso", paused: "in pausa", completed: "completata",
+  no_email: "no email", sent: "inviata", bounced: "bounced", duplicate: "duplicato",
+  none: "nessuna", replied: "ha risposto", interested: "interessato", not_interested: "non interessato", booked: "prenotata",
+};
+function badgeLabel(value) { return BADGE_LABELS[value] || value || "—"; }
+function badge(value) { return `<span class="badge b-${value}">${badgeLabel(value)}</span>`; }
+function esc(s) {
+  return (s == null ? "" : String(s)).replace(/[&<>"]/g, c => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+// ── view switching ───────────────────────────────────────
+function showView(view) {
+  state.view = view;
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  document.getElementById("view-" + view).classList.add("active");
+  document.getElementById("tab-campaigns").classList.toggle("active", view === "campaigns");
+  document.getElementById("tab-template").classList.toggle("active", view === "template");
+  document.getElementById("tab-notes").classList.toggle("active", view === "notes");
+  document.getElementById("tab-detail").classList.toggle("active", view === "detail");
+  if (view !== "detail") stopLogPolling();
+  if (view === "campaigns") {
+    document.getElementById("tab-detail").style.display = "none";
+    loadCampaigns();
+  }
+  if (view === "template") { loadTemplate(); loadExclusions(); }
+  if (view === "notes" && window.NotesEnter) window.NotesEnter();
+}
+
+// ── campaigns list ───────────────────────────────────────
+async function loadCampaigns() {
+  const body = document.getElementById("campaignsBody");
+  try {
+    const rows = await api("/campaigns");
+    if (!rows.length) {
+      body.innerHTML = `<tr><td class="empty" colspan="7">Nessuna campagna. Avviane una qui sopra.</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows.map(c => `
+      <tr class="clickable" onclick="openCampaign(${c.id})">
+        <td><strong>${esc(c.city)}</strong></td>
+        <td>${badge(c.status)}</td>
+        <td class="muted">${fmtDate(c.created_at)}</td>
+        <td>${c.total_found}</td>
+        <td>${c.total_emailed}</td>
+        <td>${c.total_responded}</td>
+        <td>${c.total_booked}</td>
+      </tr>`).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td class="empty" colspan="7">Errore: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function createCampaign() {
+  const city = document.getElementById("city").value.trim();
+  const maxResults = parseInt(document.getElementById("maxResults").value, 10) || 60;
+  if (!city) { toast("Inserisci una città", true); return; }
+  const btn = document.getElementById("startBtn");
+  btn.disabled = true; btn.textContent = "Avvio…";
+  try {
+    const campaign = await api("/campaigns", {
+      method: "POST",
+      body: JSON.stringify({ city, max_results: maxResults }),
+    });
+    await api(`/campaigns/${campaign.id}/start`, { method: "POST" });
+    toast(`Campagna avviata per ${city}`);
+    document.getElementById("city").value = "";
+    openCampaign(campaign.id);
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Avvia Campagna";
+  }
+}
+
+// ── campaign detail ──────────────────────────────────────
+async function openCampaign(id) {
+  state.campaignId = id;
+  document.getElementById("tab-detail").style.display = "";
+  showViewDetail();
+  await refreshCampaign();
+  await loadLeads();
+  await loadLogs();
+  startLogPolling();
+}
+function showViewDetail() {
+  state.view = "detail";
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  document.getElementById("view-detail").classList.add("active");
+  document.getElementById("tab-campaigns").classList.remove("active");
+  document.getElementById("tab-detail").classList.add("active");
+}
+
+async function refreshCampaign() {
+  try {
+    const c = await api(`/campaigns/${state.campaignId}`);
+    state.campaign = c;
+    document.getElementById("d-city").textContent = c.city;
+    const st = document.getElementById("d-status");
+    st.className = "badge b-" + c.status;
+    st.textContent = badgeLabel(c.status);
+    document.getElementById("s-found").textContent = c.total_found;
+    document.getElementById("s-emailed").textContent = c.total_emailed;
+    document.getElementById("s-responded").textContent = c.total_responded;
+    document.getElementById("s-booked").textContent = c.total_booked;
+
+    const running = c.status === "running";
+    document.getElementById("d-live").innerHTML = running ? '<span class="pulse"></span>' : "";
+    const toggle = document.getElementById("d-toggle");
+    toggle.textContent = running ? "Pausa" : (c.status === "completed" ? "Riavvia" : "Avvia");
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  }
+}
+
+async function toggleCampaign() {
+  const c = state.campaign;
+  if (!c) return;
+  try {
+    if (c.status === "running") {
+      await api(`/campaigns/${c.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "paused" }) });
+      toast("Campagna in pausa");
+    } else if (c.status === "completed") {
+      await api(`/campaigns/${c.id}/start`, { method: "POST" });
+      toast("Campagna riavviata");
+    } else {
+      // pending or paused → resume via status=running
+      await api(`/campaigns/${c.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "running" }) });
+      toast("Campagna ripresa");
+    }
+    await refreshCampaign();
+    startLogPolling();
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  }
+}
+
+async function loadLeads() {
+  const body = document.getElementById("leadsBody");
+  const status = document.getElementById("leadFilter").value;
+  try {
+    const q = status ? `?status=${encodeURIComponent(status)}&limit=200` : "?limit=200";
+    const data = await api(`/campaigns/${state.campaignId}/leads${q}`);
+    const leads = data.leads || [];
+    if (!leads.length) {
+      body.innerHTML = `<tr><td class="empty" colspan="5">Nessun lead${status ? " con questo filtro" : " ancora"}.</td></tr>`;
+      return;
+    }
+    body.innerHTML = leads.map(l => `
+      <tr>
+        <td><strong>${esc(l.agency_name) || "—"}</strong>${l.notes ? `<br><span class="muted" style="font-size:.8rem">${esc(l.notes)}</span>` : ""}</td>
+        <td>${l.email ? esc(l.email) : '<span class="muted">—</span>'}</td>
+        <td>${badge(l.email_status)}</td>
+        <td>${badge(l.response_status)}</td>
+        <td><button class="btn ghost sm" onclick="openModal(${l.id}, '${esc(l.agency_name).replace(/'/g, "\\'")}')">Segna risposta</button></td>
+      </tr>`).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td class="empty" colspan="5">Errore: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function loadLogs() {
+  const feed = document.getElementById("logFeed");
+  try {
+    const logs = await api(`/campaigns/${state.campaignId}/logs?limit=100`);
+    if (!logs.length) { feed.innerHTML = `<div class="empty">Nessun evento ancora.</div>`; return; }
+    feed.innerHTML = logs.map(l => `
+      <div class="log-row">
+        <span class="log-time">${fmtTime(l.created_at)}</span>
+        <span class="log-event ev-${esc(l.event)}">${esc(l.event)}</span>
+        <span class="log-detail">${esc(l.detail) || ""}</span>
+      </div>`).join("");
+  } catch (e) {
+    feed.innerHTML = `<div class="empty">Errore: ${esc(e.message)}</div>`;
+  }
+}
+
+// ── polling: every 5s while running ──────────────────────
+function startLogPolling() {
+  stopLogPolling();
+  state.logTimer = setInterval(async () => {
+    if (state.view !== "detail" || !state.campaignId) { stopLogPolling(); return; }
+    await refreshCampaign();
+    await loadLogs();
+    await loadLeads();
+    document.getElementById("logHint").textContent =
+      state.campaign && state.campaign.status === "running" ? "aggiornamento ogni 5s" : "";
+    if (state.campaign && state.campaign.status !== "running") stopLogPolling();
+  }, 5000);
+  document.getElementById("logHint").textContent =
+    state.campaign && state.campaign.status === "running" ? "aggiornamento ogni 5s" : "";
+}
+function stopLogPolling() {
+  if (state.logTimer) { clearInterval(state.logTimer); state.logTimer = null; }
+  document.getElementById("logHint").textContent = "";
+}
+
+// ── response modal ───────────────────────────────────────
+function openModal(leadId, name) {
+  state.modalLeadId = leadId;
+  document.getElementById("modalLead").textContent = name || ("Lead #" + leadId);
+  document.getElementById("respType").value = "interested";
+  document.getElementById("respNotes").value = "";
+  document.getElementById("modalBg").classList.add("open");
+}
+function closeModal() {
+  document.getElementById("modalBg").classList.remove("open");
+  state.modalLeadId = null;
+}
+async function submitResponse() {
+  const lead_id = state.modalLeadId;
+  if (!lead_id) return;
+  const response_type = document.getElementById("respType").value;
+  const notes = document.getElementById("respNotes").value.trim() || null;
+  try {
+    await api("/leads/response", {
+      method: "POST",
+      body: JSON.stringify({ lead_id, response_type, notes }),
+    });
+    toast("Risposta salvata");
+    closeModal();
+    await refreshCampaign();
+    await loadLeads();
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  }
+}
+document.getElementById("modalBg").addEventListener("click", e => {
+  if (e.target.id === "modalBg") closeModal();
+});
+document.getElementById("city").addEventListener("keydown", e => {
+  if (e.key === "Enter") createCampaign();
+});
+
+// ── email template ───────────────────────────────────────
+let templateDefaults = { subject: "", body: "" };
+
+async function loadTemplate() {
+  try {
+    const t = await api("/outreach/template");
+    templateDefaults = { subject: t.default_subject, body: t.default_body };
+    document.getElementById("tplSubject").value = t.subject;
+    document.getElementById("tplBody").value = t.body;
+    updatePreview();
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  }
+}
+
+async function saveTemplate() {
+  const subject = document.getElementById("tplSubject").value.trim();
+  const body = document.getElementById("tplBody").value.trim();
+  if (!subject || !body) { toast("Oggetto e corpo non possono essere vuoti", true); return; }
+  const btn = document.getElementById("tplSaveBtn");
+  btn.disabled = true; btn.textContent = "Salvataggio…";
+  try {
+    await api("/outreach/template", { method: "PUT", body: JSON.stringify({ subject, body }) });
+    toast("Template salvato");
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Salva";
+  }
+}
+
+function resetTemplate() {
+  document.getElementById("tplSubject").value = templateDefaults.subject;
+  document.getElementById("tplBody").value = templateDefaults.body;
+  updatePreview();
+  toast("Predefinito ripristinato — ricorda di salvare");
+}
+
+function renderTokens(text) {
+  return (text || "")
+    .split("{agency_name}").join("Studio Rossi")
+    .split("{city}").join("Milano")
+    .split("{calendly_link}").join("https://calendly.com/adam/demo");
+}
+function updatePreview() {
+  document.getElementById("prevSubject").textContent = renderTokens(document.getElementById("tplSubject").value) || "—";
+  document.getElementById("prevBody").textContent = renderTokens(document.getElementById("tplBody").value) || "—";
+}
+document.getElementById("tplSubject").addEventListener("input", updatePreview);
+document.getElementById("tplBody").addEventListener("input", updatePreview);
+
+async function sendTestEmail() {
+  const to = document.getElementById("testTo").value.trim();
+  if (!to) { toast("Inserisci un indirizzo email", true); return; }
+  const subject = document.getElementById("tplSubject").value;
+  const body = document.getElementById("tplBody").value;
+  const btn = document.getElementById("testBtn");
+  btn.disabled = true; btn.textContent = "Invio…";
+  try {
+    const r = await api("/outreach/test", {
+      method: "POST",
+      body: JSON.stringify({ to, subject, body }),
+    });
+    toast("Email di prova inviata a " + r.to);
+    document.getElementById("testHint").textContent =
+      "Inviata da " + r.from + " — rispondi a quell'email per testare le risposte "
+      + "(le risposte arrivano a " + (r.reply_to || r.from) + ").";
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Invia prova";
+  }
+}
+
+// ── agency-name blocklist ────────────────────────────────
+async function loadExclusions() {
+  try {
+    const x = await api("/outreach/exclusions");
+    document.getElementById("exclKeywords").value = x.keywords || "";
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  }
+}
+
+async function saveExclusions() {
+  const keywords = document.getElementById("exclKeywords").value.trim();
+  const btn = document.getElementById("exclSaveBtn");
+  btn.disabled = true; btn.textContent = "Salvataggio…";
+  try {
+    await api("/outreach/exclusions", { method: "PUT", body: JSON.stringify({ keywords }) });
+    toast(keywords ? "Esclusioni salvate" : "Esclusioni rimosse");
+  } catch (e) {
+    toast("Errore: " + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Salva";
+  }
+}
+
+// ── Note riunioni: spoken debrief → structured note ───────────────────────
+// The rep talks to herself after a meeting; the browser streams her audio
+// straight to OpenAI's Realtime transcription API over WebRTC (no audio ever
+// reaches our backend — only the transcript text, via periodic autosave), and
+// one extraction call turns it into an editable note.
+//
+// Same machinery as the agency dashboard's ApollonIA Meeting tool
+// (backend/dashboard/index.html), minus everything property-specific: no
+// consent step (she is recording herself, not a seller), no listing fields.
+// Self-contained IIFE so its connection state can't collide with the campaign
+// dashboard's globals.
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const startBar = $("nt-start");
+  const liveCard = $("nt-live");
+  const procCard = $("nt-processing");
+  const reviewCard = $("nt-review");
+  const resumeCard = $("nt-resume");
+  const resumeExcerpt = $("nt-resume-excerpt");
+  const resumeErr = $("nt-resume-err");
+  const startErr = $("nt-start-err");
+  const startBtn = $("nt-start-btn");
+  const languageSel = $("nt-language");
+  const dot = $("nt-dot");
+  const statusEl = $("nt-status");
+  const transcriptEl = $("nt-transcript");
+  const pauseBtn = $("nt-pause-btn");
+  const finishBtn = $("nt-finish-btn");
+  const cancelBtn = $("nt-cancel-btn");
+  const procErr = $("nt-processing-err");
+  const procText = $("nt-processing-text");
+  const retryBtn = $("nt-retry-btn");
+  const procBackBtn = $("nt-processing-back-btn");
+  const reviewErr = $("nt-review-err");
+  const reviewMeta = $("nt-review-meta");
+  const rawTranscript = $("nt-raw-transcript");
+  const saveBtn = $("nt-save-btn");
+  const closeBtn = $("nt-review-close-btn");
+  const deleteBtn = $("nt-delete-btn");
+  const listBody = $("nt-list-body");
+  const listHint = $("nt-list-hint");
+
+  const LIST_FIELDS = ["went_well", "went_wrong", "objections", "next_steps"];
+
+  // Silence-triggered chunking: a transcription session has no server-side
+  // turn detection (gpt-realtime-whisper requires a manual
+  // input_audio_buffer.commit), so we commit on natural pauses instead of
+  // blindly on a timer, to avoid cutting words in half. Every commit is a hard
+  // context boundary the model can't see across, so the pause has to be long
+  // enough to be a sentence end rather than a breath.
+  const SILENCE_MS = 1200;
+  const MAX_CHUNK_MS = 25000;
+  // Unconditional commit heartbeat, and the PRIMARY mechanism rather than a
+  // safety net: some browsers leave the AudioContext suspended when it's
+  // resumed this far downstream of the original click, so input level reads ~0
+  // forever and the analyser below never fires. An empty commit is harmless.
+  const COMMIT_INTERVAL_MS = 10000;
+  const AUTOSAVE_MS = 8000;
+  const SESSION_MAX_MS = 55 * 60 * 1000;   // reconnect before the 60-min cap
+  const HEALTH_TICK_MS = 2000;
+  const QUIET_WARN_MS = 45000;             // "connected but hearing nothing"
+  const DROP_GRACE_MS = 4000;              // ICE "disconnected" often heals itself
+  const FLUSH_QUIET_MS = 4000;             // wait for the tail of the audio
+  const FLUSH_MAX_MS = 20000;
+
+  let noteId = null;
+  let recording = false;
+  let paused = false;
+  let transcript = "";
+  let micStream = null;
+  let pc = null, dc = null;
+  let audioCtx = null, analyser = null, rafId = null;
+  let hasPendingAudio = false, belowThresholdSince = null, lastCommitAt = 0;
+  let commitTimer = null, autosaveTimer = null, reconnectTimer = null;
+  let healthTimer = null, dropTimer = null;
+  let reconnecting = false;      // a reopen is in flight; don't start another
+  let sessionDown = true;        // cleared once a session actually opens
+  let reopenBackoffMs = 0;
+  let lastSavedTranscript = "";  // what the server already has
+  let strandedNote = null;       // the recording /resumable offered back
+  let wakeLock = null, noSleepVideo = null, noSleepCanvasTimer = null;
+  let itemDeltaText = {};        // item_id -> deltas seen, for the completed-event fallback
+  let lastTranscriptEventAt = 0;
+  let editing = null;            // the note currently in the review form
+  let deleteArmed = false;       // the delete button's two-click confirm
+
+  // ── step visibility ────────────────────────────────────
+  function showStep(step) {
+    startBar.classList.toggle("hidden", step !== "idle");
+    liveCard.classList.toggle("hidden", step !== "live");
+    procCard.classList.toggle("hidden", step !== "processing");
+    reviewCard.classList.toggle("hidden", step !== "review");
+    if (step !== "idle") resumeCard.classList.add("hidden");
+  }
+
+  function renderTranscript() {
+    transcriptEl.textContent = transcript;
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  }
+
+  // ── what the live header is entitled to claim ──────────
+  // An unconditional "recording" dot would make a session that died mid-debrief
+  // look exactly like a working one: she keeps talking, nothing is transcribed,
+  // and the loss only surfaces at Termina.
+  function liveState() {
+    if (!recording) return "idle";
+    if (paused) return "paused";
+    // A peer connection that has already failed can still hold a data channel
+    // reading "open", so waiting on the next attempt must not look healthy.
+    if (reconnecting || sessionDown || !dc || dc.readyState !== "open") return "reconnecting";
+    if (Date.now() - lastTranscriptEventAt > QUIET_WARN_MS) return "quiet";
+    return "recording";
+  }
+
+  const STATUS_TEXT = {
+    idle: "—",
+    recording: "Registrazione in corso…",
+    paused: "In pausa",
+    reconnecting: "Riconnessione…",
+    quiet: "Connessa, ma non sento nulla — controlla il microfono",
+  };
+
+  function updateLiveLabels() {
+    const st = liveState();
+    statusEl.textContent = STATUS_TEXT[st];
+    pauseBtn.textContent = paused ? "Riprendi" : "Pausa";
+    dot.classList.toggle("live", st === "recording");
+    dot.classList.toggle("warn", st === "reconnecting" || st === "quiet");
+  }
+
+  // ── wake lock (+ fallback) ─────────────────────────────
+  async function acquireWakeLock() {
+    try {
+      if ("wakeLock" in navigator) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => { wakeLock = null; });
+        return;
+      }
+    } catch (_) { /* OS refused (power saver) — fall through */ }
+    startNoSleepFallback();
+  }
+
+  function startNoSleepFallback() {
+    // Platforms without the Wake Lock API (older iOS especially): stream a
+    // 1x1 canvas into a hidden looping <video>, which is enough to suppress
+    // the screen timeout. Classic NoSleep.js trick, no binary asset needed.
+    if (noSleepVideo) return;
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1; canvas.height = 1;
+      const ctx2d = canvas.getContext("2d");
+      const video = document.createElement("video");
+      video.setAttribute("playsinline", "");
+      video.muted = true;
+      video.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;";
+      video.srcObject = canvas.captureStream(1);
+      document.body.appendChild(video);
+      noSleepCanvasTimer = setInterval(() => ctx2d.fillRect(0, 0, 1, 1), 1000);
+      video.play().catch(() => {});
+      noSleepVideo = video;
+    } catch (_) { /* best-effort only */ }
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) { try { wakeLock.release(); } catch (_) {} wakeLock = null; }
+    if (noSleepCanvasTimer) { clearInterval(noSleepCanvasTimer); noSleepCanvasTimer = null; }
+    if (noSleepVideo) {
+      try { noSleepVideo.pause(); } catch (_) {}
+      if (noSleepVideo.parentNode) noSleepVideo.parentNode.removeChild(noSleepVideo);
+      noSleepVideo = null;
+    }
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    // Wake Lock auto-releases when the tab is hidden.
+    if (document.visibilityState === "visible" && recording && !paused) acquireWakeLock();
+    // Going away is the last reliable moment to save on mobile: a hidden tab
+    // can be killed without another event ever firing.
+    if (document.visibilityState === "hidden") flushTranscriptBeacon();
+  });
+
+  // ── amplitude analyser: drives silence-triggered commits ─
+  function startAnalyser(stream) {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      audioCtx = new AC();
+      if (audioCtx.resume) audioCtx.resume();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.6;
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        if (!analyser) return;
+        analyser.getByteFrequencyData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i];
+        const level = sum / data.length / 255;
+        const now = Date.now();
+        if (!paused) {
+          if (level > 0.04) {
+            hasPendingAudio = true;
+            belowThresholdSince = null;
+          } else if (belowThresholdSince === null) {
+            belowThresholdSince = now;
+          }
+          const silentLongEnough = belowThresholdSince !== null && (now - belowThresholdSince) > SILENCE_MS;
+          const chunkTooLong = (now - lastCommitAt) > MAX_CHUNK_MS;
+          if (hasPendingAudio && (silentLongEnough || chunkTooLong)) commitBuffer();
+        }
+        rafId = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (_) {
+      // Transcription still works without silence-based chunking; the
+      // heartbeat commit alone carries it.
+    }
+  }
+
+  function stopAnalyser() {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    if (analyser) { try { analyser.disconnect(); } catch (_) {} analyser = null; }
+    if (audioCtx) { try { audioCtx.close(); } catch (_) {} audioCtx = null; }
+  }
+
+  function commitBuffer() {
+    if (!dc || dc.readyState !== "open") return;
+    try {
+      dc.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+      hasPendingAudio = false;
+      lastCommitAt = Date.now();
+    } catch (err) {
+      console.error("Note: commit send failed", err);
+    }
+  }
+
+  // ── transcript autosave ────────────────────────────────
+  async function autosaveTranscript() {
+    if (!noteId || transcript === lastSavedTranscript) return;
+    const pending = transcript;
+    try {
+      await api("/notes/" + noteId + "/transcript", {
+        method: "PATCH",
+        body: JSON.stringify({ transcript: pending }),
+      });
+      lastSavedTranscript = pending;
+    } catch (_) { /* best-effort; the next tick retries */ }
+  }
+
+  // Last chance to save. A closing tab cancels an in-flight fetch, and a
+  // backgrounded tab can be killed outright — sendBeacon is the one request
+  // the browser promises to deliver anyway. It can only POST, which is why the
+  // transcript endpoint accepts both verbs.
+  function flushTranscriptBeacon() {
+    if (!noteId || !recording || transcript === lastSavedTranscript) return;
+    try {
+      const body = new Blob([JSON.stringify({ transcript })], { type: "application/json" });
+      if (navigator.sendBeacon(CONFIG.API_BASE + "/notes/" + noteId + "/transcript", body)) {
+        lastSavedTranscript = transcript;
+      }
+    } catch (_) { /* nothing better to try at this point */ }
+  }
+
+  window.addEventListener("pagehide", flushTranscriptBeacon);
+
+  // Browsers ignore custom wording here; what matters is that the prompt
+  // appears at all — for a live recording, and for a structured note still
+  // sitting unsaved in the form.
+  window.addEventListener("beforeunload", (e) => {
+    const unsaved = editing && editing.status === "review" && !reviewCard.classList.contains("hidden");
+    if (!recording && !unsaved) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
+
+  // ── WebRTC session ─────────────────────────────────────
+  async function openSession() {
+    const tokenData = await api("/notes/" + noteId + "/session-token", { method: "POST" });
+    const ephemeral = tokenData.value || (tokenData.client_secret && tokenData.client_secret.value);
+    if (!ephemeral) throw new Error("no ephemeral key");
+
+    const newPc = new RTCPeerConnection();
+    newPc.addTrack(micStream.getAudioTracks()[0], micStream);
+    newPc.ontrack = () => {}; // no-op: a transcription session sends nothing back
+    const newDc = newPc.createDataChannel("oai-events");
+
+    newDc.addEventListener("open", () => {
+      lastCommitAt = Date.now();
+      if (commitTimer) clearInterval(commitTimer);
+      commitTimer = setInterval(commitBuffer, COMMIT_INTERVAL_MS);
+    });
+    newDc.addEventListener("message", (e) => {
+      let evt;
+      try { evt = JSON.parse(e.data); } catch (_) { return; }
+      if (evt.type === "conversation.item.input_audio_transcription.delta" && evt.delta) {
+        itemDeltaText[evt.item_id] = (itemDeltaText[evt.item_id] || "") + evt.delta;
+        lastTranscriptEventAt = Date.now();
+        transcript += evt.delta;
+        renderTranscript();
+      } else if (evt.type === "conversation.item.input_audio_transcription.completed") {
+        lastTranscriptEventAt = Date.now();
+        // Short chunks (committed on the heartbeat rather than a natural
+        // pause) may never stream deltas and arrive only as one completed
+        // event — don't drop that text. If deltas WERE seen they already sum
+        // to the same string, so skip to avoid duplicating it.
+        if (!itemDeltaText[evt.item_id] && evt.transcript) {
+          transcript += evt.transcript;
+          renderTranscript();
+        }
+      } else if (evt.type === "error") {
+        console.error("Note realtime error", evt);
+      }
+    });
+    newDc.addEventListener("close", () => handleDrop(newPc, "data channel closed", 0));
+    newDc.addEventListener("error", (e) => console.error("Note: data channel error", e));
+
+    const connected = new Promise((resolve, reject) => {
+      newPc.onconnectionstatechange = () => {
+        const st = newPc.connectionState;
+        if (st === "connected") resolve();
+        else if (st === "failed") {
+          // Before this session goes live the reject ends the attempt; after
+          // it, the promise is already settled and this is a drop to recover.
+          reject(new Error("connection failed"));
+          handleDrop(newPc, "connection failed", 0);
+        } else if (st === "disconnected") {
+          handleDrop(newPc, "connection disconnected", DROP_GRACE_MS);
+        }
+      };
+    });
+
+    const offer = await newPc.createOffer();
+    await newPc.setLocalDescription(offer);
+    // No `model=` query param: a transcription session's model is pinned
+    // server-side when the ephemeral token is minted, and OpenAI's /calls
+    // endpoint rejects the param for this session type.
+    const sdpResp = await fetch("https://api.openai.com/v1/realtime/calls", {
+      method: "POST",
+      body: offer.sdp,
+      headers: { "Authorization": "Bearer " + ephemeral, "Content-Type": "application/sdp" },
+    });
+    if (!sdpResp.ok) throw new Error("sdp " + sdpResp.status);
+    await newPc.setRemoteDescription({ type: "answer", sdp: await sdpResp.text() });
+    await connected;
+
+    // New session is live — now retire the previous one. Briefly running both
+    // avoids a gap in transcription across the seam, at the cost of a possible
+    // sliver of duplicated text, which is the right trade for "never lose text".
+    const oldPc = pc, oldDc = dc;
+    pc = newPc; dc = newDc;
+    if (oldDc) { try { oldDc.close(); } catch (_) {} }
+    if (oldPc) { try { oldPc.close(); } catch (_) {} }
+
+    scheduleReconnect();
+  }
+
+  function scheduleReconnect() {
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => reopenSession("session age cap"), SESSION_MAX_MS);
+  }
+
+  function handleDrop(deadPc, reason, graceMs) {
+    // A session we've already replaced or torn down closes its own channel on
+    // the way out; that isn't a drop worth chasing.
+    if (!recording || deadPc !== pc) return;
+    if (dropTimer) clearTimeout(dropTimer);
+    dropTimer = setTimeout(() => {
+      dropTimer = null;
+      if (!recording || deadPc !== pc) return;
+      // Healed itself while we waited (the usual outcome of a brief ICE
+      // "disconnected") — leave the working session alone.
+      if (pc.connectionState === "connected" && dc && dc.readyState === "open") return;
+      reopenSession(reason);
+    }, graceMs);
+  }
+
+  async function reopenSession(reason) {
+    if (!recording || reconnecting) return;
+    reconnecting = true;
+    sessionDown = true;   // stays set across backoff gaps, cleared only by a live session
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    console.log("Note: reopening session —", reason);
+    updateLiveLabels();
+    try {
+      await openSession();
+      sessionDown = false;
+      reopenBackoffMs = 0;
+    } catch (err) {
+      console.error("Note: session reopen failed", err);
+      // Back off rather than hammering a network that's simply gone; the
+      // transcript buffer is untouched, so a later attempt picks up from here.
+      reopenBackoffMs = Math.min(reopenBackoffMs ? reopenBackoffMs * 2 : 2000, 30000);
+      reconnectTimer = setTimeout(() => reopenSession(reason), reopenBackoffMs);
+    } finally {
+      reconnecting = false;
+      updateLiveLabels();
+    }
+  }
+
+  function cleanupConnection() {
+    stopAnalyser();
+    if (commitTimer) { clearInterval(commitTimer); commitTimer = null; }
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if (autosaveTimer) { clearInterval(autosaveTimer); autosaveTimer = null; }
+    if (healthTimer) { clearInterval(healthTimer); healthTimer = null; }
+    if (dropTimer) { clearTimeout(dropTimer); dropTimer = null; }
+    reopenBackoffMs = 0;
+    sessionDown = true;
+    if (dc) { try { dc.close(); } catch (_) {} dc = null; }
+    if (pc) { try { pc.close(); } catch (_) {} pc = null; }
+    if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
+  }
+
+  // Mic, session and the timers that keep a recording alive — shared by
+  // "Avvia" (a new note) and "Riprendi" (one the browser lost). The caller
+  // owns noteId and the transcript buffer, so resuming picks up with the
+  // recovered text already in place.
+  async function beginSession() {
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (_) {
+      throw { userMessage: "Microfono non disponibile: consenti l'accesso e riprova." };
+    }
+    await openSession();
+
+    sessionDown = false;
+    paused = false;
+    recording = true;
+    hasPendingAudio = false;
+    belowThresholdSince = null;
+    lastTranscriptEventAt = Date.now();
+    startAnalyser(micStream);
+    autosaveTimer = setInterval(autosaveTranscript, AUTOSAVE_MS);
+    healthTimer = setInterval(updateLiveLabels, HEALTH_TICK_MS);
+
+    showStep("live");
+    renderTranscript();
+    updateLiveLabels();
+  }
+
+  function stopEverything() {
+    recording = false;
+    cleanupConnection();
+    releaseWakeLock();
+    paused = false;
+  }
+
+  function resetToIdle() {
+    noteId = null;
+    transcript = "";
+    lastSavedTranscript = "";
+    itemDeltaText = {};
+    editing = null;
+    startErr.textContent = "";
+    renderTranscript();
+    showStep("idle");
+  }
+
+  // ── start / pause / abandon ────────────────────────────
+  startBtn.addEventListener("click", async () => {
+    startErr.textContent = "";
+    startBtn.disabled = true;
+    // The Wake Lock has to be requested from inside the click handler — that's
+    // the API's #1 gotcha, it needs the user-gesture context.
+    await acquireWakeLock();
+    try {
+      const note = await api("/notes", {
+        method: "POST",
+        body: JSON.stringify({ language: languageSel.value }),
+      });
+      noteId = note.id;
+      transcript = "";
+      lastSavedTranscript = "";
+      itemDeltaText = {};
+      await beginSession();
+    } catch (err) {
+      console.error("Note: start failed", err);
+      stopEverything();
+      noteId = null;
+      startErr.textContent = (err && err.userMessage) || "Impossibile avviare la registrazione. Riprova.";
+    } finally {
+      startBtn.disabled = false;
+    }
+  });
+
+  pauseBtn.addEventListener("click", () => {
+    paused = !paused;
+    if (micStream) micStream.getAudioTracks().forEach((t) => { t.enabled = !paused; });
+    if (paused) hasPendingAudio = false;
+    else if (document.visibilityState === "visible") acquireWakeLock();
+    updateLiveLabels();
+  });
+
+  // Two-click confirm rather than window.confirm(), and nothing is deleted
+  // server-side: the note keeps its transcript, it just stops being offered
+  // back as something to resume.
+  let armedBtn = null, armTimer = null;
+  function disarm() {
+    if (armTimer) { clearTimeout(armTimer); armTimer = null; }
+    if (armedBtn) { armedBtn.textContent = armedBtn.dataset.label; armedBtn = null; }
+  }
+  function wireDiscard(btn) {
+    btn.dataset.label = btn.textContent;
+    btn.addEventListener("click", () => {
+      if (transcript.trim() && armedBtn !== btn) {
+        disarm();
+        armedBtn = btn;
+        btn.textContent = "Sicura? Clicca di nuovo";
+        armTimer = setTimeout(disarm, 6000);
+        return;
+      }
+      disarm();
+      if (noteId) api("/notes/" + noteId + "/abandon", { method: "POST" }).catch(() => {});
+      stopEverything();
+      resetToIdle();
+    });
+  }
+  wireDiscard(cancelBtn);
+  wireDiscard(procBackBtn);
+
+  // ── finish → extraction ────────────────────────────────
+  // The tail of the debrief is still in flight when she hits Termina: the
+  // model holds several seconds of audio for context before emitting anything,
+  // so closing the connection right away silently drops the last sentence.
+  // Wait for transcript events to go quiet, with a cap so a noisy room can't
+  // stall the handoff forever.
+  function waitForFinalTranscripts() {
+    if (!dc || dc.readyState !== "open") return Promise.resolve();
+    return new Promise((resolve) => {
+      const startedAt = Date.now();
+      const poll = setInterval(() => {
+        const now = Date.now();
+        if (now - lastTranscriptEventAt > FLUSH_QUIET_MS || now - startedAt > FLUSH_MAX_MS) {
+          clearInterval(poll);
+          resolve();
+        }
+      }, 250);
+    });
+  }
+
+  finishBtn.addEventListener("click", async () => {
+    finishBtn.disabled = true;
+    // Nothing from here on is a session worth reconnecting to: the drain and
+    // teardown below close the channel deliberately.
+    recording = false;
+    // Close the mic first so the wait drains what was already said rather than
+    // picking up post-debrief chatter, then commit what's still buffered.
+    if (micStream) micStream.getAudioTracks().forEach((t) => { t.enabled = false; });
+    commitBuffer();
+    lastTranscriptEventAt = Date.now();  // always wait out one quiet window
+    procText.classList.remove("hidden");
+    showStep("processing");
+    await waitForFinalTranscripts();
+    await autosaveTranscript();          // final flush before tearing down
+    cleanupConnection();
+    releaseWakeLock();
+    finishBtn.disabled = false;
+    await attemptFinish();
+  });
+
+  async function attemptFinish() {
+    procErr.textContent = "";
+    retryBtn.classList.add("hidden");
+    procBackBtn.classList.add("hidden");
+    procText.classList.remove("hidden");
+    showStep("processing");
+    try {
+      renderReview(await api("/notes/" + noteId + "/finish", { method: "POST" }));
+    } catch (err) {
+      // "Transcript is empty" is the one failure a retry can't fix: nothing
+      // was captured (muted mic, stopped too early), so extraction would run
+      // against the same empty transcript and fail identically.
+      const empty = /empty/i.test(err.message || "");
+      procText.classList.add("hidden");
+      procErr.textContent = empty
+        ? "Non è stata registrata nessuna parola. Controlla il microfono e registra di nuovo."
+        : "Non sono riuscita a strutturare la nota. La trascrizione è al sicuro — riprova.";
+      retryBtn.classList.toggle("hidden", empty);
+      procBackBtn.classList.remove("hidden");
+    }
+  }
+
+  retryBtn.addEventListener("click", attemptFinish);
+
+  // ── review / edit form ─────────────────────────────────
+  function renderReview(note) {
+    editing = note;
+    noteId = note.id;
+    $("nt-f-title").value = note.title || "";
+    $("nt-f-customer").value = note.customer || "";
+    $("nt-f-outcome").value = note.outcome || "";
+    $("nt-f-summary").value = note.summary || "";
+    LIST_FIELDS.forEach((f) => { $("nt-f-" + f).value = (note[f] || []).join("\n"); });
+    rawTranscript.textContent = note.transcript || "(nessuna trascrizione)";
+    reviewMeta.textContent = note.status === "saved"
+      ? "salvata il " + fmtDate(note.saved_at || note.updated_at)
+      : "non ancora salvata";
+    reviewErr.textContent = "";
+    deleteBtn.textContent = "Elimina";
+    deleteArmed = false;
+    showStep("review");
+    reviewCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function collectFields() {
+    const payload = {
+      title: $("nt-f-title").value.trim(),
+      customer: $("nt-f-customer").value.trim(),
+      outcome: $("nt-f-outcome").value || null,
+      summary: $("nt-f-summary").value.trim(),
+    };
+    LIST_FIELDS.forEach((f) => {
+      payload[f] = $("nt-f-" + f).value.split("\n").map((l) => l.trim()).filter(Boolean);
+    });
+    return payload;
+  }
+
+  saveBtn.addEventListener("click", async () => {
+    reviewErr.textContent = "";
+    saveBtn.disabled = true;
+    try {
+      await api("/notes/" + noteId, {
+        method: "PATCH",
+        body: JSON.stringify(collectFields()),
+      });
+      toast("Nota salvata");
+      await loadNotes();
+      resetToIdle();
+    } catch (e) {
+      reviewErr.textContent = "Salvataggio fallito: " + e.message;
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  closeBtn.addEventListener("click", () => {
+    // An unsaved note isn't thrown away by closing the form — it stays in
+    // 'review' on the server and in the table below, ready to be reopened.
+    resetToIdle();
+    loadNotes();
+  });
+
+  deleteBtn.addEventListener("click", async () => {
+    if (!deleteArmed) {
+      deleteArmed = true;
+      deleteBtn.textContent = "Sicura? Clicca di nuovo";
+      setTimeout(() => {
+        if (!deleteArmed) return;
+        deleteArmed = false;
+        deleteBtn.textContent = "Elimina";
+      }, 6000);
+      return;
+    }
+    deleteArmed = false;
+    deleteBtn.textContent = "Elimina";
+    try {
+      await api("/notes/" + noteId, { method: "DELETE" });
+      toast("Nota eliminata");
+      resetToIdle();
+      await loadNotes();
+    } catch (e) {
+      reviewErr.textContent = "Eliminazione fallita: " + e.message;
+    }
+  });
+
+  // ── saved notes ────────────────────────────────────────
+  const OUTCOME_LABELS = { positive: "positivo", neutral: "neutro", negative: "negativo" };
+
+  async function loadNotes() {
+    try {
+      const data = await api("/notes?limit=200");
+      const notes = data.notes || [];
+      if (!notes.length) {
+        listBody.innerHTML = `<tr><td class="empty" colspan="6">Nessuna nota ancora.</td></tr>`;
+        listHint.textContent = "";
+        return;
+      }
+      listHint.textContent = notes.length + (notes.length === 1 ? " nota" : " note");
+      listBody.innerHTML = notes.map((n) => {
+        const outcome = n.outcome
+          ? `<span class="badge b-${n.outcome}">${OUTCOME_LABELS[n.outcome]}</span>`
+          : '<span class="muted">—</span>';
+        const draft = n.status !== "saved"
+          ? ' <span class="badge b-pending">bozza</span>' : "";
+        return `
+        <tr class="clickable" data-note="${esc(n.id)}">
+          <td class="muted">${fmtDate(n.created_at)}</td>
+          <td><strong>${esc(n.title) || "(senza titolo)"}</strong>${draft}</td>
+          <td>${esc(n.customer) || '<span class="muted">—</span>'}</td>
+          <td>${outcome}</td>
+          <td>${n.objections.length || '<span class="muted">—</span>'}</td>
+          <td><button class="btn ghost sm" data-note="${esc(n.id)}">Apri</button></td>
+        </tr>`;
+      }).join("");
+    } catch (e) {
+      listBody.innerHTML = `<tr><td class="empty" colspan="6">Errore: ${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  listBody.addEventListener("click", async (e) => {
+    const row = e.target.closest("[data-note]");
+    if (!row) return;
+    // Opening another note mid-recording would strand the live session on an
+    // id the form no longer points at.
+    if (recording) { toast("Termina prima la registrazione in corso", true); return; }
+    try {
+      const note = await api("/notes/" + row.dataset.note);
+      if (note.status === "review" || note.status === "saved") {
+        renderReview(note);
+        return;
+      }
+      // A recording that was never structured — the browser died and the
+      // 6-hour resume window closed on it. The transcript is still on the
+      // server, so the way back in is to extract it now, not to hand her an
+      // empty form she has no way to save.
+      noteId = note.id;
+      transcript = note.transcript || "";
+      lastSavedTranscript = transcript;
+      await attemptFinish();
+    } catch (err) {
+      toast("Errore: " + err.message, true);
+    }
+  });
+
+  // ── resuming a recording the browser lost ──────────────
+  // Checked when the tab is opened: that's when she's looking, and the answer
+  // can't change while she's on another tab. Only ever offered over an idle
+  // screen — never on top of a recording in progress.
+  async function checkStranded() {
+    if (recording || noteId) return;
+    if (startBar.classList.contains("hidden")) return;  // not on the idle screen
+    try {
+      const note = (await api("/notes/resumable")).note;
+      if (!note) return;
+      strandedNote = note;
+      const text = (note.transcript || "").trim();
+      resumeExcerpt.textContent = text.length > 220 ? "…" + text.slice(-220) : text;
+      resumeErr.textContent = "";
+      resumeCard.classList.remove("hidden");
+    } catch (_) { /* the idle screen is a fine place to land */ }
+  }
+
+  $("nt-resume-btn").addEventListener("click", async () => {
+    if (!strandedNote) return;
+    resumeErr.textContent = "";
+    const btn = $("nt-resume-btn");
+    btn.disabled = true;
+    await acquireWakeLock();   // same user-gesture rule as Avvia
+    try {
+      noteId = strandedNote.id;
+      transcript = strandedNote.transcript || "";
+      lastSavedTranscript = transcript;   // the server's copy is where this came from
+      itemDeltaText = {};
+      await beginSession();
+      strandedNote = null;
+    } catch (err) {
+      console.error("Note: resume failed", err);
+      stopEverything();
+      noteId = null;
+      transcript = "";
+      resumeErr.textContent = (err && err.userMessage) || "Impossibile riprendere. Riprova.";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $("nt-resume-discard-btn").addEventListener("click", () => {
+    const id = strandedNote && strandedNote.id;
+    strandedNote = null;
+    resumeCard.classList.add("hidden");
+    if (id) api("/notes/" + id + "/abandon", { method: "POST" }).catch(() => {});
+  });
+
+  // Lets the logout button refuse to pull the rug out from under a live
+  // recording — see logout() above.
+  window.NotesRecording = () => recording;
+
+  // Called by showView() every time the tab is opened.
+  window.NotesEnter = function () {
+    loadNotes();
+    if (!recording && !noteId) checkStranded();
+  };
+
+  showStep("idle");
+  updateLiveLabels();
+})();
+
+// ── boot ─────────────────────────────────────────────────
+// Nothing loads until the session check answers; unlock() starts the dashboard.
+boot();
+</script>
+</body>
+</html>

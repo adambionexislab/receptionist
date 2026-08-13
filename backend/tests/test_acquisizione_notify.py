@@ -77,6 +77,15 @@ def test_body_renders_booleans_and_omits_empty_fields():
     assert "Note del venditore:" not in body
 
 
+def test_listing_type_is_spelled_out_in_the_market_language():
+    """tipo_annuncio is stored as an untranslated 'vendita'/'affitto' token —
+    the agency must never be shown the raw token, least of all in Slovak."""
+    assert "Tipo di annuncio: Vendita" in notify.build_body(_RECORD)
+    sk = notify.build_body({**_RECORD, "market": "sk"})
+    assert "Typ inzerátu: Predaj" in sk
+    assert "vendita" not in sk.lower()
+
+
 def test_body_handles_a_record_with_no_notes_or_missing_fields():
     body = notify.build_body({
         **_RECORD, "notes": "", "missing_required": [], "transcript": "",

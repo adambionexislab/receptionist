@@ -92,6 +92,7 @@ SK: dict = {
     "email_no_text": "(žiadny opis)",
     "email_yes": "áno",
     "email_no": "nie",
+    "listing_type_values": {"vendita": "Predaj", "affitto": "Prenájom"},
     "field_labels": {
         "tipo_annuncio": "Typ inzerátu",
         "tipologia": "Typ nehnuteľnosti",

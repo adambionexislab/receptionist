@@ -1,12 +1,19 @@
 """REST API for the ApollonIA lead-generation pipeline.
 
-Campaign CRUD + the background pipeline (scrape → email) that the static
-dashboard drives, plus manual response logging and a stub inbound-email
-webhook for future Resend integration.
+Campaign CRUD + the background pipeline (scrape → email) that the internal
+dashboard drives, plus manual response logging and an inbound-email webhook.
 
 The scrape + send work runs in a FastAPI BackgroundTask. Both stages are
 SYNCHRONOUS functions, so Starlette executes them in a worker thread and the
 HTTP response returns immediately.
+
+Two routers, and the split is the security boundary. `router` carries
+require_staff (see leadgen/router.py) on the router itself, so every endpoint
+on it — existing and future — is behind the staff login without anyone having
+to remember. `webhook_router` is the deliberate exception: Resend delivers
+inbound replies to it and has no session, so it authenticates the only way it
+can, by verifying the Svix signature on the request body. Both are mounted in
+main.py.
 """
 
 import base64
@@ -18,11 +25,12 @@ import time
 from typing import Literal, Optional
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from config import settings
 from leadgen import db
+from leadgen.router import require_staff
 from services.outreach import (
     DEFAULT_BODY,
     DEFAULT_SUBJECT,
@@ -41,7 +49,8 @@ from services.places_scraper import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_staff)])
+webhook_router = APIRouter()
 
 
 # ── request models ───────────────────────────────────────────────────────────
@@ -330,7 +339,7 @@ async def _fetch_received_email(email_id: str) -> dict:
         return {}
 
 
-@router.post("/leads/inbound-email")
+@webhook_router.post("/leads/inbound-email")
 async def inbound_email(request: Request):
     """Resend inbound webhook. On an 'email.received' event we verify the
     signature, match the sender to a cold-outreach lead, fetch the reply body,

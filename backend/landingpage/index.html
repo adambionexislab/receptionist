@@ -348,18 +348,23 @@
       overflow: hidden;
     }
     .modal-backdrop.is-open .modal-card { transform: translateY(0) scale(1); }
-    .modal-header { flex-shrink: 0; padding: 1.25rem 1.5rem 0; }
-    .modal-body   { flex: 1; overflow-y: auto; padding: 0 1.5rem; min-height: 0; }
-    .modal-footer { flex-shrink: 0; padding: 0 1.5rem 1.25rem; }
+    /* All the modal's vertical spacing lives here, not in Tailwind padding
+       utilities in the markup: this block is loaded after tailwind.css, so
+       these shorthand paddings win and any py- or pb- class on the same
+       element is dead weight. One place to set it, so the two can't fight. */
+    .modal-header { flex-shrink: 0; padding: 1.5rem 1.5rem 1.1rem; }
+    .modal-body   { flex: 1; overflow-y: auto; padding: 1.4rem 1.5rem; min-height: 0; }
+    .modal-footer { flex-shrink: 0; padding: 1.15rem 1.5rem 1.4rem; }
+    .modal-fields { display: flex; flex-direction: column; gap: 1.15rem; }
     .modal-label {
       display: block; font-size: 11px; font-weight: 500;
       text-transform: uppercase; letter-spacing: .14em;
-      color: var(--muted); margin-bottom: 5px;
+      color: var(--muted); margin-bottom: 7px;
     }
     .modal-input {
       width: 100%; background: rgba(255,255,255,.04);
       border: 1px solid var(--border); border-radius: 8px;
-      padding: 8px 12px; font-size: 13px; font-family: inherit;
+      padding: 10px 12px; font-size: 13px; font-family: inherit;
       color: var(--fg); outline: none;
       transition: border-color .2s ease;
       appearance: none; -webkit-appearance: none;
@@ -1325,7 +1330,7 @@ ApollonIA riceve un proprio numero di telefono dedicato — non usa il tuo numer
     <div class="modal-card">
 
       <!-- header -->
-      <div class="modal-header flex items-center justify-between pb-4" style="border-bottom:1px solid var(--border)">
+      <div class="modal-header flex items-center justify-between" style="border-bottom:1px solid var(--border)">
         <div>
           <p class="text-[11px] font-medium uppercase tracking-[.14em]" style="color:var(--accent)">Inizia con ApollonIA</p>
           <h3 id="modal-title" class="text-base font-medium mt-0.5" style="color:var(--fg)">Controlla le informazioni</h3>
@@ -1339,8 +1344,8 @@ ApollonIA riceve un proprio numero di telefono dedicato — non usa il tuo numer
         <form id="signup-form" novalidate style="display:contents">
 
           <!-- scrollable fields -->
-          <div class="modal-body py-4">
-            <div class="flex flex-col gap-3">
+          <div class="modal-body">
+            <div class="modal-fields">
 
               <div>
                 <label class="modal-label" for="f-studio">Nome dello studio</label>
@@ -1382,7 +1387,7 @@ ApollonIA riceve un proprio numero di telefono dedicato — non usa il tuo numer
           </div>
 
           <!-- fixed footer: price + buttons -->
-          <div class="modal-footer pt-3" style="border-top:1px solid var(--border)">
+          <div class="modal-footer" style="border-top:1px solid var(--border)">
             <div class="flex items-center justify-between mb-3">
               <div>
                 <p class="text-[11px] font-medium uppercase tracking-[.14em]" style="color:var(--muted)">Totale</p>

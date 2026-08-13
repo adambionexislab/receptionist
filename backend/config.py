@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     RESEND_WEBHOOK_SECRET: Optional[str] = None
 
     # Lead-generation / cold outreach (ApollonIA agency prospecting)
+    # Shared staff password for the internal lead-gen dashboard at /leadgen
+    # (campaigns, leads, meeting notes). Unset means nobody can log in — the
+    # dashboard fails closed rather than open, so this must be set in prod.
+    LEADGEN_PASSWORD: Optional[str] = None
     GOOGLE_PLACES_API_KEY: Optional[str] = None
     # Sender for outreach emails; falls back to RESEND_FROM when unset.
     OUTREACH_FROM_EMAIL: Optional[str] = None

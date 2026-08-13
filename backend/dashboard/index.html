@@ -341,11 +341,13 @@
   .acq-fields-toggle { margin-top: 12px; }
   .acq-field { display: flex; flex-direction: column; gap: 5px; }
   .acq-field label { margin: 0; }
-  .acq-field input[type="text"], .acq-field input[type="number"] {
+  .acq-field input[type="text"], .acq-field input[type="number"], .acq-field select {
     background: var(--bg); border: 1px solid var(--border); color: var(--text);
     padding: 9px 10px; border-radius: 8px; font-size: .88rem; width: 100%;
   }
-  .acq-field.acq-field-missing input { border-color: var(--amber); }
+  .acq-field select { font-family: inherit; }
+  .acq-field.acq-field-missing input,
+  .acq-field.acq-field-missing select { border-color: var(--amber); }
   .acq-field-missing-tag { color: var(--amber); font-size: .72rem; text-transform: none; letter-spacing: normal; }
   .acq-field-check { flex-direction: row; align-items: center; gap: 8px; }
   .acq-field-check input { width: auto; }
@@ -1023,7 +1025,9 @@
       acq_photo_err: "Elaborazione non riuscita.",
       acq_photo_before: "Originale",
       acq_photo_after: "Migliorata",
+      acq_type_placeholder: "— Seleziona —",
       acq_fields: {
+        tipo_annuncio: "Tipo di annuncio",
         tipologia: "Tipologia", indirizzo_o_zona: "Indirizzo / zona",
         superficie_mq: "Superficie (m²)", locali: "Locali", camere: "Camere da letto",
         bagni: "Bagni", piano: "Piano", piani_totali: "Piani totali edificio",
@@ -1179,7 +1183,9 @@
       acq_photo_err: "Spracovanie zlyhalo.",
       acq_photo_before: "Pôvodná",
       acq_photo_after: "Vylepšená",
+      acq_type_placeholder: "— Vyberte —",
       acq_fields: {
+        tipo_annuncio: "Typ inzerátu",
         tipologia: "Typ nehnuteľnosti", indirizzo_o_zona: "Adresa / lokalita",
         superficie_mq: "Úžitková plocha (m²)", locali: "Počet izieb", camere: "Spálne",
         bagni: "Kúpeľne", piano: "Poschodie", piani_totali: "Celkový počet poschodí",
@@ -2814,6 +2820,18 @@
       updateLiveLabels();
     });
 
+    // The extraction prompt asks for the exact 'vendita'/'affitto' tokens, but a
+    // Slovak meeting sometimes comes back with the Slovak word anyway. Map it
+    // instead of showing the dropdown blank and making the agent re-answer
+    // something the seller already said. Anything unrecognised stays blank —
+    // better than guessing a listing type the phone agent will search on.
+    function normalizeListingType(value) {
+      const v = String(value == null ? "" : value).trim().toLowerCase();
+      if (v.startsWith("vend") || v.startsWith("pred")) return "vendita";
+      if (v.startsWith("affit") || v.startsWith("pren") || v.startsWith("náj") || v.startsWith("naj")) return "affitto";
+      return "";
+    }
+
     // ── Review form (Phase 4): render the extraction result as an editable
     // form, flag missing_required fields, let the agent edit/add/remove
     // tasks. Nothing is saved as final until "Conferma" (PATCH /confirm).
@@ -2839,6 +2857,27 @@
         input.checked = !!value;
         wrap.appendChild(input);
         wrap.appendChild(label);
+      } else if (name === "tipo_annuncio") {
+        // vendita/affitto stay untranslated internal tokens end to end (see
+        // acquisizione/schema.py), but the agent must never see them raw: a
+        // Slovak agency picks Predaj/Prenájom while the record keeps the
+        // token. A dropdown also stops a typo becoming an unsearchable type.
+        wrap.appendChild(label);
+        const select = document.createElement("select");
+        const chosen = normalizeListingType(value);
+        // Blank option first: tipo_annuncio is required, so a meeting that
+        // never established it must stay visibly unanswered rather than
+        // defaulting to "vendita" behind the agent's back.
+        [["", s.acq_type_placeholder],
+         ["vendita", s.types.vendita],
+         ["affitto", s.types.affitto]].forEach(([val, text]) => {
+          const opt = document.createElement("option");
+          opt.value = val;
+          opt.textContent = text;
+          if (val === chosen) opt.selected = true;
+          select.appendChild(opt);
+        });
+        wrap.appendChild(select);
       } else {
         wrap.appendChild(label);
         const input = document.createElement("input");
@@ -3122,7 +3161,9 @@
       const out = {};
       fieldsGrid.querySelectorAll(".acq-field").forEach((wrap) => {
         const name = wrap.dataset.field;
-        const input = wrap.querySelector("input");
+        // "select" for tipo_annuncio; its .value is already the stored token,
+        // and an unpicked placeholder reads as "" → null, i.e. still missing.
+        const input = wrap.querySelector("input, select");
         if (input.type === "checkbox") out[name] = input.checked;
         else if (input.type === "number") out[name] = input.value === "" ? null : Number(input.value);
         else out[name] = input.value === "" ? null : input.value;

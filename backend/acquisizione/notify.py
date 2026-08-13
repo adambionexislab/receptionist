@@ -39,6 +39,16 @@ def _format_value(value: Any, c: dict) -> str:
     return str(value)
 
 
+def _format_field(name: str, value: Any, c: dict) -> str:
+    """Like _format_value, but spells out tipo_annuncio: it's stored as the
+    untranslated 'vendita'/'affitto' token (schema.py), which is jargon to a
+    Slovak agency. An unrecognised token is printed as-is rather than dropped."""
+    if name == "tipo_annuncio":
+        token = str(value).strip().lower()
+        return c["listing_type_values"].get(token, str(value))
+    return _format_value(value, c)
+
+
 
 
 def build_body(record: dict[str, Any]) -> str:
@@ -75,7 +85,7 @@ def build_body(record: dict[str, Any]) -> str:
         value = fields.get(name)
         if value is None or value == "":
             continue
-        lines.append(f"  {labels.get(name, name)}: {_format_value(value, c)}")
+        lines.append(f"  {labels.get(name, name)}: {_format_field(name, value, c)}")
     lines.append("")
 
     transcript = (record.get("transcript") or "").strip()

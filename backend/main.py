@@ -24,9 +24,13 @@ from config import settings
 from dashboard.router import router as dashboard_router
 from demo.router import router as demo_router
 from leadgen import db as leadgen_db
+from leadgen.router import router as leadgen_router
 from listings import db as listings_db
 from listings.store import ListingsStore, store, tenant_stores
 from routers.leads import router as leads_router
+from routers.leads import webhook_router as leads_webhook_router
+from salesnotes import db as salesnotes_db
+from salesnotes.router import router as salesnotes_router
 from signup.router import router as signup_router
 from tenants import db
 from usage import db as usage_db
@@ -57,6 +61,31 @@ def _seconds_until_next_slot() -> float:
     tomorrow = today + datetime.timedelta(days=1)
     slot = datetime.datetime.combine(tomorrow, datetime.time(_SYNC_HOURS[0], 0, 0), tzinfo=_ROME)
     return (slot - now).total_seconds()
+
+
+def _check_session_signing() -> None:
+    """Say once, at boot, what is signing the two dashboards' session cookies
+    (see dashboard/session.py and leadgen/session.py).
+
+    Otherwise the broken case is invisible until someone notices they're being
+    asked to log in again after every deploy — and the person most likely to
+    notice is a sales rep standing outside a meeting.
+    """
+    if settings.SESSION_SECRET:
+        return
+    if settings.ADMIN_TOKEN:
+        logger.warning(
+            "SESSION_SECRET not set — dashboard sessions are signed with "
+            "ADMIN_TOKEN. They survive restarts, but rotating ADMIN_TOKEN logs "
+            "everyone out, and the token then doubles as a cookie-forging key. "
+            "Set SESSION_SECRET."
+        )
+        return
+    logger.error(
+        "Neither SESSION_SECRET nor ADMIN_TOKEN is set — dashboard sessions are "
+        "signed with a random per-process key, so EVERY restart logs everyone "
+        "out of both dashboards. Set SESSION_SECRET."
+    )
 
 
 def _startup_migration() -> None:
@@ -131,9 +160,11 @@ async def _sync_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _check_session_signing()
     await asyncio.to_thread(_startup_migration)
     await asyncio.to_thread(_setup_sk_demo)
     await asyncio.to_thread(leadgen_db.init)
+    await asyncio.to_thread(salesnotes_db.init)
     await asyncio.to_thread(calls_db.init)
     await asyncio.to_thread(acquisizione_db.init)
     await asyncio.to_thread(agents_db.init)
@@ -153,12 +184,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI Voice Receptionist", lifespan=lifespan)
 
-# The landing page is served by this same app (StaticFiles mount below), so
-# /session-token is normally a same-origin call. CORS still matters because the
-# lead-gen dashboard is deployed as a SEPARATE Render static site (a different
-# origin) and calls /campaigns* with GET/POST/PATCH. Origins are opened to "*"
-# per the dashboard requirement; none of these endpoints use cookies or other
-# credentials, so a wildcard origin carries no extra risk here.
+# Every page this app serves — landing, agency dashboard, lead-gen dashboard —
+# is same-origin, so none of them need CORS at all; the wildcard is left in
+# place only for third-party callers of the public endpoints.
+#
+# It stays safe for the two cookie-authenticated dashboards specifically
+# because allow_credentials is NOT set: with "*" and no credentials, browsers
+# refuse to send cookies on a cross-origin request, so another site cannot use
+# this policy to read anything behind a session. Do not turn credentials on
+# here without replacing "*" with an explicit origin list.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -170,7 +204,10 @@ app.include_router(call_router)
 app.include_router(signup_router)
 app.include_router(billing_router)
 app.include_router(demo_router)
+app.include_router(leadgen_router)
 app.include_router(leads_router)
+app.include_router(leads_webhook_router)
+app.include_router(salesnotes_router)
 app.include_router(dashboard_router)
 if settings.ACQUISIZIONE_ENABLED:
     app.include_router(acquisizione_router)
