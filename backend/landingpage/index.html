@@ -324,6 +324,15 @@
       .marquee-track { animation:none; }
     }
 
+    /* Footer legal bar: stacked on phones, spread apart from md up. Written
+       here rather than with md:flex-row utilities because the committed
+       tailwind.css is a prebuilt file — it only carries the variants the
+       markup already used, so a new one would silently do nothing. */
+    .footer-legal { display: flex; flex-direction: column; gap: 1rem; }
+    @media (min-width: 768px) {
+      .footer-legal { flex-direction: row; align-items: flex-end; justify-content: space-between; }
+    }
+
     /* Signup Modal */
     .modal-backdrop {
       position: fixed; inset: 0; z-index: 9999;
@@ -1319,9 +1328,16 @@ ApollonIA riceve un proprio numero di telefono dedicato — non usa il tuo numer
 
     </div>
 
-    <div style="border-top:1px solid var(--border)" class="max-w-[1400px] mx-auto px-6 lg:px-12 py-6">
-      <p class="text-xs" style="color:var(--muted)">&copy; 2026 ApollonIA. Tutti i diritti riservati.</p>
-      <p class="text-xs mt-1" style="color:var(--muted)">Bionexis Lab s.&nbsp;r.&nbsp;o. &middot; Horn&aacute; 37, 974&nbsp;01 Bansk&aacute; Bystrica, Slovakia</p>
+    <div style="border-top:1px solid var(--border)" class="max-w-[1400px] mx-auto px-6 lg:px-12 py-6 footer-legal">
+      <div>
+        <p class="text-xs" style="color:var(--muted)">&copy; 2026 ApollonIA. Tutti i diritti riservati.</p>
+        <p class="text-xs mt-1" style="color:var(--muted)">Bionexis Lab s.&nbsp;r.&nbsp;o. &middot; Horn&aacute; 37, 974&nbsp;01 Bansk&aacute; Bystrica, Slovakia</p>
+      </div>
+      <!-- Staff-only tool (one shared password, see leadgen/router.py). Kept in
+           the legal bar rather than the Navigazione column, and nofollow'd to
+           match the Disallow in robots.txt — it is not a visitor destination. -->
+      <a href="/leadgen" rel="nofollow" class="text-xs transition-colors" style="color:var(--muted)"
+         onmouseover="this.style.color='var(--fg)'" onmouseout="this.style.color='var(--muted)'">Lead Gen</a>
     </div>
   </footer>
 

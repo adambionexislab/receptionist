@@ -2,5 +2,6 @@ User-agent: *
 Allow: /
 Disallow: /signup
 Disallow: /call/
+Disallow: /leadgen
 
 Sitemap: https://www.apollon-ia.com/sitemap.xml
