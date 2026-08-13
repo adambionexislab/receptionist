@@ -52,6 +52,30 @@
   .tab.active { color: var(--text); background: var(--surface-2); }
   .spacer { flex: 1; }
 
+  /* ── language slider (IT ⇄ SK) ──────────────────────── */
+  /* Same component as the landing page's, retuned to this dashboard's tokens.
+     There it navigates between two static pages; here it flips the copy in
+     place, so both options are buttons rather than links. */
+  .lang-switch {
+    position: relative; display: inline-flex; align-items: center; padding: 3px;
+    border-radius: 999px; background: var(--bg); border: 1px solid var(--border);
+  }
+  .lang-switch-pill {
+    position: absolute; left: 3px; top: 3px; bottom: 3px; width: calc(50% - 3px);
+    border-radius: 999px; background: var(--accent-2);
+    transition: transform .35s cubic-bezier(.16,1,.3,1);
+  }
+  .lang-switch.is-sk .lang-switch-pill { transform: translateX(100%); }
+  .lang-switch-opt {
+    position: relative; z-index: 1; width: 38px; padding: 4px 0;
+    border: none; background: none; cursor: pointer; font-family: inherit;
+    font-size: .76rem; font-weight: 700; letter-spacing: .06em; line-height: 1.25;
+    color: var(--text-dim); transition: color .3s ease;
+  }
+  .lang-switch-opt.is-active { color: #fff; }
+  .lang-switch-opt:not(.is-active):hover { color: var(--text); }
+  @media (prefers-reduced-motion: reduce) { .lang-switch-pill { transition: none; } }
+
   /* ── login gate ─────────────────────────────────────── */
   /* <body> starts locked so no dashboard chrome is ever painted before the
      session check answers; every panel behind it is hidden, not just covered. */
@@ -66,8 +90,13 @@
   .login-card .brand { font-weight: 700; font-size: 1.15rem; letter-spacing: .3px; }
   .login-card .brand span { color: var(--accent); }
   .login-card p { margin: 6px 0 0; font-size: .9rem; }
+  /* The header (and its switch) is hidden behind the lock, so the login card
+     carries its own — the password prompt is the first thing anyone reads. */
+  .login-card .lang-switch { margin-top: 14px; }
   .login-card .field { margin: 20px 0 4px; }
-  .login-card input, .login-card button { width: 100%; }
+  /* Full-width applies to the password field and the submit button, but not to
+     the language slider's two options — they size themselves. */
+  .login-card input, .login-card button:not(.lang-switch-opt) { width: 100%; }
   .login-err { color: var(--red); font-size: .85rem; min-height: 1.3em; margin: 8px 0 12px; }
 
   main { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
@@ -253,55 +282,66 @@
 <div id="loginScreen">
   <form class="login-card" id="loginForm" onsubmit="return doLogin(event)">
     <div class="brand">Apollon<span>IA</span> · Lead Gen</div>
-    <p class="muted">Area riservata.</p>
+    <p class="muted" data-i18n="login_sub">Area riservata.</p>
+    <span class="lang-switch" id="langSwitchLogin" role="group" aria-label="Lingua / Jazyk">
+      <span class="lang-switch-pill" aria-hidden="true"></span>
+      <button type="button" class="lang-switch-opt" data-locale="it">IT</button>
+      <button type="button" class="lang-switch-opt" data-locale="sk">SK</button>
+    </span>
     <div class="field">
-      <label for="loginPw">Password</label>
+      <label for="loginPw" data-i18n="login_password">Password</label>
       <input id="loginPw" type="password" autocomplete="current-password" />
     </div>
     <div class="login-err" id="loginErr"></div>
-    <button class="btn" type="submit" id="loginBtn">Entra</button>
+    <button class="btn" type="submit" id="loginBtn" data-i18n="login_btn">Entra</button>
   </form>
 </div>
 
 <header>
   <div class="brand">Apollon<span>IA</span> · Lead Gen</div>
   <nav>
-    <button class="tab active" id="tab-campaigns" onclick="showView('campaigns')">Campagne</button>
-    <button class="tab" id="tab-template" onclick="showView('template')">Email</button>
-    <button class="tab" id="tab-notes" onclick="showView('notes')">Note riunioni</button>
-    <button class="tab" id="tab-detail" onclick="showView('detail')" style="display:none">Dettaglio</button>
+    <button class="tab active" id="tab-campaigns" onclick="showView('campaigns')" data-i18n="tab_campaigns">Campagne</button>
+    <button class="tab" id="tab-template" onclick="showView('template')" data-i18n="tab_template">Email</button>
+    <button class="tab" id="tab-notes" onclick="showView('notes')" data-i18n="tab_notes">Note riunioni</button>
+    <button class="tab" id="tab-detail" onclick="showView('detail')" style="display:none" data-i18n="tab_detail">Dettaglio</button>
   </nav>
   <div class="spacer"></div>
-  <button class="btn ghost sm" id="logoutBtn" onclick="logout()">Esci</button>
+  <span class="lang-switch" id="langSwitchHeader" role="group" aria-label="Lingua / Jazyk">
+    <span class="lang-switch-pill" aria-hidden="true"></span>
+    <button type="button" class="lang-switch-opt" data-locale="it">IT</button>
+    <button type="button" class="lang-switch-opt" data-locale="sk">SK</button>
+  </span>
+  <button class="btn ghost sm" id="logoutBtn" onclick="logout()" data-i18n="logout">Esci</button>
 </header>
 
 <main>
   <!-- ── VIEW 1: CAMPAIGNS ─────────────────────────────── -->
   <section class="view active" id="view-campaigns">
-    <h2>Nuova campagna</h2>
+    <h2 data-i18n="camp_new">Nuova campagna</h2>
     <div class="bar">
       <div class="field">
-        <label for="city">Città</label>
-        <input id="city" type="text" placeholder="es. Milano" autocomplete="off" />
+        <label for="city" data-i18n="camp_city">Città</label>
+        <input id="city" type="text" data-i18n-ph="camp_city_ph" placeholder="es. Milano" autocomplete="off" />
       </div>
       <div class="field">
-        <label for="maxResults">Max lead</label>
+        <label for="maxResults" data-i18n="camp_max">Max lead</label>
         <input id="maxResults" type="number" value="60" min="1" max="60" />
       </div>
-      <button class="btn" id="startBtn" onclick="createCampaign()">Avvia Campagna</button>
+      <button class="btn" id="startBtn" onclick="createCampaign()" data-i18n="camp_start">Avvia Campagna</button>
     </div>
 
-    <h2>Campagne</h2>
+    <h2 data-i18n="camp_list">Campagne</h2>
     <div class="card">
       <table>
         <thead>
           <tr>
-            <th>Città</th><th>Stato</th><th>Creata</th>
-            <th>Trovati</th><th>Email</th><th>Risposte</th><th>Demo</th>
+            <th data-i18n="camp_city">Città</th><th data-i18n="th_status">Stato</th><th data-i18n="th_created">Creata</th>
+            <th data-i18n="th_found">Trovati</th><th data-i18n="th_emails">Email</th>
+            <th data-i18n="th_replies">Risposte</th><th data-i18n="th_demos">Demo</th>
           </tr>
         </thead>
         <tbody id="campaignsBody">
-          <tr><td class="empty" colspan="7">Caricamento…</td></tr>
+          <tr><td class="empty" data-i18n="loading" colspan="7">Caricamento…</td></tr>
         </tbody>
       </table>
     </div>
@@ -309,7 +349,7 @@
 
   <!-- ── VIEW 2: DETAIL ────────────────────────────────── -->
   <section class="view" id="view-detail">
-    <button class="back" onclick="showView('campaigns')">← Tutte le campagne</button>
+    <button class="back" onclick="showView('campaigns')" data-i18n="det_back">← Tutte le campagne</button>
     <div class="detail-head">
       <h2 id="d-city">—</h2>
       <span id="d-status" class="badge b-pending">—</span>
@@ -319,35 +359,35 @@
     </div>
 
     <div class="stats">
-      <div class="stat"><div class="num" id="s-found">0</div><div class="lbl">Trovati</div></div>
-      <div class="stat"><div class="num" id="s-emailed">0</div><div class="lbl">Email inviate</div></div>
-      <div class="stat"><div class="num" id="s-responded">0</div><div class="lbl">Risposte</div></div>
-      <div class="stat"><div class="num" id="s-booked">0</div><div class="lbl">Demo prenotate</div></div>
+      <div class="stat"><div class="num" id="s-found">0</div><div class="lbl" data-i18n="th_found">Trovati</div></div>
+      <div class="stat"><div class="num" id="s-emailed">0</div><div class="lbl" data-i18n="stat_emailed">Email inviate</div></div>
+      <div class="stat"><div class="num" id="s-responded">0</div><div class="lbl" data-i18n="th_replies">Risposte</div></div>
+      <div class="stat"><div class="num" id="s-booked">0</div><div class="lbl" data-i18n="stat_booked">Demo prenotate</div></div>
     </div>
 
     <div class="grid2">
       <div>
         <div class="section-title">
-          <h3>Lead</h3>
+          <h3 data-i18n="det_leads">Lead</h3>
           <div class="filters">
             <select id="leadFilter" onchange="loadLeads()">
-              <option value="">Tutti</option>
-              <option value="pending">Email: in attesa</option>
-              <option value="sent">Email: inviata</option>
-              <option value="no_email">Email: assente</option>
-              <option value="bounced">Email: bounced</option>
-              <option value="duplicate">Email: duplicata</option>
-              <option value="replied">Risposta: ha risposto</option>
-              <option value="interested">Risposta: interessato</option>
-              <option value="not_interested">Risposta: non interessato</option>
-              <option value="booked">Risposta: demo prenotata</option>
+              <option value="" data-i18n="filt_all">Tutti</option>
+              <option value="pending" data-i18n="filt_pending">Email: in attesa</option>
+              <option value="sent" data-i18n="filt_sent">Email: inviata</option>
+              <option value="no_email" data-i18n="filt_no_email">Email: assente</option>
+              <option value="bounced" data-i18n="filt_bounced">Email: bounced</option>
+              <option value="duplicate" data-i18n="filt_duplicate">Email: duplicata</option>
+              <option value="replied" data-i18n="filt_replied">Risposta: ha risposto</option>
+              <option value="interested" data-i18n="filt_interested">Risposta: interessato</option>
+              <option value="not_interested" data-i18n="filt_not_interested">Risposta: non interessato</option>
+              <option value="booked" data-i18n="filt_booked">Risposta: demo prenotata</option>
             </select>
           </div>
         </div>
         <div class="card">
           <table>
             <thead>
-              <tr><th>Agenzia</th><th>Email</th><th>Stato</th><th>Risposta</th><th></th></tr>
+              <tr><th data-i18n="th_agency">Agenzia</th><th data-i18n="th_email">Email</th><th data-i18n="th_status">Stato</th><th data-i18n="th_reply">Risposta</th><th></th></tr>
             </thead>
             <tbody id="leadsBody">
               <tr><td class="empty" colspan="5">—</td></tr>
@@ -357,7 +397,7 @@
       </div>
 
       <div>
-        <div class="section-title"><h3>Log attività</h3><span class="muted" id="logHint"></span></div>
+        <div class="section-title"><h3 data-i18n="det_log">Log attività</h3><span class="muted" id="logHint"></span></div>
         <div class="card"><div class="log-feed" id="logFeed"><div class="empty">—</div></div></div>
       </div>
     </div>
@@ -366,65 +406,65 @@
 
 <!-- ── VIEW 3: EMAIL TEMPLATE ─────────────────────────────── -->
   <section class="view" id="view-template">
-    <h2>Template email di outreach</h2>
-    <p class="muted">
+    <h2 data-i18n="tpl_title">Template email di outreach</h2>
+    <p class="muted" data-i18n-html="tpl_intro">
       Questo testo viene usato per tutte le email inviate alle agenzie.
       Placeholder disponibili: <code>{agency_name}</code> <code>{city}</code> <code>{calendly_link}</code>
     </p>
     <div class="card" style="padding:18px; margin-bottom:24px;">
       <div class="field" style="margin-bottom:16px;">
-        <label for="tplSubject">Oggetto</label>
+        <label for="tplSubject" data-i18n="tpl_subject">Oggetto</label>
         <input id="tplSubject" class="full" type="text" />
       </div>
       <div class="field" style="margin-bottom:16px;">
-        <label for="tplBody">Corpo</label>
+        <label for="tplBody" data-i18n="tpl_body">Corpo</label>
         <textarea id="tplBody"></textarea>
       </div>
       <div style="display:flex; gap:10px; align-items:center;">
-        <button class="btn" id="tplSaveBtn" onclick="saveTemplate()">Salva</button>
-        <button class="btn ghost" onclick="resetTemplate()">Ripristina predefinito</button>
+        <button class="btn" id="tplSaveBtn" onclick="saveTemplate()" data-i18n="save">Salva</button>
+        <button class="btn ghost" onclick="resetTemplate()" data-i18n="tpl_reset">Ripristina predefinito</button>
         <div class="spacer"></div>
         <span class="muted" id="tplHint"></span>
       </div>
     </div>
 
-    <div class="section-title"><h3>Anteprima</h3><span class="muted">esempio: Studio Rossi · Milano</span></div>
+    <div class="section-title"><h3 data-i18n="tpl_preview">Anteprima</h3><span class="muted" id="prevSample"></span></div>
     <div class="card" style="padding:18px; margin-bottom:24px;">
-      <div class="muted" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.4px;">Oggetto</div>
+      <div class="muted" data-i18n="tpl_subject" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.4px;">Oggetto</div>
       <div id="prevSubject" style="font-weight:600; margin:4px 0 16px;">—</div>
-      <div class="muted" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.4px;">Corpo</div>
+      <div class="muted" data-i18n="tpl_body" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.4px;">Corpo</div>
       <div id="prevBody" style="white-space:pre-wrap; margin-top:4px;">—</div>
     </div>
 
-    <h2>Invia email di prova</h2>
-    <p class="muted">
+    <h2 data-i18n="test_title">Invia email di prova</h2>
+    <p class="muted" data-i18n="test_intro">
       Invia il testo qui sopra (anche non salvato) a un indirizzo a tua scelta — così vedi
       com'è in arrivo e puoi provare a rispondere. Le risposte arrivano alla casella del mittente.
     </p>
     <div class="card" style="padding:18px; margin-bottom:24px;">
       <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
         <div class="field" style="flex:1; min-width:240px;">
-          <label for="testTo">Invia a</label>
-          <input id="testTo" class="full" type="email" placeholder="tua@email.com" />
+          <label for="testTo" data-i18n="test_to">Invia a</label>
+          <input id="testTo" class="full" type="email" data-i18n-ph="test_to_ph" placeholder="tua@email.com" />
         </div>
-        <button class="btn" id="testBtn" onclick="sendTestEmail()">Invia prova</button>
+        <button class="btn" id="testBtn" onclick="sendTestEmail()" data-i18n="test_send">Invia prova</button>
       </div>
       <div class="muted" id="testHint" style="margin-top:10px;"></div>
     </div>
 
-    <h2>Agenzie da escludere</h2>
-    <p class="muted">
+    <h2 data-i18n="excl_title">Agenzie da escludere</h2>
+    <p class="muted" data-i18n-html="excl_intro">
       Le agenzie il cui <strong>nome</strong> contiene una di queste parole non verranno
       contattate (verifica senza distinzione tra maiuscole/minuscole, prima di spendere
       crediti Google). Separa le parole con una virgola. Lascia vuoto per non escludere nulla.
     </p>
     <div class="card" style="padding:18px;">
       <div class="field" style="margin-bottom:16px;">
-        <label for="exclKeywords">Parole chiave (es. tecnocasa, tempocasa)</label>
-        <input id="exclKeywords" class="full" type="text" placeholder="tecnocasa, tempocasa" />
+        <label for="exclKeywords" data-i18n="excl_label">Parole chiave (es. tecnocasa, tempocasa)</label>
+        <input id="exclKeywords" class="full" type="text" data-i18n-ph="excl_ph" placeholder="tecnocasa, tempocasa" />
       </div>
       <div style="display:flex; gap:10px; align-items:center;">
-        <button class="btn" id="exclSaveBtn" onclick="saveExclusions()">Salva</button>
+        <button class="btn" id="exclSaveBtn" onclick="saveExclusions()" data-i18n="save">Salva</button>
         <div class="spacer"></div>
         <span class="muted" id="exclHint"></span>
       </div>
@@ -433,8 +473,8 @@
 
 <!-- ── VIEW 4: MEETING NOTES ──────────────────────────────── -->
   <section class="view" id="view-notes">
-    <h2>Note riunioni</h2>
-    <p class="muted nt-intro">
+    <h2 data-i18n="tab_notes">Note riunioni</h2>
+    <p class="muted nt-intro" data-i18n="nt_intro">
       Subito dopo ogni riunione, avvia la registrazione e racconta a voce com'è andata:
       cosa ha funzionato, cosa no, cosa ha obiettato il cliente. Al termine la nota viene
       strutturata e resta modificabile. Si registra solo la tua voce — la riunione no.
@@ -445,48 +485,50 @@
          but takes the way back to it with the page. -->
     <div class="card hidden" id="nt-resume" style="margin-bottom:24px;">
       <div class="nt-pad">
-        <strong>C'è una registrazione rimasta a metà.</strong>
+        <strong data-i18n="nt_resume_title">C'è una registrazione rimasta a metà.</strong>
         <div class="nt-excerpt" id="nt-resume-excerpt"></div>
         <div class="nt-err" id="nt-resume-err"></div>
         <div class="nt-actions">
-          <button class="btn" id="nt-resume-btn">Riprendi</button>
-          <button class="btn ghost" id="nt-resume-discard-btn">Ignora</button>
+          <button class="btn" id="nt-resume-btn" data-i18n="nt_resume">Riprendi</button>
+          <button class="btn ghost" id="nt-resume-discard-btn" data-i18n="nt_ignore">Ignora</button>
         </div>
       </div>
     </div>
 
     <div class="bar" id="nt-start">
       <div class="field">
-        <label for="nt-language">Lingua della riunione</label>
+        <label for="nt-language" data-i18n="nt_language">Lingua della riunione</label>
+        <!-- Autonyms: a language is named in its own language in both locales,
+             so these three options are deliberately never translated. -->
         <select id="nt-language">
           <option value="it">Italiano</option>
           <option value="sk">Slovenčina</option>
           <option value="en">English</option>
         </select>
       </div>
-      <button class="btn" id="nt-start-btn">Avvia registrazione</button>
+      <button class="btn" id="nt-start-btn" data-i18n="nt_start">Avvia registrazione</button>
       <div class="nt-err" id="nt-start-err" style="margin:0;"></div>
     </div>
 
     <div class="card hidden" id="nt-live" style="margin-bottom:24px;">
       <div class="nt-live-head">
         <span class="nt-dot" id="nt-dot"></span>
-        <span id="nt-status">Registrazione in corso…</span>
+        <span id="nt-status">—</span>
         <div class="spacer"></div>
-        <button class="btn ghost sm" id="nt-cancel-btn">Annulla</button>
-        <button class="btn ghost sm" id="nt-pause-btn">Pausa</button>
-        <button class="btn sm" id="nt-finish-btn">Termina e struttura</button>
+        <button class="btn ghost sm" id="nt-cancel-btn" data-i18n="cancel">Annulla</button>
+        <button class="btn ghost sm" id="nt-pause-btn" data-i18n="nt_pause">Pausa</button>
+        <button class="btn sm" id="nt-finish-btn" data-i18n="nt_finish">Termina e struttura</button>
       </div>
-      <div class="nt-transcript" id="nt-transcript" data-empty="La trascrizione appare qui mentre parli…"></div>
+      <div class="nt-transcript" id="nt-transcript" data-i18n-empty="nt_transcript_empty" data-empty="La trascrizione appare qui mentre parli…"></div>
     </div>
 
     <div class="card hidden" id="nt-processing" style="margin-bottom:24px;">
       <div class="nt-pad">
-        <p id="nt-processing-text">Sto strutturando la nota…</p>
+        <p id="nt-processing-text" data-i18n="nt_processing">Sto strutturando la nota…</p>
         <div class="nt-err" id="nt-processing-err"></div>
         <div class="nt-actions">
-          <button class="btn ghost hidden" id="nt-retry-btn">Riprova</button>
-          <button class="btn ghost hidden" id="nt-processing-back-btn">Annulla</button>
+          <button class="btn ghost hidden" id="nt-retry-btn" data-i18n="retry">Riprova</button>
+          <button class="btn ghost hidden" id="nt-processing-back-btn" data-i18n="cancel">Annulla</button>
         </div>
       </div>
     </div>
@@ -496,78 +538,78 @@
     <div class="card hidden" id="nt-review" style="margin-bottom:24px;">
       <div class="nt-pad">
         <div class="section-title">
-          <h3 id="nt-review-title">Nota della riunione</h3>
+          <h3 id="nt-review-title" data-i18n="nt_review_title">Nota della riunione</h3>
           <span class="muted" id="nt-review-meta"></span>
         </div>
 
         <div class="nt-grid">
           <div class="nt-field">
-            <label for="nt-f-title">Titolo</label>
+            <label for="nt-f-title" data-i18n="nt_f_title">Titolo</label>
             <input id="nt-f-title" type="text" />
           </div>
           <div class="nt-field">
-            <label for="nt-f-customer">Cliente</label>
+            <label for="nt-f-customer" data-i18n="nt_f_customer">Cliente</label>
             <input id="nt-f-customer" type="text" />
           </div>
         </div>
 
         <div class="nt-field" style="max-width:280px;">
-          <label for="nt-f-outcome">Esito</label>
+          <label for="nt-f-outcome" data-i18n="nt_f_outcome">Esito</label>
           <select id="nt-f-outcome">
             <option value="">—</option>
-            <option value="positive">Positivo</option>
-            <option value="neutral">Neutro</option>
-            <option value="negative">Negativo</option>
+            <option value="positive" data-i18n="outcome_positive">Positivo</option>
+            <option value="neutral" data-i18n="outcome_neutral">Neutro</option>
+            <option value="negative" data-i18n="outcome_negative">Negativo</option>
           </select>
         </div>
 
         <div class="nt-field">
-          <label for="nt-f-summary">Sintesi</label>
+          <label for="nt-f-summary" data-i18n="nt_f_summary">Sintesi</label>
           <textarea id="nt-f-summary"></textarea>
         </div>
 
         <div class="nt-grid">
           <div class="nt-field">
-            <label for="nt-f-went_well">Cosa è andato bene <span class="hint muted">— una riga per punto</span></label>
+            <label for="nt-f-went_well" data-i18n-html="nt_f_went_well">Cosa è andato bene <span class="hint muted">— una riga per punto</span></label>
             <textarea id="nt-f-went_well"></textarea>
           </div>
           <div class="nt-field">
-            <label for="nt-f-went_wrong">Cosa è andato male <span class="hint muted">— una riga per punto</span></label>
+            <label for="nt-f-went_wrong" data-i18n-html="nt_f_went_wrong">Cosa è andato male <span class="hint muted">— una riga per punto</span></label>
             <textarea id="nt-f-went_wrong"></textarea>
           </div>
           <div class="nt-field">
-            <label for="nt-f-objections">Obiezioni del cliente <span class="hint muted">— una riga per obiezione</span></label>
+            <label for="nt-f-objections" data-i18n-html="nt_f_objections">Obiezioni del cliente <span class="hint muted">— una riga per obiezione</span></label>
             <textarea id="nt-f-objections"></textarea>
           </div>
           <div class="nt-field">
-            <label for="nt-f-next_steps">Prossimi passi <span class="hint muted">— una riga per punto</span></label>
+            <label for="nt-f-next_steps" data-i18n-html="nt_f_next_steps">Prossimi passi <span class="hint muted">— una riga per punto</span></label>
             <textarea id="nt-f-next_steps"></textarea>
           </div>
         </div>
 
         <details class="nt-raw">
-          <summary>Trascrizione</summary>
+          <summary data-i18n="nt_transcript">Trascrizione</summary>
           <div class="nt-excerpt" id="nt-raw-transcript"></div>
         </details>
 
         <div class="nt-err" id="nt-review-err" style="margin-top:16px;"></div>
         <div class="nt-actions">
-          <button class="btn" id="nt-save-btn">Salva nota</button>
-          <button class="btn ghost" id="nt-review-close-btn">Chiudi</button>
+          <button class="btn" id="nt-save-btn" data-i18n="nt_save">Salva nota</button>
+          <button class="btn ghost" id="nt-review-close-btn" data-i18n="nt_close">Chiudi</button>
           <div class="spacer"></div>
-          <button class="btn ghost sm" id="nt-delete-btn">Elimina</button>
+          <button class="btn ghost sm" id="nt-delete-btn" data-i18n="nt_delete">Elimina</button>
         </div>
       </div>
     </div>
 
     <div class="section-title">
-      <h3>Note salvate</h3>
+      <h3 data-i18n="nt_saved_title">Note salvate</h3>
       <span class="muted" id="nt-list-hint"></span>
     </div>
     <div class="card">
       <table>
         <thead>
-          <tr><th>Data</th><th>Titolo</th><th>Cliente</th><th>Esito</th><th>Obiezioni</th><th></th></tr>
+          <tr><th data-i18n="th_date">Data</th><th data-i18n="nt_f_title">Titolo</th><th data-i18n="nt_f_customer">Cliente</th><th data-i18n="nt_f_outcome">Esito</th><th data-i18n="th_objections">Obiezioni</th><th></th></tr>
         </thead>
         <tbody id="nt-list-body">
           <tr><td class="empty" colspan="6">—</td></tr>
@@ -579,23 +621,23 @@
 <!-- ── response modal ──────────────────────────────────── -->
 <div class="modal-bg" id="modalBg">
   <div class="modal">
-    <h3>Segna risposta</h3>
+    <h3 data-i18n="mark_reply">Segna risposta</h3>
     <div class="sub" id="modalLead">—</div>
     <div class="field">
-      <label for="respType">Tipo di risposta</label>
+      <label for="respType" data-i18n="resp_type">Tipo di risposta</label>
       <select id="respType">
-        <option value="interested">Interessato</option>
-        <option value="not_interested">Non interessato</option>
-        <option value="booked">Demo prenotata</option>
+        <option value="interested" data-i18n="resp_interested">Interessato</option>
+        <option value="not_interested" data-i18n="resp_not_interested">Non interessato</option>
+        <option value="booked" data-i18n="resp_booked">Demo prenotata</option>
       </select>
     </div>
     <div class="field">
-      <label for="respNotes">Note (opzionale)</label>
+      <label for="respNotes" data-i18n="resp_notes">Note (opzionale)</label>
       <textarea id="respNotes" placeholder="…"></textarea>
     </div>
     <div class="modal-actions">
-      <button class="btn ghost" onclick="closeModal()">Annulla</button>
-      <button class="btn" onclick="submitResponse()">Salva</button>
+      <button class="btn ghost" onclick="closeModal()" data-i18n="cancel">Annulla</button>
+      <button class="btn" onclick="submitResponse()" data-i18n="save">Salva</button>
     </div>
   </div>
 </div>
@@ -612,6 +654,493 @@ const CONFIG = {
   API_BASE: ""
 };
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ── locale ───────────────────────────────────────────────
+// Two markets, one page. Unlike the tenant dashboard (which gets its locale
+// from the URL, one path per tenant) and the landing page (two static files),
+// this is a single internal tool the same person uses in either language, so
+// the choice is a switch in the chrome and lives in localStorage.
+//
+// Only what a human reads is translated. Campaign/lead/note *statuses* stay the
+// English tokens the API speaks; the `badges` map below renders them per locale.
+const STRINGS = {
+  it: {
+    page_title: "ApollonIA · Lead Generation",
+    date_locale: "it-IT",
+
+    // login
+    login_sub: "Area riservata.",
+    login_password: "Password",
+    login_btn: "Entra",
+    login_wait: "Accesso…",
+    login_err_401: "Password errata.",
+    login_err_429: "Troppi tentativi. Riprova tra qualche minuto.",
+    login_err_503: "Login non configurato sul server (LEADGEN_PASSWORD).",
+    login_err_other: "Errore {status}",
+    login_err_conn: "Connessione fallita: {msg}",
+    session_expired: "Sessione scaduta. Accedi di nuovo.",
+
+    // chrome
+    tab_campaigns: "Campagne",
+    tab_template: "Email",
+    tab_notes: "Note riunioni",
+    tab_detail: "Dettaglio",
+    logout: "Esci",
+
+    // shared
+    save: "Salva",
+    saving: "Salvataggio…",
+    cancel: "Annulla",
+    retry: "Riprova",
+    loading: "Caricamento…",
+    error_prefix: "Errore: {msg}",
+    confirm_again: "Sicura? Clicca di nuovo",
+
+    // campaigns
+    camp_new: "Nuova campagna",
+    camp_city: "Città",
+    camp_city_ph: "es. Milano",
+    camp_max: "Max lead",
+    camp_start: "Avvia Campagna",
+    camp_starting: "Avvio…",
+    camp_list: "Campagne",
+    camp_none: "Nessuna campagna. Avviane una qui sopra.",
+    camp_need_city: "Inserisci una città",
+    camp_started: "Campagna avviata per {city}",
+    camp_paused_toast: "Campagna in pausa",
+    camp_restarted_toast: "Campagna riavviata",
+    camp_resumed_toast: "Campagna ripresa",
+
+    th_status: "Stato",
+    th_created: "Creata",
+    th_found: "Trovati",
+    th_emails: "Email",
+    th_replies: "Risposte",
+    th_demos: "Demo",
+    th_agency: "Agenzia",
+    th_email: "Email",
+    th_reply: "Risposta",
+    th_date: "Data",
+    th_objections: "Obiezioni",
+
+    // detail
+    det_back: "← Tutte le campagne",
+    det_leads: "Lead",
+    det_log: "Log attività",
+    stat_emailed: "Email inviate",
+    stat_booked: "Demo prenotate",
+    det_start: "Avvia",
+    det_pause: "Pausa",
+    det_restart: "Riavvia",
+    leads_none: "Nessun lead ancora.",
+    leads_none_filtered: "Nessun lead con questo filtro.",
+    logs_none: "Nessun evento ancora.",
+    log_polling: "aggiornamento ogni 5s",
+
+    filt_all: "Tutti",
+    filt_pending: "Email: in attesa",
+    filt_sent: "Email: inviata",
+    filt_no_email: "Email: assente",
+    filt_bounced: "Email: bounced",
+    filt_duplicate: "Email: duplicata",
+    filt_replied: "Risposta: ha risposto",
+    filt_interested: "Risposta: interessato",
+    filt_not_interested: "Risposta: non interessato",
+    filt_booked: "Risposta: demo prenotata",
+
+    badges: {
+      pending: "in attesa", running: "in corso", paused: "in pausa", completed: "completata",
+      no_email: "no email", sent: "inviata", bounced: "bounced", duplicate: "duplicato",
+      none: "nessuna", replied: "ha risposto", interested: "interessato",
+      not_interested: "non interessato", booked: "prenotata",
+    },
+
+    // response modal
+    mark_reply: "Segna risposta",
+    resp_type: "Tipo di risposta",
+    resp_interested: "Interessato",
+    resp_not_interested: "Non interessato",
+    resp_booked: "Demo prenotata",
+    resp_notes: "Note (opzionale)",
+    resp_saved: "Risposta salvata",
+
+    // email template
+    tpl_title: "Template email di outreach",
+    tpl_intro: "Questo testo viene usato per tutte le email inviate alle agenzie. "
+      + "Placeholder disponibili: <code>{agency_name}</code> <code>{city}</code> <code>{calendly_link}</code>",
+    tpl_subject: "Oggetto",
+    tpl_body: "Corpo",
+    tpl_reset: "Ripristina predefinito",
+    tpl_preview: "Anteprima",
+    tpl_sample: "esempio: {agency} · {city}",
+    tpl_saved: "Template salvato",
+    tpl_empty: "Oggetto e corpo non possono essere vuoti",
+    tpl_reset_toast: "Predefinito ripristinato — ricorda di salvare",
+    // Sample values the preview substitutes for the placeholders — a name and a
+    // city from the market being prospected, so the preview reads like a real
+    // email rather than a foreign one.
+    preview_agency: "Studio Rossi",
+    preview_city: "Milano",
+
+    test_title: "Invia email di prova",
+    test_intro: "Invia il testo qui sopra (anche non salvato) a un indirizzo a tua scelta — "
+      + "così vedi com'è in arrivo e puoi provare a rispondere. Le risposte arrivano alla "
+      + "casella del mittente.",
+    test_to: "Invia a",
+    test_to_ph: "tua@email.com",
+    test_send: "Invia prova",
+    test_sending: "Invio…",
+    test_need_email: "Inserisci un indirizzo email",
+    test_sent: "Email di prova inviata a {to}",
+    test_hint: "Inviata da {from} — rispondi a quell'email per testare le risposte "
+      + "(le risposte arrivano a {reply_to}).",
+
+    excl_title: "Agenzie da escludere",
+    excl_intro: "Le agenzie il cui <strong>nome</strong> contiene una di queste parole non "
+      + "verranno contattate (verifica senza distinzione tra maiuscole/minuscole, prima di "
+      + "spendere crediti Google). Separa le parole con una virgola. Lascia vuoto per non "
+      + "escludere nulla.",
+    excl_label: "Parole chiave (es. tecnocasa, tempocasa)",
+    excl_ph: "tecnocasa, tempocasa",
+    excl_saved: "Esclusioni salvate",
+    excl_cleared: "Esclusioni rimosse",
+
+    // meeting notes
+    nt_intro: "Subito dopo ogni riunione, avvia la registrazione e racconta a voce com'è "
+      + "andata: cosa ha funzionato, cosa no, cosa ha obiettato il cliente. Al termine la "
+      + "nota viene strutturata e resta modificabile. Si registra solo la tua voce — la "
+      + "riunione no.",
+    nt_resume_title: "C'è una registrazione rimasta a metà.",
+    nt_resume: "Riprendi",
+    nt_ignore: "Ignora",
+    nt_language: "Lingua della riunione",
+    nt_start: "Avvia registrazione",
+    nt_pause: "Pausa",
+    nt_finish: "Termina e struttura",
+    nt_transcript_empty: "La trascrizione appare qui mentre parli…",
+    nt_processing: "Sto strutturando la nota…",
+    nt_review_title: "Nota della riunione",
+    nt_f_title: "Titolo",
+    nt_f_customer: "Cliente",
+    nt_f_outcome: "Esito",
+    nt_f_summary: "Sintesi",
+    nt_f_went_well: 'Cosa è andato bene <span class="hint muted">— una riga per punto</span>',
+    nt_f_went_wrong: 'Cosa è andato male <span class="hint muted">— una riga per punto</span>',
+    nt_f_objections: 'Obiezioni del cliente <span class="hint muted">— una riga per obiezione</span>',
+    nt_f_next_steps: 'Prossimi passi <span class="hint muted">— una riga per punto</span>',
+    nt_transcript: "Trascrizione",
+    nt_save: "Salva nota",
+    nt_close: "Chiudi",
+    nt_delete: "Elimina",
+    nt_saved_title: "Note salvate",
+
+    outcome_positive: "Positivo",
+    outcome_neutral: "Neutro",
+    outcome_negative: "Negativo",
+    outcomes: { positive: "positivo", neutral: "neutro", negative: "negativo" },
+
+    nt_status_idle: "—",
+    nt_status_recording: "Registrazione in corso…",
+    nt_status_paused: "In pausa",
+    nt_status_reconnecting: "Riconnessione…",
+    nt_status_quiet: "Connessa, ma non sento nulla — controlla il microfono",
+
+    nt_none: "Nessuna nota ancora.",
+    nt_count: "{n} note",
+    nt_count_one: "1 nota",
+    nt_count_few: "{n} note",
+    nt_untitled: "(senza titolo)",
+    nt_draft: "bozza",
+    nt_open: "Apri",
+    nt_no_transcript: "(nessuna trascrizione)",
+    nt_meta_saved: "salvata il {date}",
+    nt_meta_unsaved: "non ancora salvata",
+    nt_saved_toast: "Nota salvata",
+    nt_deleted_toast: "Nota eliminata",
+    nt_save_failed: "Salvataggio fallito: {msg}",
+    nt_delete_failed: "Eliminazione fallita: {msg}",
+    nt_finish_first: "Termina prima la registrazione in corso",
+    nt_err_mic: "Microfono non disponibile: consenti l'accesso e riprova.",
+    nt_err_start: "Impossibile avviare la registrazione. Riprova.",
+    nt_err_resume: "Impossibile riprendere. Riprova.",
+    nt_err_empty: "Non è stata registrata nessuna parola. Controlla il microfono e registra di nuovo.",
+    nt_err_extract: "Non sono riuscita a strutturare la nota. La trascrizione è al sicuro — riprova.",
+  },
+
+  sk: {
+    page_title: "ApollonIA · Lead Generation",
+    date_locale: "sk-SK",
+
+    login_sub: "Vyhradená zóna.",
+    login_password: "Heslo",
+    login_btn: "Vstúpiť",
+    login_wait: "Prihlasovanie…",
+    login_err_401: "Nesprávne heslo.",
+    login_err_429: "Príliš veľa pokusov. Skúste to o pár minút.",
+    login_err_503: "Prihlásenie nie je nastavené na serveri (LEADGEN_PASSWORD).",
+    login_err_other: "Chyba {status}",
+    login_err_conn: "Pripojenie zlyhalo: {msg}",
+    session_expired: "Relácia vypršala. Prihláste sa znova.",
+
+    tab_campaigns: "Kampane",
+    tab_template: "E-mail",
+    tab_notes: "Poznámky zo stretnutí",
+    tab_detail: "Detail",
+    logout: "Odhlásiť sa",
+
+    save: "Uložiť",
+    saving: "Ukladá sa…",
+    cancel: "Zrušiť",
+    retry: "Skúsiť znova",
+    loading: "Načítava sa…",
+    error_prefix: "Chyba: {msg}",
+    confirm_again: "Naozaj? Kliknite znova",
+
+    camp_new: "Nová kampaň",
+    camp_city: "Mesto",
+    camp_city_ph: "napr. Bratislava",
+    camp_max: "Max. leadov",
+    camp_start: "Spustiť kampaň",
+    camp_starting: "Spúšťa sa…",
+    camp_list: "Kampane",
+    camp_none: "Zatiaľ žiadne kampane. Spustite jednu vyššie.",
+    camp_need_city: "Zadajte mesto",
+    camp_started: "Kampaň spustená pre {city}",
+    camp_paused_toast: "Kampaň pozastavená",
+    camp_restarted_toast: "Kampaň reštartovaná",
+    camp_resumed_toast: "Kampaň obnovená",
+
+    th_status: "Stav",
+    th_created: "Vytvorená",
+    th_found: "Nájdené",
+    th_emails: "E-maily",
+    th_replies: "Odpovede",
+    th_demos: "Demá",
+    th_agency: "Kancelária",
+    th_email: "E-mail",
+    th_reply: "Odpoveď",
+    th_date: "Dátum",
+    th_objections: "Námietky",
+
+    det_back: "← Všetky kampane",
+    det_leads: "Leady",
+    det_log: "Záznam aktivity",
+    stat_emailed: "Odoslané e-maily",
+    stat_booked: "Rezervované demá",
+    det_start: "Spustiť",
+    det_pause: "Pozastaviť",
+    det_restart: "Reštartovať",
+    leads_none: "Zatiaľ žiadne leady.",
+    leads_none_filtered: "Žiadne leady pre tento filter.",
+    logs_none: "Zatiaľ žiadne udalosti.",
+    log_polling: "aktualizácia každých 5 s",
+
+    filt_all: "Všetky",
+    filt_pending: "E-mail: čaká",
+    filt_sent: "E-mail: odoslaný",
+    filt_no_email: "E-mail: chýba",
+    filt_bounced: "E-mail: nedoručený",
+    filt_duplicate: "E-mail: duplicitný",
+    filt_replied: "Odpoveď: odpovedal",
+    filt_interested: "Odpoveď: má záujem",
+    filt_not_interested: "Odpoveď: bez záujmu",
+    filt_booked: "Odpoveď: rezervované demo",
+
+    badges: {
+      pending: "čaká", running: "prebieha", paused: "pozastavená", completed: "dokončená",
+      no_email: "bez e-mailu", sent: "odoslaný", bounced: "nedoručený", duplicate: "duplicitný",
+      none: "žiadna", replied: "odpovedal", interested: "má záujem",
+      not_interested: "bez záujmu", booked: "rezervované",
+    },
+
+    mark_reply: "Označiť odpoveď",
+    resp_type: "Typ odpovede",
+    resp_interested: "Má záujem",
+    resp_not_interested: "Bez záujmu",
+    resp_booked: "Rezervované demo",
+    resp_notes: "Poznámky (nepovinné)",
+    resp_saved: "Odpoveď uložená",
+
+    tpl_title: "Šablóna oslovujúceho e-mailu",
+    tpl_intro: "Tento text sa použije pre všetky e-maily odoslané kanceláriám. "
+      + "Dostupné zástupné symboly: <code>{agency_name}</code> <code>{city}</code> <code>{calendly_link}</code>",
+    tpl_subject: "Predmet",
+    tpl_body: "Text",
+    tpl_reset: "Obnoviť predvolené",
+    tpl_preview: "Náhľad",
+    tpl_sample: "príklad: {agency} · {city}",
+    tpl_saved: "Šablóna uložená",
+    tpl_empty: "Predmet ani text nemôžu byť prázdne",
+    tpl_reset_toast: "Predvolené obnovené — nezabudnite uložiť",
+    preview_agency: "Reality Bratislava",
+    preview_city: "Bratislava",
+
+    test_title: "Poslať skúšobný e-mail",
+    test_intro: "Pošlite text z vyššie uvedeného poľa (aj neuložený) na ľubovoľnú adresu — "
+      + "uvidíte, ako e-mail vyzerá po doručení, a môžete si vyskúšať odpoveď. Odpovede "
+      + "chodia do schránky odosielateľa.",
+    test_to: "Poslať na",
+    test_to_ph: "vas@email.com",
+    test_send: "Poslať skúšku",
+    test_sending: "Odosiela sa…",
+    test_need_email: "Zadajte e-mailovú adresu",
+    test_sent: "Skúšobný e-mail odoslaný na {to}",
+    test_hint: "Odoslané z {from} — odpovedzte na ten e-mail a otestujte odpovede "
+      + "(odpovede chodia na {reply_to}).",
+
+    excl_title: "Kancelárie na vylúčenie",
+    excl_intro: "Kancelárie, ktorých <strong>názov</strong> obsahuje niektoré z týchto slov, "
+      + "nebudú oslovené (kontrola nerozlišuje veľké a malé písmená a prebehne skôr, než sa "
+      + "minú kredity Google). Slová oddeľte čiarkou. Nechajte prázdne, ak nechcete vylúčiť nič.",
+    excl_label: "Kľúčové slová (napr. remax, century21)",
+    excl_ph: "remax, century21",
+    excl_saved: "Vylúčenia uložené",
+    excl_cleared: "Vylúčenia odstránené",
+
+    nt_intro: "Hneď po každom stretnutí spustite nahrávanie a nahlas povedzte, ako prebehlo: "
+      + "čo fungovalo, čo nie, čo klient namietal. Na konci sa poznámka spracuje a zostane "
+      + "upraviteľná. Nahráva sa len váš hlas — stretnutie nie.",
+    nt_resume_title: "Ostala nedokončená nahrávka.",
+    nt_resume: "Pokračovať",
+    nt_ignore: "Ignorovať",
+    nt_language: "Jazyk stretnutia",
+    nt_start: "Spustiť nahrávanie",
+    nt_pause: "Pauza",
+    nt_finish: "Ukončiť a spracovať",
+    nt_transcript_empty: "Prepis sa tu zobrazí, kým hovoríte…",
+    nt_processing: "Spracúvam poznámku…",
+    nt_review_title: "Poznámka zo stretnutia",
+    nt_f_title: "Názov",
+    nt_f_customer: "Klient",
+    nt_f_outcome: "Výsledok",
+    nt_f_summary: "Zhrnutie",
+    nt_f_went_well: 'Čo fungovalo <span class="hint muted">— jeden riadok na bod</span>',
+    nt_f_went_wrong: 'Čo nefungovalo <span class="hint muted">— jeden riadok na bod</span>',
+    nt_f_objections: 'Námietky klienta <span class="hint muted">— jeden riadok na námietku</span>',
+    nt_f_next_steps: 'Ďalšie kroky <span class="hint muted">— jeden riadok na bod</span>',
+    nt_transcript: "Prepis",
+    nt_save: "Uložiť poznámku",
+    nt_close: "Zavrieť",
+    nt_delete: "Vymazať",
+    nt_saved_title: "Uložené poznámky",
+
+    outcome_positive: "Pozitívny",
+    outcome_neutral: "Neutrálny",
+    outcome_negative: "Negatívny",
+    outcomes: { positive: "pozitívny", neutral: "neutrálny", negative: "negatívny" },
+
+    nt_status_idle: "—",
+    nt_status_recording: "Nahrávanie prebieha…",
+    nt_status_paused: "Pozastavené",
+    nt_status_reconnecting: "Opätovné pripájanie…",
+    nt_status_quiet: "Pripojené, ale nič nepočuť — skontrolujte mikrofón",
+
+    nt_none: "Zatiaľ žiadne poznámky.",
+    nt_count: "{n} poznámok",
+    nt_count_one: "1 poznámka",
+    nt_count_few: "{n} poznámky",
+    nt_untitled: "(bez názvu)",
+    nt_draft: "koncept",
+    nt_open: "Otvoriť",
+    nt_no_transcript: "(žiadny prepis)",
+    nt_meta_saved: "uložené {date}",
+    nt_meta_unsaved: "zatiaľ neuložené",
+    nt_saved_toast: "Poznámka uložená",
+    nt_deleted_toast: "Poznámka vymazaná",
+    nt_save_failed: "Uloženie zlyhalo: {msg}",
+    nt_delete_failed: "Vymazanie zlyhalo: {msg}",
+    nt_finish_first: "Najprv ukončite prebiehajúce nahrávanie",
+    nt_err_mic: "Mikrofón nie je dostupný: povoľte prístup a skúste znova.",
+    nt_err_start: "Nahrávanie sa nepodarilo spustiť. Skúste znova.",
+    nt_err_resume: "Nepodarilo sa pokračovať. Skúste znova.",
+    nt_err_empty: "Nezaznamenalo sa ani jedno slovo. Skontrolujte mikrofón a nahrajte znova.",
+    nt_err_extract: "Poznámku sa nepodarilo spracovať. Prepis je v bezpečí — skúste znova.",
+  },
+};
+
+const LOCALE_KEY = "leadgen.locale";
+let LOCALE = "it";
+try {
+  if (localStorage.getItem(LOCALE_KEY) === "sk") LOCALE = "sk";
+} catch (_) { /* private mode / storage disabled — Italian is the default */ }
+
+const T = () => STRINGS[LOCALE] || STRINGS.it;
+
+// Placeholder substitution, e.g. fmt(T().camp_started, { city: "Milano" }).
+function fmt(template, values) {
+  return Object.keys(values || {}).reduce(
+    (out, k) => out.split("{" + k + "}").join(values[k]),
+    template || ""
+  );
+}
+
+// Slovak count agreement is 1 / 2–4 / 5+; Italian only needs one/other, so its
+// _few form simply repeats the plural.
+function pluralize(base, n) {
+  const s = T();
+  if (n === 1) return s[base + "_one"];
+  const key = n >= 2 && n <= 4 ? base + "_few" : base;
+  return (s[key] || s[base]).replace("{n}", n);
+}
+
+// Static markup: data-i18n sets text, data-i18n-html sets markup (for the few
+// strings carrying <code>/<strong>/<span> inside), data-i18n-ph a placeholder,
+// data-i18n-empty the transcript box's empty-state attribute.
+function applyI18n() {
+  const s = T();
+  document.documentElement.lang = LOCALE;
+  document.title = s.page_title;
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const v = s[el.dataset.i18n];
+    if (v != null) el.textContent = v;
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach((el) => {
+    const v = s[el.dataset.i18nHtml];
+    if (v != null) el.innerHTML = v;
+  });
+  document.querySelectorAll("[data-i18n-ph]").forEach((el) => {
+    const v = s[el.dataset.i18nPh];
+    if (v != null) el.placeholder = v;
+  });
+  document.querySelectorAll("[data-i18n-empty]").forEach((el) => {
+    const v = s[el.dataset.i18nEmpty];
+    if (v != null) el.setAttribute("data-empty", v);
+  });
+  document.querySelectorAll(".lang-switch").forEach((sw) => {
+    sw.classList.toggle("is-sk", LOCALE === "sk");
+    sw.querySelectorAll(".lang-switch-opt").forEach((opt) => {
+      const active = opt.dataset.locale === LOCALE;
+      opt.classList.toggle("is-active", active);
+      opt.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  });
+}
+
+// Everything already on screen was rendered in the old language, so the switch
+// re-runs whatever the current view is showing. Deliberately re-fetches rather
+// than re-rendering from cached rows: switching is rare, and a stale table is a
+// worse bug than an extra request.
+function setLocale(loc) {
+  if (loc !== "it" && loc !== "sk") return;
+  if (loc === LOCALE) return;
+  LOCALE = loc;
+  try { localStorage.setItem(LOCALE_KEY, loc); } catch (_) {}
+  applyI18n();
+  if (!document.body.classList.contains("locked")) {
+    if (state.view === "detail" && state.campaignId) {
+      refreshCampaign(); loadLeads(); loadLogs();
+    } else if (state.view === "campaigns") {
+      loadCampaigns();
+    } else if (state.view === "template") {
+      updatePreview();
+    }
+    if (window.NotesRelocalize) window.NotesRelocalize();
+  }
+}
+
+document.querySelectorAll(".lang-switch-opt").forEach((opt) => {
+  opt.addEventListener("click", () => setLocale(opt.dataset.locale));
+});
 
 let state = {
   view: "campaigns",
@@ -644,8 +1173,9 @@ async function doLogin(event) {
   const password = document.getElementById("loginPw").value;
   const btn = document.getElementById("loginBtn");
   const err = document.getElementById("loginErr");
+  const s = T();
   err.textContent = "";
-  btn.disabled = true; btn.textContent = "Accesso…";
+  btn.disabled = true; btn.textContent = s.login_wait;
   try {
     const res = await fetch(CONFIG.API_BASE + "/leadgen/login", {
       method: "POST",
@@ -656,14 +1186,14 @@ async function doLogin(event) {
     // Each of these means something different to whoever is standing there:
     // wrong password, locked out, or nobody set the password on the server.
     err.textContent = {
-      401: "Password errata.",
-      429: "Troppi tentativi. Riprova tra qualche minuto.",
-      503: "Login non configurato sul server (LEADGEN_PASSWORD).",
-    }[res.status] || ("Errore " + res.status);
+      401: s.login_err_401,
+      429: s.login_err_429,
+      503: s.login_err_503,
+    }[res.status] || fmt(s.login_err_other, { status: res.status });
   } catch (e) {
-    err.textContent = "Connessione fallita: " + e.message;
+    err.textContent = fmt(s.login_err_conn, { msg: e.message });
   } finally {
-    btn.disabled = false; btn.textContent = "Entra";
+    btn.disabled = false; btn.textContent = s.login_btn;
   }
   return false;
 }
@@ -671,7 +1201,7 @@ async function doLogin(event) {
 async function logout() {
   // Logging out mid-recording would kill the autosave and strand the debrief.
   if (window.NotesRecording && window.NotesRecording()) {
-    toast("Termina prima la registrazione in corso", true);
+    toast(T().nt_finish_first, true);
     return;
   }
   try { await fetch(CONFIG.API_BASE + "/leadgen/logout", { method: "POST" }); } catch (_) {}
@@ -695,8 +1225,8 @@ async function api(path, opts = {}) {
   if (res.status === 401) {
     // The session expired or was cleared elsewhere. Back to the login screen,
     // rather than letting every panel on the page fill up with red errors.
-    showLogin("Sessione scaduta. Accedi di nuovo.");
-    throw new Error("Sessione scaduta");
+    showLogin(T().session_expired);
+    throw new Error(T().session_expired);
   }
   if (!res.ok) {
     let msg = res.status + " " + res.statusText;
@@ -717,20 +1247,18 @@ function fmtDate(iso) {
   if (!iso) return "—";
   const d = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
   if (isNaN(d)) return iso;
-  return d.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString(T().date_locale, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 function fmtTime(iso) {
   if (!iso) return "";
   const d = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
   if (isNaN(d)) return iso;
-  return d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return d.toLocaleTimeString(T().date_locale, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
-const BADGE_LABELS = {
-  pending: "in attesa", running: "in corso", paused: "in pausa", completed: "completata",
-  no_email: "no email", sent: "inviata", bounced: "bounced", duplicate: "duplicato",
-  none: "nessuna", replied: "ha risposto", interested: "interessato", not_interested: "non interessato", booked: "prenotata",
-};
-function badgeLabel(value) { return BADGE_LABELS[value] || value || "—"; }
+// The API's status tokens are English identifiers; this is the only place they
+// become words, so an unknown one falls through to the raw token rather than
+// disappearing.
+function badgeLabel(value) { return T().badges[value] || value || "—"; }
 function badge(value) { return `<span class="badge b-${value}">${badgeLabel(value)}</span>`; }
 function esc(s) {
   return (s == null ? "" : String(s)).replace(/[&<>"]/g, c => (
@@ -761,7 +1289,7 @@ async function loadCampaigns() {
   try {
     const rows = await api("/campaigns");
     if (!rows.length) {
-      body.innerHTML = `<tr><td class="empty" colspan="7">Nessuna campagna. Avviane una qui sopra.</td></tr>`;
+      body.innerHTML = `<tr><td class="empty" colspan="7">${esc(T().camp_none)}</td></tr>`;
       return;
     }
     body.innerHTML = rows.map(c => `
@@ -775,29 +1303,31 @@ async function loadCampaigns() {
         <td>${c.total_booked}</td>
       </tr>`).join("");
   } catch (e) {
-    body.innerHTML = `<tr><td class="empty" colspan="7">Errore: ${esc(e.message)}</td></tr>`;
+    body.innerHTML = `<tr><td class="empty" colspan="7">${esc(fmt(T().error_prefix, { msg: e.message }))}</td></tr>`;
   }
 }
 
 async function createCampaign() {
+  const s = T();
   const city = document.getElementById("city").value.trim();
   const maxResults = parseInt(document.getElementById("maxResults").value, 10) || 60;
-  if (!city) { toast("Inserisci una città", true); return; }
+  if (!city) { toast(s.camp_need_city, true); return; }
   const btn = document.getElementById("startBtn");
-  btn.disabled = true; btn.textContent = "Avvio…";
+  btn.disabled = true; btn.textContent = s.camp_starting;
   try {
     const campaign = await api("/campaigns", {
       method: "POST",
       body: JSON.stringify({ city, max_results: maxResults }),
     });
     await api(`/campaigns/${campaign.id}/start`, { method: "POST" });
-    toast(`Campagna avviata per ${city}`);
+    toast(fmt(s.camp_started, { city }));
     document.getElementById("city").value = "";
     openCampaign(campaign.id);
   } catch (e) {
-    toast("Errore: " + e.message, true);
+    toast(fmt(s.error_prefix, { msg: e.message }), true);
   } finally {
-    btn.disabled = false; btn.textContent = "Avvia Campagna";
+    // Re-read: the locale can have changed while the request was in flight.
+    btn.disabled = false; btn.textContent = T().camp_start;
   }
 }
 
@@ -835,31 +1365,33 @@ async function refreshCampaign() {
     const running = c.status === "running";
     document.getElementById("d-live").innerHTML = running ? '<span class="pulse"></span>' : "";
     const toggle = document.getElementById("d-toggle");
-    toggle.textContent = running ? "Pausa" : (c.status === "completed" ? "Riavvia" : "Avvia");
+    const s = T();
+    toggle.textContent = running ? s.det_pause : (c.status === "completed" ? s.det_restart : s.det_start);
   } catch (e) {
-    toast("Errore: " + e.message, true);
+    toast(fmt(T().error_prefix, { msg: e.message }), true);
   }
 }
 
 async function toggleCampaign() {
   const c = state.campaign;
   if (!c) return;
+  const s = T();
   try {
     if (c.status === "running") {
       await api(`/campaigns/${c.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "paused" }) });
-      toast("Campagna in pausa");
+      toast(s.camp_paused_toast);
     } else if (c.status === "completed") {
       await api(`/campaigns/${c.id}/start`, { method: "POST" });
-      toast("Campagna riavviata");
+      toast(s.camp_restarted_toast);
     } else {
       // pending or paused → resume via status=running
       await api(`/campaigns/${c.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "running" }) });
-      toast("Campagna ripresa");
+      toast(s.camp_resumed_toast);
     }
     await refreshCampaign();
     startLogPolling();
   } catch (e) {
-    toast("Errore: " + e.message, true);
+    toast(fmt(s.error_prefix, { msg: e.message }), true);
   }
 }
 
@@ -871,7 +1403,8 @@ async function loadLeads() {
     const data = await api(`/campaigns/${state.campaignId}/leads${q}`);
     const leads = data.leads || [];
     if (!leads.length) {
-      body.innerHTML = `<tr><td class="empty" colspan="5">Nessun lead${status ? " con questo filtro" : " ancora"}.</td></tr>`;
+      const none = status ? T().leads_none_filtered : T().leads_none;
+      body.innerHTML = `<tr><td class="empty" colspan="5">${esc(none)}</td></tr>`;
       return;
     }
     body.innerHTML = leads.map(l => `
@@ -880,10 +1413,10 @@ async function loadLeads() {
         <td>${l.email ? esc(l.email) : '<span class="muted">—</span>'}</td>
         <td>${badge(l.email_status)}</td>
         <td>${badge(l.response_status)}</td>
-        <td><button class="btn ghost sm" onclick="openModal(${l.id}, '${esc(l.agency_name).replace(/'/g, "\\'")}')">Segna risposta</button></td>
+        <td><button class="btn ghost sm" onclick="openModal(${l.id}, '${esc(l.agency_name).replace(/'/g, "\\'")}')">${esc(T().mark_reply)}</button></td>
       </tr>`).join("");
   } catch (e) {
-    body.innerHTML = `<tr><td class="empty" colspan="5">Errore: ${esc(e.message)}</td></tr>`;
+    body.innerHTML = `<tr><td class="empty" colspan="5">${esc(fmt(T().error_prefix, { msg: e.message }))}</td></tr>`;
   }
 }
 
@@ -891,7 +1424,7 @@ async function loadLogs() {
   const feed = document.getElementById("logFeed");
   try {
     const logs = await api(`/campaigns/${state.campaignId}/logs?limit=100`);
-    if (!logs.length) { feed.innerHTML = `<div class="empty">Nessun evento ancora.</div>`; return; }
+    if (!logs.length) { feed.innerHTML = `<div class="empty">${esc(T().logs_none)}</div>`; return; }
     feed.innerHTML = logs.map(l => `
       <div class="log-row">
         <span class="log-time">${fmtTime(l.created_at)}</span>
@@ -899,7 +1432,7 @@ async function loadLogs() {
         <span class="log-detail">${esc(l.detail) || ""}</span>
       </div>`).join("");
   } catch (e) {
-    feed.innerHTML = `<div class="empty">Errore: ${esc(e.message)}</div>`;
+    feed.innerHTML = `<div class="empty">${esc(fmt(T().error_prefix, { msg: e.message }))}</div>`;
   }
 }
 
@@ -912,11 +1445,11 @@ function startLogPolling() {
     await loadLogs();
     await loadLeads();
     document.getElementById("logHint").textContent =
-      state.campaign && state.campaign.status === "running" ? "aggiornamento ogni 5s" : "";
+      state.campaign && state.campaign.status === "running" ? T().log_polling : "";
     if (state.campaign && state.campaign.status !== "running") stopLogPolling();
   }, 5000);
   document.getElementById("logHint").textContent =
-    state.campaign && state.campaign.status === "running" ? "aggiornamento ogni 5s" : "";
+    state.campaign && state.campaign.status === "running" ? T().log_polling : "";
 }
 function stopLogPolling() {
   if (state.logTimer) { clearInterval(state.logTimer); state.logTimer = null; }
@@ -945,12 +1478,12 @@ async function submitResponse() {
       method: "POST",
       body: JSON.stringify({ lead_id, response_type, notes }),
     });
-    toast("Risposta salvata");
+    toast(T().resp_saved);
     closeModal();
     await refreshCampaign();
     await loadLeads();
   } catch (e) {
-    toast("Errore: " + e.message, true);
+    toast(fmt(T().error_prefix, { msg: e.message }), true);
   }
 }
 document.getElementById("modalBg").addEventListener("click", e => {
@@ -971,23 +1504,24 @@ async function loadTemplate() {
     document.getElementById("tplBody").value = t.body;
     updatePreview();
   } catch (e) {
-    toast("Errore: " + e.message, true);
+    toast(fmt(T().error_prefix, { msg: e.message }), true);
   }
 }
 
 async function saveTemplate() {
+  const s = T();
   const subject = document.getElementById("tplSubject").value.trim();
   const body = document.getElementById("tplBody").value.trim();
-  if (!subject || !body) { toast("Oggetto e corpo non possono essere vuoti", true); return; }
+  if (!subject || !body) { toast(s.tpl_empty, true); return; }
   const btn = document.getElementById("tplSaveBtn");
-  btn.disabled = true; btn.textContent = "Salvataggio…";
+  btn.disabled = true; btn.textContent = s.saving;
   try {
     await api("/outreach/template", { method: "PUT", body: JSON.stringify({ subject, body }) });
-    toast("Template salvato");
+    toast(s.tpl_saved);
   } catch (e) {
-    toast("Errore: " + e.message, true);
+    toast(fmt(s.error_prefix, { msg: e.message }), true);
   } finally {
-    btn.disabled = false; btn.textContent = "Salva";
+    btn.disabled = false; btn.textContent = T().save;
   }
 }
 
@@ -995,42 +1529,49 @@ function resetTemplate() {
   document.getElementById("tplSubject").value = templateDefaults.subject;
   document.getElementById("tplBody").value = templateDefaults.body;
   updatePreview();
-  toast("Predefinito ripristinato — ricorda di salvare");
+  toast(T().tpl_reset_toast);
 }
 
+// The template itself is one shared text the rep writes for whichever market
+// she's prospecting — only the sample values standing in for the placeholders
+// follow the interface language.
 function renderTokens(text) {
+  const s = T();
   return (text || "")
-    .split("{agency_name}").join("Studio Rossi")
-    .split("{city}").join("Milano")
+    .split("{agency_name}").join(s.preview_agency)
+    .split("{city}").join(s.preview_city)
     .split("{calendly_link}").join("https://calendly.com/adam/demo");
 }
 function updatePreview() {
+  const s = T();
   document.getElementById("prevSubject").textContent = renderTokens(document.getElementById("tplSubject").value) || "—";
   document.getElementById("prevBody").textContent = renderTokens(document.getElementById("tplBody").value) || "—";
+  document.getElementById("prevSample").textContent =
+    fmt(s.tpl_sample, { agency: s.preview_agency, city: s.preview_city });
 }
 document.getElementById("tplSubject").addEventListener("input", updatePreview);
 document.getElementById("tplBody").addEventListener("input", updatePreview);
 
 async function sendTestEmail() {
+  const s = T();
   const to = document.getElementById("testTo").value.trim();
-  if (!to) { toast("Inserisci un indirizzo email", true); return; }
+  if (!to) { toast(s.test_need_email, true); return; }
   const subject = document.getElementById("tplSubject").value;
   const body = document.getElementById("tplBody").value;
   const btn = document.getElementById("testBtn");
-  btn.disabled = true; btn.textContent = "Invio…";
+  btn.disabled = true; btn.textContent = s.test_sending;
   try {
     const r = await api("/outreach/test", {
       method: "POST",
       body: JSON.stringify({ to, subject, body }),
     });
-    toast("Email di prova inviata a " + r.to);
+    toast(fmt(T().test_sent, { to: r.to }));
     document.getElementById("testHint").textContent =
-      "Inviata da " + r.from + " — rispondi a quell'email per testare le risposte "
-      + "(le risposte arrivano a " + (r.reply_to || r.from) + ").";
+      fmt(T().test_hint, { from: r.from, reply_to: r.reply_to || r.from });
   } catch (e) {
-    toast("Errore: " + e.message, true);
+    toast(fmt(s.error_prefix, { msg: e.message }), true);
   } finally {
-    btn.disabled = false; btn.textContent = "Invia prova";
+    btn.disabled = false; btn.textContent = T().test_send;
   }
 }
 
@@ -1040,21 +1581,22 @@ async function loadExclusions() {
     const x = await api("/outreach/exclusions");
     document.getElementById("exclKeywords").value = x.keywords || "";
   } catch (e) {
-    toast("Errore: " + e.message, true);
+    toast(fmt(T().error_prefix, { msg: e.message }), true);
   }
 }
 
 async function saveExclusions() {
+  const s = T();
   const keywords = document.getElementById("exclKeywords").value.trim();
   const btn = document.getElementById("exclSaveBtn");
-  btn.disabled = true; btn.textContent = "Salvataggio…";
+  btn.disabled = true; btn.textContent = s.saving;
   try {
     await api("/outreach/exclusions", { method: "PUT", body: JSON.stringify({ keywords }) });
-    toast(keywords ? "Esclusioni salvate" : "Esclusioni rimosse");
+    toast(keywords ? T().excl_saved : T().excl_cleared);
   } catch (e) {
-    toast("Errore: " + e.message, true);
+    toast(fmt(s.error_prefix, { msg: e.message }), true);
   } finally {
-    btn.disabled = false; btn.textContent = "Salva";
+    btn.disabled = false; btn.textContent = T().save;
   }
 }
 
@@ -1172,18 +1714,11 @@ async function saveExclusions() {
     return "recording";
   }
 
-  const STATUS_TEXT = {
-    idle: "—",
-    recording: "Registrazione in corso…",
-    paused: "In pausa",
-    reconnecting: "Riconnessione…",
-    quiet: "Connessa, ma non sento nulla — controlla il microfono",
-  };
-
   function updateLiveLabels() {
+    const s = T();
     const st = liveState();
-    statusEl.textContent = STATUS_TEXT[st];
-    pauseBtn.textContent = paused ? "Riprendi" : "Pausa";
+    statusEl.textContent = s["nt_status_" + st];
+    pauseBtn.textContent = paused ? s.nt_resume : s.nt_pause;
     dot.classList.toggle("live", st === "recording");
     dot.classList.toggle("warn", st === "reconnecting" || st === "quiet");
   }
@@ -1480,7 +2015,7 @@ async function saveExclusions() {
     try {
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (_) {
-      throw { userMessage: "Microfono non disponibile: consenti l'accesso e riprova." };
+      throw { userMessage: T().nt_err_mic };
     }
     await openSession();
 
@@ -1538,7 +2073,7 @@ async function saveExclusions() {
       console.error("Note: start failed", err);
       stopEverything();
       noteId = null;
-      startErr.textContent = (err && err.userMessage) || "Impossibile avviare la registrazione. Riprova.";
+      startErr.textContent = (err && err.userMessage) || T().nt_err_start;
     } finally {
       startBtn.disabled = false;
     }
@@ -1558,15 +2093,17 @@ async function saveExclusions() {
   let armedBtn = null, armTimer = null;
   function disarm() {
     if (armTimer) { clearTimeout(armTimer); armTimer = null; }
-    if (armedBtn) { armedBtn.textContent = armedBtn.dataset.label; armedBtn = null; }
+    // Restored from the string table via the button's own i18n key rather than
+    // from a snapshot of its text, so disarming after a language switch puts
+    // back the label in the language now on screen.
+    if (armedBtn) { armedBtn.textContent = T()[armedBtn.dataset.i18n]; armedBtn = null; }
   }
   function wireDiscard(btn) {
-    btn.dataset.label = btn.textContent;
     btn.addEventListener("click", () => {
       if (transcript.trim() && armedBtn !== btn) {
         disarm();
         armedBtn = btn;
-        btn.textContent = "Sicura? Clicca di nuovo";
+        btn.textContent = T().confirm_again;
         armTimer = setTimeout(disarm, 6000);
         return;
       }
@@ -1633,9 +2170,7 @@ async function saveExclusions() {
       // against the same empty transcript and fail identically.
       const empty = /empty/i.test(err.message || "");
       procText.classList.add("hidden");
-      procErr.textContent = empty
-        ? "Non è stata registrata nessuna parola. Controlla il microfono e registra di nuovo."
-        : "Non sono riuscita a strutturare la nota. La trascrizione è al sicuro — riprova.";
+      procErr.textContent = empty ? T().nt_err_empty : T().nt_err_extract;
       retryBtn.classList.toggle("hidden", empty);
       procBackBtn.classList.remove("hidden");
     }
@@ -1652,15 +2187,22 @@ async function saveExclusions() {
     $("nt-f-outcome").value = note.outcome || "";
     $("nt-f-summary").value = note.summary || "";
     LIST_FIELDS.forEach((f) => { $("nt-f-" + f).value = (note[f] || []).join("\n"); });
-    rawTranscript.textContent = note.transcript || "(nessuna trascrizione)";
-    reviewMeta.textContent = note.status === "saved"
-      ? "salvata il " + fmtDate(note.saved_at || note.updated_at)
-      : "non ancora salvata";
+    rawTranscript.textContent = note.transcript || T().nt_no_transcript;
+    renderReviewMeta();
     reviewErr.textContent = "";
-    deleteBtn.textContent = "Elimina";
+    deleteBtn.textContent = T().nt_delete;
     deleteArmed = false;
     showStep("review");
     reviewCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // Split out of renderReview so a language switch can redraw the "saved at…"
+  // line without touching the fields the rep may be halfway through editing.
+  function renderReviewMeta() {
+    if (!editing) { reviewMeta.textContent = ""; return; }
+    reviewMeta.textContent = editing.status === "saved"
+      ? fmt(T().nt_meta_saved, { date: fmtDate(editing.saved_at || editing.updated_at) })
+      : T().nt_meta_unsaved;
   }
 
   function collectFields() {
@@ -1684,11 +2226,11 @@ async function saveExclusions() {
         method: "PATCH",
         body: JSON.stringify(collectFields()),
       });
-      toast("Nota salvata");
+      toast(T().nt_saved_toast);
       await loadNotes();
       resetToIdle();
     } catch (e) {
-      reviewErr.textContent = "Salvataggio fallito: " + e.message;
+      reviewErr.textContent = fmt(T().nt_save_failed, { msg: e.message });
     } finally {
       saveBtn.disabled = false;
     }
@@ -1704,57 +2246,56 @@ async function saveExclusions() {
   deleteBtn.addEventListener("click", async () => {
     if (!deleteArmed) {
       deleteArmed = true;
-      deleteBtn.textContent = "Sicura? Clicca di nuovo";
+      deleteBtn.textContent = T().confirm_again;
       setTimeout(() => {
         if (!deleteArmed) return;
         deleteArmed = false;
-        deleteBtn.textContent = "Elimina";
+        deleteBtn.textContent = T().nt_delete;
       }, 6000);
       return;
     }
     deleteArmed = false;
-    deleteBtn.textContent = "Elimina";
+    deleteBtn.textContent = T().nt_delete;
     try {
       await api("/notes/" + noteId, { method: "DELETE" });
-      toast("Nota eliminata");
+      toast(T().nt_deleted_toast);
       resetToIdle();
       await loadNotes();
     } catch (e) {
-      reviewErr.textContent = "Eliminazione fallita: " + e.message;
+      reviewErr.textContent = fmt(T().nt_delete_failed, { msg: e.message });
     }
   });
 
   // ── saved notes ────────────────────────────────────────
-  const OUTCOME_LABELS = { positive: "positivo", neutral: "neutro", negative: "negativo" };
-
   async function loadNotes() {
+    const s = T();
     try {
       const data = await api("/notes?limit=200");
       const notes = data.notes || [];
       if (!notes.length) {
-        listBody.innerHTML = `<tr><td class="empty" colspan="6">Nessuna nota ancora.</td></tr>`;
+        listBody.innerHTML = `<tr><td class="empty" colspan="6">${esc(s.nt_none)}</td></tr>`;
         listHint.textContent = "";
         return;
       }
-      listHint.textContent = notes.length + (notes.length === 1 ? " nota" : " note");
+      listHint.textContent = pluralize("nt_count", notes.length);
       listBody.innerHTML = notes.map((n) => {
         const outcome = n.outcome
-          ? `<span class="badge b-${n.outcome}">${OUTCOME_LABELS[n.outcome]}</span>`
+          ? `<span class="badge b-${n.outcome}">${esc(s.outcomes[n.outcome] || n.outcome)}</span>`
           : '<span class="muted">—</span>';
         const draft = n.status !== "saved"
-          ? ' <span class="badge b-pending">bozza</span>' : "";
+          ? ` <span class="badge b-pending">${esc(s.nt_draft)}</span>` : "";
         return `
         <tr class="clickable" data-note="${esc(n.id)}">
           <td class="muted">${fmtDate(n.created_at)}</td>
-          <td><strong>${esc(n.title) || "(senza titolo)"}</strong>${draft}</td>
+          <td><strong>${esc(n.title) || esc(s.nt_untitled)}</strong>${draft}</td>
           <td>${esc(n.customer) || '<span class="muted">—</span>'}</td>
           <td>${outcome}</td>
           <td>${n.objections.length || '<span class="muted">—</span>'}</td>
-          <td><button class="btn ghost sm" data-note="${esc(n.id)}">Apri</button></td>
+          <td><button class="btn ghost sm" data-note="${esc(n.id)}">${esc(s.nt_open)}</button></td>
         </tr>`;
       }).join("");
     } catch (e) {
-      listBody.innerHTML = `<tr><td class="empty" colspan="6">Errore: ${esc(e.message)}</td></tr>`;
+      listBody.innerHTML = `<tr><td class="empty" colspan="6">${esc(fmt(s.error_prefix, { msg: e.message }))}</td></tr>`;
     }
   }
 
@@ -1763,7 +2304,7 @@ async function saveExclusions() {
     if (!row) return;
     // Opening another note mid-recording would strand the live session on an
     // id the form no longer points at.
-    if (recording) { toast("Termina prima la registrazione in corso", true); return; }
+    if (recording) { toast(T().nt_finish_first, true); return; }
     try {
       const note = await api("/notes/" + row.dataset.note);
       if (note.status === "review" || note.status === "saved") {
@@ -1779,7 +2320,7 @@ async function saveExclusions() {
       lastSavedTranscript = transcript;
       await attemptFinish();
     } catch (err) {
-      toast("Errore: " + err.message, true);
+      toast(fmt(T().error_prefix, { msg: err.message }), true);
     }
   });
 
@@ -1819,7 +2360,7 @@ async function saveExclusions() {
       stopEverything();
       noteId = null;
       transcript = "";
-      resumeErr.textContent = (err && err.userMessage) || "Impossibile riprendere. Riprova.";
+      resumeErr.textContent = (err && err.userMessage) || T().nt_err_resume;
     } finally {
       btn.disabled = false;
     }
@@ -1842,12 +2383,29 @@ async function saveExclusions() {
     if (!recording && !noteId) checkStranded();
   };
 
+  // Called by setLocale(). applyI18n() has already swapped the static labels;
+  // this redraws only what JS owns. It must never re-render the review form
+  // from the server — the rep's unsaved edits live in those inputs.
+  window.NotesRelocalize = function () {
+    disarm();                       // a half-confirmed button would keep the old wording
+    if (deleteArmed) { deleteArmed = false; deleteBtn.textContent = T().nt_delete; }
+    updateLiveLabels();
+    renderReviewMeta();
+    if (!rawTranscript.textContent.trim() || !editing || !editing.transcript) {
+      rawTranscript.textContent = (editing && editing.transcript) || T().nt_no_transcript;
+    }
+    loadNotes();
+  };
+
   showStep("idle");
   updateLiveLabels();
 })();
 
 // ── boot ─────────────────────────────────────────────────
-// Nothing loads until the session check answers; unlock() starts the dashboard.
+// Static labels first: the login screen is the first thing painted, and it must
+// come up in the stored language rather than flashing Italian.
+applyI18n();
+// Nothing else loads until the session check answers; unlock() starts the dashboard.
 boot();
 </script>
 </body>
