@@ -60,6 +60,10 @@ class CheckoutRequest(BaseModel):
     # Originating market ("it" homepage or "sk" /sk/ page). Sets the Stripe
     # Checkout UI language and the cancel-return page; validated server-side.
     locale: Optional[str] = "it"
+    # Set by the terms checkbox on the /sk/ signup modal. Recorded on the
+    # session so there is a record of the acceptance; the Italian page has no
+    # terms document yet and simply omits it.
+    terms_accepted: Optional[bool] = False
 
 
 @router.post("/create-checkout-session")
@@ -87,6 +91,13 @@ async def create_checkout_session(data: CheckoutRequest):
         # Carried through to the webhook so the customer confirmation email
         # can be sent in the same language as the checkout page.
         "locale": checkout_locale,
+        # Which terms were accepted and when. The timestamp is taken here rather
+        # than in the browser so it cannot be spoofed by the client.
+        "terms_accepted": (
+            f"ApollonIA-VOP-SK.pdf @ {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')}"
+            if data.terms_accepted
+            else ""
+        ),
     }
 
     try:

@@ -4,8 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ApollonIA | AI recepčná pre realitné kancelárie</title>
-  <!-- [DRAFT] meta description — review wording -->
-  <meta name="description" content="AI recepčná pre realitné kancelárie: prijíma hovory 24/7, kvalifikuje záujemcov a posiela vám ich e-mailom. Už žiadne zmeškané hovory — vyskúšajte ju ešte dnes." />
+  <meta name="description" content="AI recepčná pre realitné kancelárie: prijíma hovory 24/7, kvalifikuje záujemcov a pošle vám ich e-mailom. Koniec zmeškaným hovorom — vyskúšajte ju dnes." />
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://www.apollon-ia.com/sk/" />
   <link rel="alternate" hreflang="it-IT" href="https://www.apollon-ia.com/" />
@@ -18,10 +17,9 @@
   <meta property="og:locale" content="sk_SK" />
   <meta property="og:site_name" content="ApollonIA" />
   <meta property="og:title" content="ApollonIA | AI recepčná pre realitné kancelárie" />
-  <!-- [DRAFT] og description — review wording -->
-  <meta property="og:description" content="AI recepčná pre realitné kancelárie: prijíma hovory 24/7, kvalifikuje záujemcov a posiela vám ich e-mailom. Už žiadne zmeškané hovory." />
-  <!-- TODO: creare immagine 1200x630 e caricarla come /og-image.jpg (file non ancora esistente) -->
-  <meta property="og:image" content="https://www.apollon-ia.com/og-image.jpg" />
+  <meta property="og:description" content="AI recepčná pre realitné kancelárie: prijíma hovory 24/7, kvalifikuje záujemcov a pošle vám ich e-mailom. Koniec zmeškaným hovorom." />
+  <meta property="og:image" content="https://www.apollon-ia.com/assets/og-image.png" />
+  <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:image:alt" content="ApollonIA — AI recepčná pre realitné kancelárie" />
@@ -29,8 +27,8 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="ApollonIA | AI recepčná pre realitné kancelárie" />
-  <meta name="twitter:description" content="AI recepčná pre realitné kancelárie: prijíma hovory 24/7, kvalifikuje záujemcov a posiela vám ich e-mailom. Už žiadne zmeškané hovory." />
-  <meta name="twitter:image" content="https://www.apollon-ia.com/og-image.jpg" />
+  <meta name="twitter:description" content="AI recepčná pre realitné kancelárie: prijíma hovory 24/7, kvalifikuje záujemcov a pošle vám ich e-mailom. Koniec zmeškaným hovorom." />
+  <meta name="twitter:image" content="https://www.apollon-ia.com/assets/og-image.png" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -380,6 +378,16 @@
     }
     .modal-input:focus { border-color: var(--accent); }
     .modal-input option { background: #13131a; }
+    /* Terms consent row. The checkbox gates the submit handler; its link opens
+       the PDF in a new tab so the modal — and everything already typed into it —
+       survives the detour. */
+    .modal-consent { display: flex; align-items: flex-start; gap: 9px; }
+    .modal-consent input[type="checkbox"] {
+      flex-shrink: 0; width: 16px; height: 16px; margin-top: 1px;
+      accent-color: var(--accent); cursor: pointer;
+    }
+    .modal-consent label { font-size: 12px; line-height: 1.5; color: var(--muted); cursor: pointer; }
+    .modal-consent a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
     .modal-close-btn {
       background: none; border: none; cursor: pointer;
       padding: 4px; color: var(--muted);
@@ -452,7 +460,7 @@
           {
             "@type": "Question",
             "name": "Čo je ApollonIA?",
-            "acceptedAnswer": { "@type": "Answer", "text": "ApollonIA je AI recepčná — virtuálna asistentka pre realitných maklérov a kancelárie: prijíma hovory za vás, kvalifikuje potenciálnych klientov a posiela vám záujemcov e-mailom v reálnom čase." }
+            "acceptedAnswer": { "@type": "Answer", "text": "ApollonIA je AI recepčná — virtuálna asistentka pre maklérov a realitné kancelárie: prijíma hovory za vás, kvalifikuje potenciálnych klientov a posiela vám ich kontakty e-mailom v reálnom čase." }
           },
           {
             "@type": "Question",
@@ -596,10 +604,9 @@
           <span class="sr-only">ApollonIA — AI recepčná, ktorá kvalifikuje záujemcov pre vašu realitnú kanceláriu</span>
           <span id="hero-title" aria-hidden="true" class="block text-7xl md:text-8xl lg:text-9xl tracking-tight"></span>
         </h1>
-        <!-- [DRAFT] hero tagline — review wording -->
         <p class="ha d1 mt-8 text-lg md:text-xl leading-relaxed mx-auto max-w-[42ch]"
            style="color:var(--accent)">
-          AI recepčná pre realitné kancelárie. Zdvihne telefón, kvalifikuje záujemcu a pošle vám výsledok.
+          AI recepčná pre realitné kancelárie. Zdvihne telefón, kvalifikuje záujemcu a pošle vám ho rovno do e-mailu.
         </p>
         <div class="ha d2 mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
           <a href="#prezzi" class="btn-star">
@@ -732,10 +739,9 @@
     <!-- ── FEATURES BENTO ────────────────────────────────────────────────── -->
     <section id="funzionalita" class="max-w-[1400px] mx-auto px-6 lg:px-12 py-24 lg:py-32" style="border-top:1px solid var(--border)">
       <p class="text-[11px] font-medium uppercase tracking-[.2em] mb-10" style="color:var(--muted)">Funkcie</p>
-      <!-- [DRAFT] section heading — review wording -->
       <div class="reveal max-w-3xl mb-16">
         <h2 class="text-4xl md:text-5xl font-light tracking-tight leading-[1.08]" style="color:var(--fg)">
-          Vaša virtuálna realitná asistentka, vždy v pohotovosti
+          Vaša virtuálna asistentka pre reality, vždy v pohotovosti
         </h2>
       </div>
 
@@ -969,8 +975,8 @@
             <svg class="faq-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
           <div class="faq-panel"><div class="faq-panel-inner"><p>
-            <!-- [DRAFT] FAQ answer reworded (keep in sync with FAQPage JSON-LD in <head>) -->
-            ApollonIA je AI recepčná — virtuálna asistentka pre realitných maklérov a kancelárie: prijíma hovory za vás, kvalifikuje potenciálnych klientov a posiela vám záujemcov e-mailom v reálnom čase.
+            <!-- Keep in sync with the FAQPage JSON-LD in <head>. -->
+            ApollonIA je AI recepčná — virtuálna asistentka pre maklérov a realitné kancelárie: prijíma hovory za vás, kvalifikuje potenciálnych klientov a posiela vám ich kontakty e-mailom v reálnom čase.
           </p></div></div>
         </div>
         <div class="faq-item" data-faq>
@@ -1282,7 +1288,6 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
 
       <div>
         <p class="text-sm font-semibold uppercase tracking-[.12em]" style="color:var(--fg)">ApollonIA</p>
-        <!-- [DRAFT] footer tagline — review wording -->
         <p class="mt-4 text-sm leading-relaxed" style="color:var(--muted)">
           AI recepčná pre realitné kancelárie.<br />
           Automatické prijímanie hovorov, 24 hodín denne, 7 dní v týždni.
@@ -1332,11 +1337,16 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
         <p class="text-xs" style="color:var(--muted)">&copy; 2026 ApollonIA. Všetky práva vyhradené.</p>
         <p class="text-xs mt-1" style="color:var(--muted)">Bionexis Lab s.&nbsp;r.&nbsp;o. &middot; Horn&aacute; 37, 974&nbsp;01 Bansk&aacute; Bystrica, Slovakia</p>
       </div>
-      <!-- Staff-only tool (one shared password, see leadgen/router.py). Kept in
-           the legal bar rather than the Navigácia column, and nofollow'd to
+      <!-- Grouped so .footer-legal keeps its two-child space-between layout.
+           Staff-only Lead Gen tool (one shared password, see leadgen/router.py)
+           sits here rather than in the Navigácia column, and is nofollow'd to
            match the Disallow in robots.txt — it is not a visitor destination. -->
-      <a href="/leadgen" rel="nofollow" class="text-xs transition-colors" style="color:var(--muted)"
-         onmouseover="this.style.color='var(--fg)'" onmouseout="this.style.color='var(--muted)'">Lead Gen</a>
+      <div class="flex items-center gap-4">
+        <a href="/assets/ApollonIA-VOP-SK.pdf" target="_blank" rel="noopener" class="text-xs transition-colors" style="color:var(--muted)"
+           onmouseover="this.style.color='var(--fg)'" onmouseout="this.style.color='var(--muted)'">Všeobecné obchodné podmienky</a>
+        <a href="/leadgen" rel="nofollow" class="text-xs transition-colors" style="color:var(--muted)"
+           onmouseover="this.style.color='var(--fg)'" onmouseout="this.style.color='var(--muted)'">Lead Gen</a>
+      </div>
     </div>
   </footer>
 
@@ -1396,6 +1406,13 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
                     <option value="Annuale">Ročne −15%</option>
                   </select>
                 </div>
+              </div>
+
+              <div class="modal-consent">
+                <input id="f-terms" type="checkbox" name="terms_accepted" />
+                <label for="f-terms">
+                  Súhlasím so <a href="/assets/ApollonIA-VOP-SK.pdf" target="_blank" rel="noopener">Všeobecnými obchodnými podmienkami</a> (PDF, otvorí sa v novom okne).
+                </label>
               </div>
 
             </div>
@@ -2113,9 +2130,16 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
         var email     = document.getElementById('f-email').value.trim();
         var plan      = planSel.value;
         var pagamento = document.getElementById('f-pagamento').value;
+        var terms     = document.getElementById('f-terms').checked;
 
         if (!studio || !phone || !email) {
           errorEl.textContent   = 'Vyplňte všetky povinné polia.';
+          errorEl.style.display = '';
+          return;
+        }
+
+        if (!terms) {
+          errorEl.textContent   = 'Na pokračovanie potvrďte súhlas so Všeobecnými obchodnými podmienkami.';
           errorEl.style.display = '';
           return;
         }
@@ -2142,7 +2166,8 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
             studio_name: studio,
             phone: phone,
             plan: plan,
-            pagamento: pagamento
+            pagamento: pagamento,
+            terms_accepted: true
           })
         })
         .then(function (r) {
