@@ -59,6 +59,7 @@ There's no admin endpoint for tenant edits, so setting it today means direct SQL
 Worth doing for live tenants before you invoice on these numbers.
 
 add calendly to dashboard and let apollonia take meetings
+doplnit datum do VOP
 
 
 

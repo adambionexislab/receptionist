@@ -230,6 +230,12 @@
     .price-cta.is-outline:hover { border-color: var(--accent); color: var(--accent); }
     .price-cta.is-solid { background: var(--accent); color: #0c0c0d; border: 1px solid var(--accent); }
     .price-cta.is-solid:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    /* Disabled: the modal's submit button rests here until the terms box is
+       ticked, and returns here while the checkout redirect is in flight. The
+       hover override stops the solid variant from lighting up under the cursor
+       as though it were still clickable. */
+    .price-cta:disabled { opacity: .45; cursor: not-allowed; }
+    .price-cta.is-solid:disabled:hover { background: var(--accent); border-color: var(--accent); }
 
     /* AI tools */
     .tool-card { position: relative; border-radius: 1.5rem; padding: 1.75rem; background: rgba(255,255,255,.02); border: 1px solid var(--border); transition: border-color .3s ease, box-shadow .3s ease; }
@@ -2050,8 +2056,15 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
       var planSel    = document.getElementById('f-plan');
       var pagSel     = document.getElementById('f-pagamento');
       var confirmBtn = document.getElementById('modal-confirm');
+      var termsChk   = document.getElementById('f-terms');
       var priceAmt   = document.getElementById('modal-price-amount');
       var priceDetail= document.getElementById('modal-price-detail');
+
+      // The submit button is only live once the terms box is ticked. Called on
+      // every open (after form.reset(), so it starts unticked) and whenever the
+      // box is toggled.
+      function syncTermsGate() { confirmBtn.disabled = !termsChk.checked; }
+      termsChk.addEventListener('change', syncTermsGate);
 
       var PRICES = {
         Base: { monthly: 145, annual: 125 },
@@ -2097,8 +2110,8 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
         form.style.display      = '';
         successEl.style.display = 'none';
         errorEl.style.display   = 'none';
-        confirmBtn.disabled     = false;
         confirmBtn.textContent  = 'Prejsť k platbe';
+        syncTermsGate();
         updatePrice();
         backdrop.classList.add('is-open');
         document.body.style.overflow = 'hidden';
@@ -2185,8 +2198,8 @@ ApollonIA dostane vlastné telefónne číslo — nepoužíva vaše existujúce.
           console.error('Checkout error:', err);
           errorEl.textContent    = 'Vyskytla sa chyba. Skúste to neskôr alebo nás kontaktujte priamo.';
           errorEl.style.display  = '';
-          confirmBtn.disabled    = false;
           confirmBtn.textContent = 'Prejsť k platbe';
+          syncTermsGate();
         });
       });
     })();
