@@ -27,7 +27,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/call")
 
-_GREETING_TEXT = "Buongiorno, sono Apollonia. Come posso aiutarla?"
+_GREETING_TEXT = (
+    "Buongiorno, mi chiamo Apollonia, sono l'assistente virtuale dello studio. "
+    "Come posso aiutarla?"
+)
 
 
 def _format_listing_brief(content: dict[str, Any], listing: dict[str, Any]) -> str:
@@ -124,6 +127,13 @@ _SYSTEM_PROMPT_BODY = (
     "momento in poi TUTTE le tue risposte per il resto della chiamata devono\n"
     "essere interamente nella lingua del chiamante, dalla prima parola —\n"
     "senza dire prima nulla in italiano.\n"
+    "Cambia lingua SOLO quando hai davvero sentito e capito una frase\n"
+    "compiuta in un'altra lingua. Un turno del chiamante privo di parole\n"
+    "comprensibili — silenzio, rumore di linea, uno scatto, un colpo di\n"
+    "tosse, un frammento che non capisci — NON è un segnale di lingua:\n"
+    "resta in italiano e riprendi da dove eri rimasta. Non dare mai per\n"
+    "scontato l'inglese solo perché non hai capito un turno: se il primo\n"
+    "turno è incomprensibile la lingua della chiamata resta l'italiano.\n"
     "Questa regola vale SEMPRE, comprese le risposte generate subito dopo il\n"
     "risultato di uno strumento (search_listings, get_listing_by_address,\n"
     "mark_listing_interest, record_caller_info, leave_message, ecc.). I dati\n"
@@ -376,6 +386,39 @@ _SYSTEM_PROMPT_BODY = (
     "   procedura quando hai finito.\n"
 )
 
+# The caller has to be told, unprompted and in the opening sentence, that he is
+# not talking to a person: EU transparency rules on AI systems that interact
+# with people. It is a section of its own, appended like the date, because the
+# agency name has to be filled in per tenant — the same reason the first line
+# is a template rather than part of the body.
+_OPENING_SECTION = (
+    "\n\n# Apertura della chiamata — DICHIARAZIONE OBBLIGATORIA\n"
+    "Nella tua PRIMA frase, subito dopo aver salutato, presentati e dichiara\n"
+    "che sei un assistente virtuale: di' il tuo nome e di chi sei l'assistente\n"
+    "virtuale. È un obbligo di legge (trasparenza sugli assistenti basati\n"
+    "sull'intelligenza artificiale) e vale per ogni chiamata, senza eccezioni.\n"
+    "- Formula da usare: 'Buongiorno, mi chiamo {name}, sono l'assistente\n"
+    "  virtuale di {agency}. Come posso aiutarla?'\n"
+    "- Dilla con tono naturale e cordiale, in una sola frase, e passa subito\n"
+    "  alla domanda su come puoi aiutare: non aggiungere spiegazioni\n"
+    "  sull'intelligenza artificiale se il chiamante non le chiede.\n"
+    "- La dichiarazione non si omette mai e non si rimanda: se apri la\n"
+    "  chiamata in una lingua diversa dall'italiano (vedi '# Lingua'), falla\n"
+    "  in quella lingua.\n"
+    "- Se qualcosa ti interrompe a metà della frase di apertura, la\n"
+    "  dichiarazione non è stata fatta: ripeti la frase di apertura per\n"
+    "  intero, dall'inizio, invece di proseguire come se l'avessi già detta.\n"
+    "- Non presentarti mai come una persona e non lasciar credere di esserlo:\n"
+    "  se più avanti il chiamante ti chiede se sei una persona vera, conferma\n"
+    "  sempre, con chiarezza e senza scusarti, di essere un assistente\n"
+    "  virtuale.\n"
+)
+
+# Used in the mandatory declaration when a tenant has no agency name (the
+# env-var demo fallback and the website demo), so the sentence still names who
+# she answers for instead of trailing off.
+_AGENCY_FALLBACK = "questo studio immobiliare"
+
 
 # Instructions for the farewell turn. These REPLACE the system prompt above for
 # that one response (see the end_call handler), which is the whole point: the
@@ -442,11 +485,15 @@ _IT_CONTENT: dict[str, Any] = {
         "# Ruolo e obiettivo\nSei {name}, la receptionist virtuale di {agency}.\n"
     ),
     "system_prompt_body": _SYSTEM_PROMPT_BODY,
+    "opening_section": _OPENING_SECTION,
+    "agency_fallback": _AGENCY_FALLBACK,
     "ask_for_number": _ASK_FOR_NUMBER_INSTRUCTION,
     "greeting_text": _GREETING_TEXT,
     "greeting_prompt": (
-        "Il telefono ha squillato e hai risposto. "
-        "Saluta il chiamante e chiedi come puoi aiutarlo."
+        "Il telefono ha squillato e hai risposto. Saluta il chiamante, "
+        "presentati come indicato in '# Apertura della chiamata — "
+        "DICHIARAZIONE OBBLIGATORIA' (il tuo nome e di chi sei l'assistente "
+        "virtuale) e chiedi come puoi aiutarlo."
     ),
     "farewell_instruction": _FAREWELL_INSTRUCTION,
     "timezone": "Europe/Rome",
@@ -544,14 +591,19 @@ def _build_system_prompt(
     now: datetime.datetime | None = None,
 ) -> str:
     """Build the system prompt for a locale: inject the tenant's agency/agent
-    name into the first line; the body is the locale's full instruction set,
-    followed by the current date so relative dates can be resolved."""
-    body = content["system_prompt_body"] + content["datetime_section"].format(
-        now=_now_line(content, now)
+    name into the first line and into the mandatory opening declaration; the
+    body is the locale's full instruction set, followed by the current date so
+    relative dates can be resolved."""
+    name = agent_name or "Apollonia"
+    body = (
+        content["system_prompt_body"]
+        + content["opening_section"].format(
+            name=name, agency=agency_name or content["agency_fallback"]
+        )
+        + content["datetime_section"].format(now=_now_line(content, now))
     )
     if not agency_name:
         return content["first_line_default"] + body
-    name = agent_name or "Apollonia"
     return content["first_line_template"].format(name=name, agency=agency_name) + body
 
 _SEARCH_TOOL: dict[str, Any] = {
@@ -1759,12 +1811,19 @@ async def _run_call(
                         # in the log that looks like nothing happened at all.
                         resp = msg.get("response") or {}
                         status = resp.get("status")
-                        if status != "completed":
+                        details = resp.get("status_details") or {}
+                        if details.get("reason") == "turn_detected":
+                            # The caller talked over her and VAD handed them the
+                            # turn mid-sentence. Barge-in is the feature working,
+                            # not a fault — warning on it drowned out the
+                            # statuses that actually cost the caller a reply.
+                            logger.info("Caller interrupted — response cancelled")
+                        elif status != "completed":
                             logger.warning(
                                 "Response %s for call %s: %s",
                                 status,
                                 call_id,
-                                resp.get("status_details"),
+                                details,
                             )
 
                     elif etype == "response.output_audio_transcript.done":

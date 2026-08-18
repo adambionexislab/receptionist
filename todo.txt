@@ -60,7 +60,7 @@ Worth doing for live tenants before you invoice on these numbers.
 
 add calendly to dashboard and let apollonia take meetings
 doplnit datum do VOP
-
+tell apollonia to always acgnowledge that she is virtual asistant (AI)
 
 
 
