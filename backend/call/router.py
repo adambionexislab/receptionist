@@ -8,6 +8,7 @@ import logging
 import re
 import time
 from collections.abc import Awaitable, Callable
+from html import escape
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -1659,6 +1660,65 @@ def _format_lead_body(
         )
 
 
+# Every "Label: value" key the lead body can emit, so the HTML rendering knows
+# which colons introduce a field name and which merely sit inside a value.
+def _lead_field_labels(content: dict[str, Any]) -> set[str]:
+    labels = [
+        content["email_caller_label"],
+        content["email_agent_label"],
+        content["email_agent_label_plural"],
+        content["email_name_label"],
+        content["email_urgency_label"],
+        content["email_message_label"],
+        *content["caller_info_labels"].values(),
+    ]
+    return {label for label in labels if label}
+
+
+# Section headers are written "=== Titolo ===" — the markers stay in the
+# HTML too, so both parts of the mail read the same; the bold is added on top.
+_SECTION_HEADER_RE = re.compile(r"^=+\s*\S.*=+$")
+
+
+def _lead_html_line(line: str, labels: set[str]) -> str:
+    """One body line as HTML: section headers and field names bold, everything
+    else plain. Input is trusted-ish (caller speech, listing data), so escape
+    first and only then add markup."""
+    stripped = line.strip()
+    if _SECTION_HEADER_RE.match(stripped):
+        return f"<strong>{escape(stripped)}</strong>"
+    label, sep, value = line.partition(":")
+    if sep and label in labels:
+        return f"<strong>{escape(label)}:</strong>{escape(value)}"
+    return escape(line)
+
+
+def _format_lead_html(content: dict[str, Any], summary: str, detail_body: str) -> str:
+    """The lead email as HTML, rendered from the very plain-text body that is
+    also sent (and that the summary model read), so the two cannot drift apart.
+    Blank lines separate paragraphs; section headings and field names are bold
+    so the mail can be skimmed instead of read. Returns "" on any slip — the
+    text part alone is a complete email."""
+    try:
+        labels = _lead_field_labels(content)
+        blocks = [f"<p>{escape(summary)}</p>"] if summary else []
+        for block in detail_body.split("\n\n"):
+            lines = [line for line in block.split("\n") if line.strip()]
+            if not lines:
+                continue
+            rendered = "<br>".join(_lead_html_line(line, labels) for line in lines)
+            blocks.append(f"<p>{rendered}</p>")
+        return (
+            '<div style="font-family:-apple-system,BlinkMacSystemFont,'
+            "'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;"
+            'line-height:1.5;color:#111">' + "".join(blocks) + "</div>"
+        )
+    except Exception as exc:
+        logger.error("Failed to format lead email HTML: %s", exc)
+        return ""
+
+
+
 async def _send_lead_email(session: dict[str, Any]) -> None:
     content = _content(session.get("locale"))
     # Who handles the property the caller is interested in decides where this
@@ -1701,6 +1761,11 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
     if cc:
         payload["cc"] = cc
 
+    # Same content twice: the text part stays the record of the call, the HTML
+    # part only adds the bold headings and field names that make it skimmable.
+    # Clients that refuse HTML still get the whole lead.
+    html_body = _format_lead_html(content, summary, detail_body)
+
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
@@ -1716,6 +1781,7 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
                         else content["email_subject_call"].format(caller=caller)
                     ),
                     "text": body,
+                    **({"html": html_body} if html_body else {}),
                 },
             )
             response.raise_for_status()
