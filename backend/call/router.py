@@ -96,6 +96,7 @@ _CALLER_INFO_LABELS: dict[str, str] = {
 # in the prompt, the model loses its map of the email.
 _EMAIL_SECTION_COLLECTED = "=== Dati raccolti dal chiamante ==="
 _EMAIL_SECTION_INTERESTED = "=== Immobile di interesse ==="
+_EMAIL_SECTION_OTHERS = "=== Altri immobili presentati ==="
 
 
 # Only the first line of the system prompt is tenant-specific; the body
@@ -519,6 +520,12 @@ _IT_CONTENT: dict[str, Any] = {
         f"- L'immobile che interessa al chiamante è SOLO quello elencato "
         f"sotto '{_EMAIL_SECTION_INTERESTED}'. Se quella sezione è vuota, "
         "il chiamante non ha scelto nessun immobile: non inventarne uno.\n"
+        f"- '{_EMAIL_SECTION_OTHERS}' elenca gli immobili presentati al "
+        "chiamante durante la telefonata: sono proposte che NON ha scelto. "
+        "Non ricavare mai da qui l'immobile di interesse. Se quella sezione "
+        f"contiene immobili ma '{_EMAIL_SECTION_INTERESTED}' è vuota, "
+        "l'esito della chiamata è proprio che il chiamante non ha scelto "
+        "nulla: scrivilo così, senza nominare quegli immobili.\n"
         f"- '{_EMAIL_SECTION_COLLECTED}' contiene dati di qualificazione SUL "
         "chiamante, non l'immobile che cerca. In particolare "
         f"'{_CALLER_INFO_LABELS['has_property_to_sell']}' è un immobile che "
@@ -536,7 +543,7 @@ _IT_CONTENT: dict[str, Any] = {
     "email_no_data": "Nessun dato raccolto.",
     "email_section_interested": _EMAIL_SECTION_INTERESTED,
     "email_none_specified": "Nessuno specificato dal chiamante.",
-    "email_section_others": "=== Altri immobili presentati ===",
+    "email_section_others": _EMAIL_SECTION_OTHERS,
     "email_none": "Nessuno.",
     "email_section_message": "=== Messaggio lasciato ===",
     "email_name_label": "Nome",

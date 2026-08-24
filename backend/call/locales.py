@@ -382,6 +382,7 @@ _SK_ASK_FOR_NUMBER = (
 # in the prompt, the model loses its map of the email.
 _SK_SECTION_COLLECTED = "=== Údaje získané od volajúceho ==="
 _SK_SECTION_INTERESTED = "=== Nehnuteľnosť, o ktorú má záujem ==="
+_SK_SECTION_OTHERS = "=== Ďalšie predstavené nehnuteľnosti ==="
 
 # Spelled out on purpose: "Nehnuteľnosť na predaj" alone reads as the property
 # on offer, and both the agent skimming the mail and the summary model then
@@ -444,6 +445,13 @@ SK = {
         f"- Nehnuteľnosť, o ktorú má volajúci záujem, je IBA tá uvedená pod "
         f"'{_SK_SECTION_INTERESTED}'. Ak je tá sekcia prázdna, volajúci si "
         "žiadnu nevybral: nevymýšľajte si ju.\n"
+        f"- '{_SK_SECTION_OTHERS}' obsahuje nehnuteľnosti, ktoré boli "
+        "volajúcemu počas hovoru predstavené: sú to ponuky, ktoré si "
+        "NEVYBRAL. Nikdy z nej neodvodzujte nehnuteľnosť, o ktorú má "
+        "záujem. Ak sú v tejto sekcii nehnuteľnosti, ale "
+        f"'{_SK_SECTION_INTERESTED}' je prázdna, výsledkom hovoru je "
+        "práve to, že si volajúci žiadnu nevybral: tak to aj napíšte, "
+        "bez menovania tých nehnuteľností.\n"
         f"- '{_SK_SECTION_COLLECTED}' obsahuje kvalifikačné údaje O "
         "volajúcom, nie nehnuteľnosť, ktorú hľadá. Najmä "
         f"'{_SK_PROPERTY_TO_SELL_LABEL}' je nehnuteľnosť, ktorú volajúci už "
@@ -461,7 +469,7 @@ SK = {
     "email_no_data": "Žiadne údaje neboli získané.",
     "email_section_interested": _SK_SECTION_INTERESTED,
     "email_none_specified": "Volajúci žiadnu neuviedol.",
-    "email_section_others": "=== Ďalšie predstavené nehnuteľnosti ===",
+    "email_section_others": _SK_SECTION_OTHERS,
     "email_none": "Žiadne.",
     "email_section_message": "=== Zanechaný odkaz ===",
     "email_name_label": "Meno",

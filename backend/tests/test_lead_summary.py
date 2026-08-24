@@ -66,6 +66,7 @@ def test_summary_prompt_quotes_the_real_section_headers(locale):
 
     assert content["email_section_interested"] in instruction
     assert content["email_section_collected"] in instruction
+    assert content["email_section_others"] in instruction
 
 
 @pytest.mark.parametrize("locale", LOCALES)
@@ -133,3 +134,48 @@ def test_body_formatting_error_still_yields_a_sendable_lead(locale):
 
     assert "+39123" in body
     assert content["email_format_error"] in body
+
+
+# The call that exposed the second summariser bug: one listing was read out,
+# the caller chose nothing, and the summary announced he was interested in it.
+# Nothing in the email said so — 'interested' was explicitly empty — but the
+# section that DID name a listing had never been mapped for the model.
+OBCHODNA_FLAT = {
+    "address": "Obchodna 12, Bratislava",
+    "zone": "Bratislava - Stare Mesto",
+    "type": "affitto",
+    "rooms": 2,
+    "size_sqm": 55,
+    "price": 780,
+}
+
+
+@pytest.mark.parametrize("locale", LOCALES)
+def test_a_listing_only_shown_never_reaches_the_interested_section(locale):
+    """A listing the caller was read but did not pick belongs under 'others',
+    and 'interested' has to say plainly that he chose none."""
+    content = router._content(locale)
+    body = router._format_lead_body(
+        content, _session(locale, [], {}, shown=[OBCHODNA_FLAT]),
+        "+393899376234", [], False,
+    )
+
+    interested, _, others = body.partition(content["email_section_others"])
+
+    assert "Obchodna 12" in others
+    assert "Obchodna 12" not in interested
+    assert content["email_none_specified"] in interested
+
+
+@pytest.mark.parametrize("locale", LOCALES)
+def test_fallback_summary_never_claims_interest_in_a_listing_only_shown(locale):
+    """The deterministic summary is the safety net for exactly this call, so it
+    must not drift into the same claim the model made."""
+    content = router._content(locale)
+    session = _session(locale, [], {}, shown=[OBCHODNA_FLAT])
+    session["caller_number"] = "+393899376234"
+
+    summary = router._fallback_lead_summary(content, session)
+
+    assert summary == content["summary_shown"].format(who="+393899376234")
+    assert "Obchodna" not in summary
