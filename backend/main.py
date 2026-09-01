@@ -34,6 +34,9 @@ from salesnotes.router import router as salesnotes_router
 from signup.router import router as signup_router
 from tenants import db
 from usage import db as usage_db
+from videotour import db as videotour_db
+from videotour import pipeline as videotour_pipeline
+from videotour.router import router as videotour_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -170,16 +173,25 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(agents_db.init)
     await asyncio.to_thread(listings_db.init)
     await asyncio.to_thread(usage_db.init)
+    await asyncio.to_thread(videotour_db.init)
     await _load_all_tenant_listings()
-    task = asyncio.create_task(_sync_loop())
+    tasks = [asyncio.create_task(_sync_loop())]
+    # The video-tour retention sweeper. Only when the tool is on: with the
+    # feature dark there are no jobs to reclaim, and its media directory does
+    # not exist. Without it the 1 GB disk fills after a couple of dozen tours
+    # and takes receptionist.db — every call, lead and listing — down with it.
+    if settings.VIDEO_TOUR_ENABLED:
+        tasks.append(asyncio.create_task(videotour_pipeline.sweep_loop()))
     try:
         yield
     finally:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title="AI Voice Receptionist", lifespan=lifespan)
@@ -211,6 +223,8 @@ app.include_router(salesnotes_router)
 app.include_router(dashboard_router)
 if settings.ACQUISIZIONE_ENABLED:
     app.include_router(acquisizione_router)
+if settings.VIDEO_TOUR_ENABLED:
+    app.include_router(videotour_router)
 
 
 class Listing(BaseModel):

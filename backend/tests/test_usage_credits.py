@@ -66,7 +66,7 @@ def test_each_tool_costs_its_own_price():
     usage = usage_db.monthly_usage(TENANT, *bounds())
     # €0.50 + €0.50 + €1.00
     assert usage["used_cents"] == 200
-    assert usage["uses"] == {"photo": 2, "meeting": 1}
+    assert usage["uses"] == {"photo": 2, "meeting": 1, "video_tour": 0}
 
 
 def test_a_meeting_is_charged_once_however_often_its_session_reopens():
@@ -227,7 +227,7 @@ def test_credits_reset_on_the_subscription_day_not_the_first():
     assert nxt["period_start"].startswith("2026-09-21T22:00")  # 22 Sep, Rome
     assert nxt["tools"]["used_cents"] == 0
     assert nxt["tools"]["remaining_cents"] == 3000
-    assert nxt["tools"]["uses"] == {"photo": 0, "meeting": 0}
+    assert nxt["tools"]["uses"] == {"photo": 0, "meeting": 0, "video_tour": 0}
     assert usage_db.monthly_credits(
         TENANT, "Pro", 0, *bounds(IN_AUGUST)
     )["tools"]["used_cents"] == 150
@@ -254,7 +254,7 @@ def test_usage_is_scoped_to_one_tenant():
     assert usage_db.monthly_usage(TENANT, *bounds())["used_cents"] == 150
     assert usage_db.monthly_usage(OTHER_TENANT, *bounds())["used_cents"] == 100
     assert usage_db.monthly_credits(OTHER_TENANT, "Max", 0, *bounds())["tools"]["uses"] == {
-        "photo": 0, "meeting": 1,
+        "photo": 0, "meeting": 1, "video_tour": 0,
     }
 
 

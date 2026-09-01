@@ -1,0 +1,22 @@
+# Build context is backend/ (see render.yaml's dockerContext).
+#
+# The native runtime had no build context at all — it just ran from a checkout —
+# so nothing here was a concern before. Under Docker every file in this
+# directory is copied into an image layer, which makes two of them worth
+# excluding deliberately: .env would bake secrets into a distributable layer,
+# and __pycache__ from a different Python version is worse than useless.
+.env
+.env.*
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# Not needed at runtime. Excluding them keeps the image smaller and stops an
+# edit to a test from busting the COPY layer cache on every deploy.
+tests/
+Dockerfile
+.dockerignore
+render.yaml

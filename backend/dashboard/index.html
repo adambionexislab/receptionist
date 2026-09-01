@@ -202,6 +202,10 @@
   th.num { text-align: right; }
 
   .hidden { display: none !important; }
+  /* Feature-flag visibility. Separate from .hidden because the AI tools drive
+     .hidden on the same cards as they move between steps — a tool that is off
+     for this agency must stay off regardless of what its state machine does. */
+  .feature-off { display: none !important; }
 
   /* ── listings cards ─────────────────────────────────────────────────── */
   .listings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
@@ -336,6 +340,34 @@
   #acq-review h3:first-child { margin-top: 0; }
   .acq-tool-title { font-size: 1.05rem; margin: 32px 0 14px; }
   .acq-tool-title:first-of-type { margin-top: 0; }
+
+  /* ── AI tools launcher ──────────────────────────────────────────────
+     The tab opens on a grid of small cards, one per tool, and the tool
+     itself only takes over the page once its card is opened. Three full
+     tool UIs stacked on one page read as one endless form. */
+  .tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .tool-card {
+    background: var(--surface); border: 1px solid var(--card-border);
+    border-radius: var(--radius); padding: 20px;
+    display: flex; flex-direction: column; gap: 10px;
+    transition: border-color .2s ease;
+  }
+  .tool-card:hover { border-color: var(--accent); }
+  .tool-card-icon {
+    width: 38px; height: 38px; border-radius: 10px; margin-bottom: 2px;
+    background: var(--surface-2); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .tool-card-icon svg { width: 19px; height: 19px; display: block; }
+  .tool-card-name { font-weight: 600; font-size: 1.02rem; }
+  /* flex:1 rather than margin-top:auto on the button: the descriptions are
+     different lengths and the buttons still have to line up across the row. */
+  .tool-card-desc { color: var(--text-dim); font-size: .86rem; line-height: 1.6; margin: 0; flex: 1; }
+  .tool-card .btn { margin-top: 6px; }
+
+  /* An opened tool: back to the grid, then the tool's own name. */
+  .acq-panel-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .acq-panel-head .acq-tool-title { margin: 0; }
   .acq-fields-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
   .acq-fields-none { color: var(--text-dim); font-size: .88rem; grid-column: 1 / -1; }
   .acq-fields-toggle { margin-top: 12px; }
@@ -396,6 +428,63 @@
   .acq-photo-panel-img { width: 100%; height: 100%; object-fit: contain; }
   .acq-photo-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .acq-photo-err { color: var(--red); font-size: .78rem; margin-top: 10px; }
+
+  /* ── ApollonIA Video wizard ─────────────────────────────────────────────
+     Three stacked step cards. A locked step is dimmed and inert rather than
+     hidden, so the agent can see what is coming before they get there. */
+  .vt-step { margin-bottom: 16px; transition: opacity .2s ease; }
+  .vt-step.is-locked { opacity: .45; pointer-events: none; }
+  .vt-step.is-done .vt-step-num { background: var(--green); color: var(--on-accent); }
+  .vt-step-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .vt-step-num {
+    flex: 0 0 24px; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--accent); color: var(--on-accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: .8rem; font-weight: 700;
+  }
+  .vt-step-title { margin: 0; font-size: .98rem; font-weight: 600; }
+
+  .vt-address-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .vt-input {
+    flex: 1; min-width: 220px; padding: 10px 12px;
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; font: inherit;
+  }
+  .vt-input:focus { outline: none; border-color: var(--accent); }
+  .vt-map { width: 100%; height: 320px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+  .vt-map-hint { color: var(--text-dim); font-size: .8rem; margin: 10px 0 0; }
+
+  /* Collapsed step 1: just the confirmed address, once it is locked in. */
+  .vt-collapsed { display: flex; align-items: center; gap: 10px; font-size: .9rem; }
+  .vt-collapsed-check { color: var(--green); font-weight: 700; }
+
+  .vt-upload-state { color: var(--text-dim); font-size: .78rem; margin: 8px 0 0; min-height: 1.1em; }
+  .vt-upload-state.is-error { color: var(--red); }
+
+  /* Interior thumbnails fill the panel as a grid rather than one preview. */
+  .vt-thumbs {
+    position: absolute; inset: 0; padding: 8px; gap: 6px;
+    display: grid; grid-template-columns: repeat(3, 1fr); align-content: start;
+    overflow-y: auto;
+  }
+  .vt-thumbs img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; }
+
+  .vt-player {
+    position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; margin-bottom: 16px;
+  }
+  .vt-player-waiting { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px; text-align: center; }
+  .vt-player-status { margin: 0; font-size: .9rem; }
+  .vt-player-note { margin: 0; color: var(--text-dim); font-size: .78rem; max-width: 34ch; }
+  .vt-video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+
+  .vt-progress { width: 200px; height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; }
+  .vt-progress-bar { height: 100%; width: 0; background: var(--accent); transition: width .4s ease; }
+
+  @media (max-width: 700px) {
+    .vt-map { height: 240px; }
+  }
 
   /* Loader (right panel, while waiting on the model) */
   .acq-loader {
@@ -673,143 +762,310 @@
     <section id="view-acquisizione" class="view">
       <h2 id="acq-title">Strumenti AI</h2>
 
-      <h3 id="acq-meeting-title" class="acq-tool-title">ApollonIA Meeting</h3>
+      <!-- Tool launcher. One card per tool; opening one hides the grid and
+           shows that tool alone. Feature flags hide the card and its panel
+           together, so a tool that is off for this agency has no way in. -->
+      <div id="acq-launcher" class="tools-grid">
+        <div class="tool-card" id="launch-meeting">
+          <span class="tool-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+              <path d="M19 10v1a7 7 0 0 1-14 0v-1"></path>
+              <line x1="12" y1="18" x2="12" y2="22"></line>
+            </svg>
+          </span>
+          <div class="tool-card-name" id="launch-meeting-name">ApollonIA Meeting</div>
+          <p class="tool-card-desc" id="launch-meeting-desc"></p>
+          <button class="btn" id="launch-meeting-btn"></button>
+        </div>
 
-      <!-- Only shown when the server still holds a meeting nobody finished:
-           a closed browser or a killed tab leaves the transcript on the
-           server but takes the agent's way back to it with the page. -->
-      <div id="acq-resume" class="card hidden">
-        <div class="acq-pad">
-          <p id="acq-resume-text" class="acq-consent-text"></p>
-          <div id="acq-resume-excerpt" class="acq-resume-excerpt"></div>
-          <div class="err" id="acq-resume-err"></div>
-          <div class="acq-step-actions">
-            <button class="btn" id="acq-resume-start-btn"></button>
-            <button class="btn ghost" id="acq-resume-discard-btn"></button>
-          </div>
+        <div class="tool-card" id="launch-photo">
+          <span class="tool-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="6" width="18" height="14" rx="2"></rect>
+              <path d="M8 6l1.5-2.5h5L16 6"></path>
+              <circle cx="12" cy="13" r="3.5"></circle>
+            </svg>
+          </span>
+          <div class="tool-card-name" id="launch-photo-name">ApollonIA Photo</div>
+          <p class="tool-card-desc" id="launch-photo-desc"></p>
+          <button class="btn" id="launch-photo-btn"></button>
+        </div>
+
+        <div class="tool-card" id="launch-video">
+          <span class="tool-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="6" width="14" height="12" rx="2"></rect>
+              <path d="M16 10.5l6-3.5v10l-6-3.5z"></path>
+            </svg>
+          </span>
+          <div class="tool-card-name" id="launch-video-name">ApollonIA Video</div>
+          <p class="tool-card-desc" id="launch-video-desc"></p>
+          <button class="btn" id="launch-video-btn"></button>
         </div>
       </div>
 
-      <div id="acq-consent" class="card">
-        <div class="acq-pad">
-          <p id="acq-consent-text" class="acq-consent-text"></p>
-          <label class="acq-check">
-            <input type="checkbox" id="acq-consent-check" />
-            <span id="acq-consent-label"></span>
-          </label>
-          <div class="err" id="acq-consent-err"></div>
-          <button class="btn" id="acq-start-btn" disabled></button>
+      <div id="tool-meeting" class="acq-tool-panel hidden">
+        <div class="acq-panel-head">
+          <button class="btn ghost acq-back" id="acq-back-meeting"></button>
+          <h3 id="acq-meeting-title" class="acq-tool-title">ApollonIA Meeting</h3>
         </div>
-      </div>
 
-      <div id="acq-live" class="card hidden">
-        <div class="acq-live-header">
-          <span class="acq-rec-dot" id="acq-rec-dot"></span>
-          <span id="acq-status-text"></span>
-          <div class="spacer"></div>
-          <button class="btn ghost" id="acq-cancel-btn"></button>
-          <button class="btn ghost" id="acq-pause-btn"></button>
-          <button class="btn" id="acq-finish-btn"></button>
-        </div>
-        <div id="acq-transcript" class="acq-transcript"></div>
-      </div>
-
-      <div id="acq-processing" class="card hidden">
-        <div class="acq-pad">
-          <p id="acq-processing-text"></p>
-          <div class="err" id="acq-finish-err"></div>
-          <div class="acq-step-actions">
-            <button class="btn ghost hidden" id="acq-finish-retry-btn"></button>
-            <button class="btn ghost hidden" id="acq-finish-back-btn"></button>
-          </div>
-        </div>
-      </div>
-
-      <div id="acq-review" class="card hidden">
-        <div class="acq-pad">
-          <h3 id="acq-review-agent-title"></h3>
-          <div id="acq-agent-wrap" class="acq-agent">
-            <label id="acq-agent-label" for="acq-agent"></label>
-            <select id="acq-agent"></select>
-            <div id="acq-agent-hint" class="acq-agent-hint hidden"></div>
-          </div>
-
-          <h3 id="acq-review-fields-title"></h3>
-          <div id="acq-fields-grid" class="acq-fields-grid"></div>
-          <button type="button" class="btn ghost acq-fields-toggle" id="acq-fields-toggle"></button>
-
-          <h3 id="acq-review-text-title"></h3>
-          <textarea id="acq-listing-text" class="acq-textarea"></textarea>
-
-          <h3 id="acq-review-notes-title"></h3>
-          <textarea id="acq-notes" class="acq-textarea acq-notes"></textarea>
-
-          <div class="err" id="acq-review-err"></div>
-          <div class="acq-step-actions">
-            <button class="btn" id="acq-confirm-btn"></button>
-            <button class="btn ghost" id="acq-review-back-btn"></button>
-          </div>
-        </div>
-      </div>
-
-      <div id="acq-confirmed" class="card hidden">
-        <div class="acq-pad">
-          <p id="acq-confirmed-text"></p>
-          <button class="btn" id="acq-new-btn"></button>
-        </div>
-      </div>
-
-      <h3 id="acq-photos-tool-title" class="acq-tool-title">ApollonIA Photo</h3>
-      <div id="acq-photos-tool" class="card">
-        <div class="acq-pad">
-          <p class="acq-photo-hint" id="acq-photo-hint"></p>
-
-          <div class="acq-photo-panels">
-            <div class="acq-photo-panel-wrap">
-              <div class="acq-photo-panel-label" id="acq-photo-before-label"></div>
-              <div id="acq-photo-before-panel" class="acq-photo-panel acq-photo-panel-upload">
-                <input type="file" id="acq-photo-input" accept="image/png,image/jpeg,image/webp" class="hidden" />
-                <div class="acq-photo-panel-empty" id="acq-photo-before-empty"></div>
-                <img id="acq-photo-before-img" class="acq-photo-panel-img hidden" alt="" />
-              </div>
-            </div>
-            <div class="acq-photo-panel-wrap">
-              <div class="acq-photo-panel-label" id="acq-photo-after-label"></div>
-              <div id="acq-photo-after-panel" class="acq-photo-panel">
-                <div class="acq-photo-panel-empty" id="acq-photo-after-empty"></div>
-                <div id="acq-photo-loader" class="acq-loader hidden"></div>
-                <img id="acq-photo-after-img" class="acq-photo-panel-img hidden" alt="" />
-              </div>
+        <!-- Only shown when the server still holds a meeting nobody finished:
+             a closed browser or a killed tab leaves the transcript on the
+             server but takes the agent's way back to it with the page. -->
+        <div id="acq-resume" class="card hidden">
+          <div class="acq-pad">
+            <p id="acq-resume-text" class="acq-consent-text"></p>
+            <div id="acq-resume-excerpt" class="acq-resume-excerpt"></div>
+            <div class="err" id="acq-resume-err"></div>
+            <div class="acq-step-actions">
+              <button class="btn" id="acq-resume-start-btn"></button>
+              <button class="btn ghost" id="acq-resume-discard-btn"></button>
             </div>
           </div>
+        </div>
 
-          <div class="acq-photo-controls">
-            <div class="acq-photo-modernize">
-              <span id="acq-photo-modernize-label"></span>
-              <span class="mode-switch" id="acq-photo-mode" role="group">
-                <span class="mode-switch-pill" aria-hidden="true"></span>
-                <!-- IEC on/off symbols: ○ = off, | = on -->
-                <button type="button" class="mode-switch-opt is-active" data-mode="enhance" id="acq-mode-enhance">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                    <circle cx="12" cy="12" r="7"></circle>
-                  </svg>
-                </button>
-                <button type="button" class="mode-switch-opt" data-mode="modernize" id="acq-mode-modernize">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                    <line x1="12" y1="4" x2="12" y2="20"></line>
-                  </svg>
-                </button>
-              </span>
-            </div>
+        <div id="acq-consent" class="card">
+          <div class="acq-pad">
+            <p id="acq-consent-text" class="acq-consent-text"></p>
+            <label class="acq-check">
+              <input type="checkbox" id="acq-consent-check" />
+              <span id="acq-consent-label"></span>
+            </label>
+            <div class="err" id="acq-consent-err"></div>
+            <button class="btn" id="acq-start-btn" disabled></button>
+          </div>
+        </div>
+
+        <div id="acq-live" class="card hidden">
+          <div class="acq-live-header">
+            <span class="acq-rec-dot" id="acq-rec-dot"></span>
+            <span id="acq-status-text"></span>
             <div class="spacer"></div>
-            <button class="btn ghost hidden" id="acq-photo-clear-btn"></button>
-            <a class="btn ghost hidden" id="acq-photo-download-link" download></a>
-            <button class="btn" id="acq-photo-enhance-btn" disabled></button>
+            <button class="btn ghost" id="acq-cancel-btn"></button>
+            <button class="btn ghost" id="acq-pause-btn"></button>
+            <button class="btn" id="acq-finish-btn"></button>
           </div>
-          <p class="acq-photo-mode-hint" id="acq-photo-mode-hint"></p>
-          <div class="err" id="acq-photo-err"></div>
+          <div id="acq-transcript" class="acq-transcript"></div>
         </div>
-      </div>
+
+        <div id="acq-processing" class="card hidden">
+          <div class="acq-pad">
+            <p id="acq-processing-text"></p>
+            <div class="err" id="acq-finish-err"></div>
+            <div class="acq-step-actions">
+              <button class="btn ghost hidden" id="acq-finish-retry-btn"></button>
+              <button class="btn ghost hidden" id="acq-finish-back-btn"></button>
+            </div>
+          </div>
+        </div>
+
+        <div id="acq-review" class="card hidden">
+          <div class="acq-pad">
+            <h3 id="acq-review-agent-title"></h3>
+            <div id="acq-agent-wrap" class="acq-agent">
+              <label id="acq-agent-label" for="acq-agent"></label>
+              <select id="acq-agent"></select>
+              <div id="acq-agent-hint" class="acq-agent-hint hidden"></div>
+            </div>
+
+            <h3 id="acq-review-fields-title"></h3>
+            <div id="acq-fields-grid" class="acq-fields-grid"></div>
+            <button type="button" class="btn ghost acq-fields-toggle" id="acq-fields-toggle"></button>
+
+            <h3 id="acq-review-text-title"></h3>
+            <textarea id="acq-listing-text" class="acq-textarea"></textarea>
+
+            <h3 id="acq-review-notes-title"></h3>
+            <textarea id="acq-notes" class="acq-textarea acq-notes"></textarea>
+
+            <div class="err" id="acq-review-err"></div>
+            <div class="acq-step-actions">
+              <button class="btn" id="acq-confirm-btn"></button>
+              <button class="btn ghost" id="acq-review-back-btn"></button>
+            </div>
+          </div>
+        </div>
+
+        <div id="acq-confirmed" class="card hidden">
+          <div class="acq-pad">
+            <p id="acq-confirmed-text"></p>
+            <button class="btn" id="acq-new-btn"></button>
+          </div>
+        </div>
+
+      </div><!-- /#tool-meeting -->
+
+      <div id="tool-photo" class="acq-tool-panel hidden">
+        <div class="acq-panel-head">
+          <button class="btn ghost acq-back" id="acq-back-photo"></button>
+          <h3 id="acq-photos-tool-title" class="acq-tool-title">ApollonIA Photo</h3>
+        </div>
+        <div id="acq-photos-tool" class="card">
+          <div class="acq-pad">
+            <p class="acq-photo-hint" id="acq-photo-hint"></p>
+
+            <div class="acq-photo-panels">
+              <div class="acq-photo-panel-wrap">
+                <div class="acq-photo-panel-label" id="acq-photo-before-label"></div>
+                <div id="acq-photo-before-panel" class="acq-photo-panel acq-photo-panel-upload">
+                  <input type="file" id="acq-photo-input" accept="image/png,image/jpeg,image/webp" class="hidden" />
+                  <div class="acq-photo-panel-empty" id="acq-photo-before-empty"></div>
+                  <img id="acq-photo-before-img" class="acq-photo-panel-img hidden" alt="" />
+                </div>
+              </div>
+              <div class="acq-photo-panel-wrap">
+                <div class="acq-photo-panel-label" id="acq-photo-after-label"></div>
+                <div id="acq-photo-after-panel" class="acq-photo-panel">
+                  <div class="acq-photo-panel-empty" id="acq-photo-after-empty"></div>
+                  <div id="acq-photo-loader" class="acq-loader hidden"></div>
+                  <img id="acq-photo-after-img" class="acq-photo-panel-img hidden" alt="" />
+                </div>
+              </div>
+            </div>
+
+            <div class="acq-photo-controls">
+              <div class="acq-photo-modernize">
+                <span id="acq-photo-modernize-label"></span>
+                <span class="mode-switch" id="acq-photo-mode" role="group">
+                  <span class="mode-switch-pill" aria-hidden="true"></span>
+                  <!-- IEC on/off symbols: ○ = off, | = on -->
+                  <button type="button" class="mode-switch-opt is-active" data-mode="enhance" id="acq-mode-enhance">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                      <circle cx="12" cy="12" r="7"></circle>
+                    </svg>
+                  </button>
+                  <button type="button" class="mode-switch-opt" data-mode="modernize" id="acq-mode-modernize">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                      <line x1="12" y1="4" x2="12" y2="20"></line>
+                    </svg>
+                  </button>
+                </span>
+              </div>
+              <div class="spacer"></div>
+              <button class="btn ghost hidden" id="acq-photo-clear-btn"></button>
+              <a class="btn ghost hidden" id="acq-photo-download-link" download></a>
+              <button class="btn" id="acq-photo-enhance-btn" disabled></button>
+            </div>
+            <p class="acq-photo-mode-hint" id="acq-photo-mode-hint"></p>
+            <div class="err" id="acq-photo-err"></div>
+          </div>
+        </div>
+
+      </div><!-- /#tool-photo -->
+
+      <div id="tool-video" class="acq-tool-panel hidden">
+        <div class="acq-panel-head">
+          <button class="btn ghost acq-back" id="acq-back-video"></button>
+          <h3 id="vt-tool-title" class="acq-tool-title">ApollonIA Video</h3>
+        </div>
+        <!-- ── ApollonIA Video: address → photos → preview ──────────────────
+             Three cards, opened one at a time. Step 1 collapses to its
+             confirmed address once locked in, and steps 2 and 3 are inert
+             until the step before them is done. Step 3 has no way back by
+             design: the pipeline has already started spending money on the
+             coordinates and photos behind it. -->
+        <div id="vt-tool">
+
+          <!-- Step 1 — address and location -->
+          <div class="card vt-step" id="vt-step1">
+            <div class="acq-pad">
+              <div class="vt-step-head">
+                <span class="vt-step-num">1</span>
+                <h4 class="vt-step-title" id="vt-step1-title"></h4>
+              </div>
+              <div id="vt-step1-body">
+                <p class="acq-photo-hint" id="vt-step1-hint"></p>
+                <div class="vt-address-row">
+                  <input type="text" id="vt-address" class="vt-input" autocomplete="off" />
+                  <button class="btn ghost" id="vt-search-btn"></button>
+                </div>
+                <div id="vt-map" class="vt-map hidden"></div>
+                <p class="vt-map-hint hidden" id="vt-map-hint"></p>
+                <div class="err" id="vt-step1-err"></div>
+                <div class="acq-step-actions">
+                  <button class="btn" id="vt-confirm-btn" disabled></button>
+                </div>
+              </div>
+              <div id="vt-step1-collapsed" class="vt-collapsed hidden">
+                <span class="vt-collapsed-check">&#10003;</span>
+                <span id="vt-collapsed-address"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2 — photos. Deliberately never blocks: uploads fire in the
+               background and the agent can move to step 3 immediately. -->
+          <div class="card vt-step is-locked" id="vt-step2">
+            <div class="acq-pad">
+              <div class="vt-step-head">
+                <span class="vt-step-num">2</span>
+                <h4 class="vt-step-title" id="vt-step2-title"></h4>
+              </div>
+              <div id="vt-step2-body">
+                <p class="acq-photo-hint" id="vt-step2-hint"></p>
+
+                <div class="acq-photo-panels">
+                  <div class="acq-photo-panel-wrap">
+                    <div class="acq-photo-panel-label" id="vt-exterior-label"></div>
+                    <div id="vt-exterior-panel" class="acq-photo-panel acq-photo-panel-upload">
+                      <input type="file" id="vt-exterior-input" accept="image/png,image/jpeg,image/webp" class="hidden" />
+                      <div class="acq-photo-panel-empty" id="vt-exterior-empty"></div>
+                      <img id="vt-exterior-img" class="acq-photo-panel-img hidden" alt="" />
+                    </div>
+                    <p class="vt-upload-state" id="vt-exterior-state"></p>
+                  </div>
+
+                  <div class="acq-photo-panel-wrap">
+                    <div class="acq-photo-panel-label" id="vt-interior-label"></div>
+                    <div id="vt-interior-panel" class="acq-photo-panel acq-photo-panel-upload">
+                      <input type="file" id="vt-interior-input" accept="image/png,image/jpeg,image/webp" multiple class="hidden" />
+                      <div class="acq-photo-panel-empty" id="vt-interior-empty"></div>
+                      <div id="vt-interior-thumbs" class="vt-thumbs hidden"></div>
+                    </div>
+                    <p class="vt-upload-state" id="vt-interior-state"></p>
+                  </div>
+                </div>
+
+                <div class="err" id="vt-step2-err"></div>
+                <div class="acq-step-actions">
+                  <button class="btn" id="vt-continue-btn" disabled></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3 — preview. No back button: see the block comment above. -->
+          <div class="card vt-step is-locked" id="vt-step3">
+            <div class="acq-pad">
+              <div class="vt-step-head">
+                <span class="vt-step-num">3</span>
+                <h4 class="vt-step-title" id="vt-step3-title"></h4>
+              </div>
+              <div id="vt-step3-body">
+                <div class="vt-player">
+                  <div id="vt-player-waiting" class="vt-player-waiting">
+                    <div class="acq-loader" id="vt-player-loader"></div>
+                    <p class="vt-player-status" id="vt-player-status"></p>
+                    <div class="vt-progress hidden" id="vt-progress">
+                      <div class="vt-progress-bar" id="vt-progress-bar"></div>
+                    </div>
+                    <p class="vt-player-note" id="vt-player-note"></p>
+                  </div>
+                  <video id="vt-video" class="vt-video hidden" controls playsinline></video>
+                </div>
+                <div class="err" id="vt-step3-err"></div>
+                <div class="acq-step-actions">
+                  <a class="btn ghost hidden" id="vt-download-link" download="tour.mp4"></a>
+                  <button class="btn hidden" id="vt-retry-btn"></button>
+                  <button class="btn ghost hidden" id="vt-new-btn"></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /#tool-video -->
     </section>
   </main>
 </div>
@@ -907,6 +1163,9 @@
       credits_meetings: "{n} riunioni",
       credits_meetings_few: "{n} riunioni",
       credits_meetings_one: "1 riunione",
+      credits_videos: "{n} video",
+      credits_videos_few: "{n} video",
+      credits_videos_one: "1 video",
       th_date: "Data", th_name: "Nome", th_phone: "Telefono",
       th_summary: "Riepilogo", th_outcome: "Esito", th_assigned: "Inoltrato a",
       contacts_empty: "Nessun contatto ancora.",
@@ -955,6 +1214,19 @@
       agent_email_invalid: "Indirizzo email non valido.",
       acq_tab: "Strumenti AI",
       acq_title: "Strumenti AI",
+      // Launcher: one card per tool. The names stay in English (product
+      // names), only the one-line description is translated.
+      acq_tool_open: "Apri",
+      acq_tools_back: "← Strumenti",
+      acq_meeting_desc:
+        "Trascrive la riunione con il venditore e compila da sola la scheda " +
+        "dell'immobile, pronta da rivedere e pubblicare.",
+      acq_photo_desc:
+        "Migliora le foto dell'immobile: luce, prospettiva e ordine, oppure " +
+        "rinnova finiture e arredamento in stile moderno.",
+      vt_tool_desc:
+        "Crea un video tour dell'immobile a partire dall'indirizzo e da " +
+        "poche foto, pronto da pubblicare sui social.",
       // The tool's product name — English in every locale, like "ApollonIA"
       // itself. Only the surrounding UI copy is translated.
       acq_meeting_title: "ApollonIA Meeting",
@@ -1025,6 +1297,61 @@
       acq_photo_err: "Elaborazione non riuscita.",
       acq_photo_before: "Originale",
       acq_photo_after: "Migliorata",
+      // ── ApollonIA Video ──────────────────────────────────────────────
+      // Nome del prodotto in inglese come "ApollonIA Meeting"/"ApollonIA
+      // Photo": si traduce solo il testo intorno.
+      vt_tool_title: "ApollonIA Video",
+      vt_step1_title: "Indirizzo e posizione",
+      vt_step1_hint:
+        "Inserisca l'indirizzo dell'immobile, poi trascini il segnaposto " +
+        "sulla posizione esatta della proprietà. Il video partirà da qui.",
+      vt_address_placeholder: "Via Roma 12, Milano",
+      vt_search_btn: "Cerca",
+      vt_map_hint: "Trascini il segnaposto per correggere la posizione.",
+      vt_confirm_btn: "Conferma posizione",
+      vt_err_address: "Inserisca un indirizzo.",
+      vt_err_geocode: "Indirizzo non trovato. Provi a essere più specifico.",
+      vt_err_maps: "Mappa non disponibile. Contatti l'assistenza.",
+
+      vt_step2_title: "Foto dell'immobile",
+      vt_step2_hint:
+        "Una foto dell'esterno e le foto delle stanze. Ogni foto degli " +
+        "interni diventa una stanza del video, nell'ordine in cui le carica. " +
+        "Può passare al passaggio 3 subito: il caricamento continua da solo.",
+      vt_exterior_label: "Esterno",
+      vt_interior_label: "Interni",
+      vt_exterior_upload: "Trascini qui la foto dell'esterno o clicchi per caricarla",
+      vt_interior_upload: "Trascini qui le foto delle stanze o clicchi per caricarle",
+      vt_uploading: "Caricamento…",
+      vt_uploaded_ok: "Caricata ✓",
+      // Lo slovacco richiede uno / 2–4 / 5+, quindi ogni locale porta tutte
+      // e tre le chiavi (vedi pluralize).
+      vt_rooms_uploaded: "{n} stanze caricate ✓",
+      vt_rooms_uploaded_few: "{n} stanze caricate ✓",
+      vt_rooms_uploaded_one: "1 stanza caricata ✓",
+      vt_err_upload: "Caricamento non riuscito. Riprovi.",
+      vt_err_type: "Formato non supportato: usa JPG, PNG o WebP.",
+      vt_err_too_many: "Massimo {n} foto degli interni.",
+      vt_continue_btn: "Continua",
+
+      vt_step3_title: "Il suo video",
+      // "preparing": il backend sta ancora aspettando gli ingredienti.
+      vt_state_preparing: "Preparazione in corso…",
+      vt_state_preparing_note:
+        "Stiamo preparando la ripresa aerea. Se non ha ancora caricato la " +
+        "foto dell'esterno, il video partirà appena la carica.",
+      vt_state_generating: "Generazione del video…",
+      vt_state_generating_note:
+        "Può volerci qualche minuto. Può lasciare questa pagina: il video " +
+        "continua a essere generato e lo ritrova qui.",
+      vt_state_ready_note: "Video pronto.",
+      vt_state_error: "Generazione non riuscita.",
+      vt_state_error_note:
+        "Riprova riparte solo dal punto in cui si è interrotta, non " +
+        "dall'inizio.",
+      vt_retry_btn: "Riprova",
+      vt_download_btn: "Scarica video",
+      vt_new_btn: "Nuovo ApollonIA Video",
       acq_type_placeholder: "— Seleziona —",
       acq_fields: {
         tipo_annuncio: "Tipo di annuncio",
@@ -1069,6 +1396,9 @@
       credits_meetings: "{n} stretnutí",
       credits_meetings_few: "{n} stretnutia",
       credits_meetings_one: "1 stretnutie",
+      credits_videos: "{n} videí",
+      credits_videos_few: "{n} videá",
+      credits_videos_one: "1 video",
       th_date: "Dátum", th_name: "Meno", th_phone: "Telefón",
       th_summary: "Zhrnutie", th_outcome: "Výsledok", th_assigned: "Odoslané",
       contacts_empty: "Zatiaľ žiadne kontakty.",
@@ -1116,6 +1446,17 @@
       agent_email_invalid: "Neplatná e-mailová adresa.",
       acq_tab: "Nástroje AI",
       acq_title: "Nástroje AI",
+      acq_tool_open: "Otvoriť",
+      acq_tools_back: "← Nástroje",
+      acq_meeting_desc:
+        "Prepíše stretnutie s predávajúcim a sám pripraví inzerát " +
+        "nehnuteľnosti, pripravený na kontrolu a zverejnenie.",
+      acq_photo_desc:
+        "Vylepší fotografie nehnuteľnosti: osvetlenie, perspektívu a " +
+        "poriadok, alebo obnoví povrchy a zariadi v modernom štýle.",
+      vt_tool_desc:
+        "Vytvorí video prehliadku nehnuteľnosti z adresy a niekoľkých " +
+        "fotografií, pripravenú na zverejnenie na sociálnych sieťach.",
       acq_meeting_title: "ApollonIA Meeting",  // product name, untranslated
       acq_consent_text:
         "Skôr než začnete, informujte predávajúceho, že konverzácia bude " +
@@ -1183,6 +1524,58 @@
       acq_photo_err: "Spracovanie zlyhalo.",
       acq_photo_before: "Pôvodná",
       acq_photo_after: "Vylepšená",
+      // ── ApollonIA Video ──────────────────────────────────────────────
+      vt_tool_title: "ApollonIA Video",  // názov produktu, nepreložený
+      vt_step1_title: "Adresa a poloha",
+      vt_step1_hint:
+        "Zadajte adresu nehnuteľnosti a potom presuňte značku na presné " +
+        "miesto nehnuteľnosti. Video sa začne práve tam.",
+      vt_address_placeholder: "Hlavná 12, Bratislava",
+      vt_search_btn: "Hľadať",
+      vt_map_hint: "Presuňte značku, ak treba polohu opraviť.",
+      vt_confirm_btn: "Potvrdiť polohu",
+      vt_err_address: "Zadajte adresu.",
+      vt_err_geocode: "Adresa sa nenašla. Skúste ju zadať presnejšie.",
+      vt_err_maps: "Mapa nie je dostupná. Kontaktujte podporu.",
+
+      vt_step2_title: "Fotografie nehnuteľnosti",
+      vt_step2_hint:
+        "Jedna fotografia exteriéru a fotografie jednotlivých miestností. " +
+        "Každá fotografia interiéru je v videu samostatná miestnosť, v " +
+        "poradí, v akom ich nahráte. Na krok 3 môžete prejsť hneď — " +
+        "nahrávanie pokračuje samo.",
+      vt_exterior_label: "Exteriér",
+      vt_interior_label: "Interiér",
+      vt_exterior_upload: "Presuňte sem fotografiu exteriéru alebo kliknite pre nahratie",
+      vt_interior_upload: "Presuňte sem fotografie miestností alebo kliknite pre nahratie",
+      vt_uploading: "Nahráva sa…",
+      vt_uploaded_ok: "Nahraté ✓",
+      // one / 2–4 / 5+ (pozri pluralize)
+      vt_rooms_uploaded: "Nahratých {n} miestností ✓",
+      vt_rooms_uploaded_few: "Nahraté {n} miestnosti ✓",
+      vt_rooms_uploaded_one: "Nahratá 1 miestnosť ✓",
+      vt_err_upload: "Nahratie zlyhalo. Skúste to znova.",
+      vt_err_type: "Nepodporovaný formát: použite JPG, PNG alebo WebP.",
+      vt_err_too_many: "Najviac {n} fotografií interiéru.",
+      vt_continue_btn: "Pokračovať",
+
+      vt_step3_title: "Vaše video",
+      vt_state_preparing: "Pripravuje sa…",
+      vt_state_preparing_note:
+        "Pripravujeme letecký záber. Ak ste ešte nenahrali fotografiu " +
+        "exteriéru, video sa spustí hneď po jej nahratí.",
+      vt_state_generating: "Generuje sa video…",
+      vt_state_generating_note:
+        "Môže to trvať niekoľko minút. Túto stránku môžete zavrieť — video " +
+        "sa generuje ďalej a nájdete ho tu.",
+      vt_state_ready_note: "Video je pripravené.",
+      vt_state_error: "Generovanie zlyhalo.",
+      vt_state_error_note:
+        "Opakovanie pokračuje len od miesta, kde sa to prerušilo, nie od " +
+        "začiatku.",
+      vt_retry_btn: "Skúsiť znova",
+      vt_download_btn: "Stiahnuť video",
+      vt_new_btn: "Nové ApollonIA Video",
       acq_type_placeholder: "— Vyberte —",
       acq_fields: {
         tipo_annuncio: "Typ inzerátu",
@@ -1255,12 +1648,30 @@
     "acq-confirm-btn": "acq_confirm_btn",
     "acq-confirmed-text": "acq_confirmed_text",
     "acq-meeting-title": "acq_meeting_title",
+    "launch-meeting-name": "acq_meeting_title", "launch-meeting-desc": "acq_meeting_desc",
+    "launch-photo-name": "acq_photos_tool_title", "launch-photo-desc": "acq_photo_desc",
+    "launch-video-name": "vt_tool_title", "launch-video-desc": "vt_tool_desc",
+    "launch-meeting-btn": "acq_tool_open", "launch-photo-btn": "acq_tool_open",
+    "launch-video-btn": "acq_tool_open",
+    "acq-back-meeting": "acq_tools_back", "acq-back-photo": "acq_tools_back",
+    "acq-back-video": "acq_tools_back",
     "acq-photos-tool-title": "acq_photos_tool_title",
     "acq-photo-hint": "acq_photo_hint",
     "acq-photo-before-label": "acq_photo_before", "acq-photo-after-label": "acq_photo_after",
     "acq-photo-before-empty": "acq_photo_upload_label", "acq-photo-after-empty": "acq_photo_result_placeholder",
     "acq-photo-modernize-label": "acq_photo_modernize_label",
     "acq-photo-clear-btn": "acq_photo_clear_btn", "acq-photo-enhance-btn": "acq_photo_enhance_btn",
+    "vt-tool-title": "vt_tool_title",
+    "vt-step1-title": "vt_step1_title", "vt-step1-hint": "vt_step1_hint",
+    "vt-search-btn": "vt_search_btn", "vt-map-hint": "vt_map_hint",
+    "vt-confirm-btn": "vt_confirm_btn",
+    "vt-step2-title": "vt_step2_title", "vt-step2-hint": "vt_step2_hint",
+    "vt-exterior-label": "vt_exterior_label", "vt-interior-label": "vt_interior_label",
+    "vt-exterior-empty": "vt_exterior_upload", "vt-interior-empty": "vt_interior_upload",
+    "vt-continue-btn": "vt_continue_btn",
+    "vt-step3-title": "vt_step3_title",
+    "vt-retry-btn": "vt_retry_btn", "vt-download-link": "vt_download_btn",
+    "vt-new-btn": "vt_new_btn",
   };
 
   function applyStrings() {
@@ -1273,6 +1684,9 @@
     if (transcriptEl) transcriptEl.setAttribute("data-placeholder", s.acq_transcript_placeholder);
     if (window.AcqRefreshLiveLabels) window.AcqRefreshLiveLabels();
     if (window.AcqRefreshPhotoMode) window.AcqRefreshPhotoMode();
+    // The wizard has copy that TEXT_IDS cannot reach: the address placeholder
+    // and whatever the player is currently showing.
+    if (window.VtApplyStrings) window.VtApplyStrings();
     document.documentElement.lang = LOCALE;
     document.title = s.title;
   }
@@ -1288,15 +1702,59 @@
     // neither. The overage card beside it stays either way — minutes are
     // billed past the plan whether or not this agency has the tools — so the
     // row goes 1-up rather than leaving a hole.
-    const hasTools = !!(me.features && me.features.acquisizione);
+    const hasTools = !!(me.features && (me.features.acquisizione || me.features.video_tour));
+    // Each tool inside the AI-tools tab is flagged separately, so an agency
+    // can have one without the other.
+    const showMeeting = !!(me.features && me.features.acquisizione);
+    const showVideo = !!(me.features && me.features.video_tour);
     $("tab-acquisizione").classList.toggle("hidden", !hasTools);
     $("credits-card").classList.toggle("hidden", !hasTools);
     $("billing-stats").classList.toggle("stats-one", !hasTools);
+    // The meeting and photo tools ship together behind ACQUISIZIONE_ENABLED;
+    // the video wizard has its own flag. Toggled with .feature-off rather than
+    // .hidden: opening and closing a tool drives .hidden on these same panels,
+    // and the two would fight over it.
+    for (const id of ["launch-meeting", "tool-meeting", "launch-photo", "tool-photo"]) {
+      $(id).classList.toggle("feature-off", !showMeeting);
+    }
+    for (const id of ["launch-video", "tool-video"]) {
+      $(id).classList.toggle("feature-off", !showVideo);
+    }
+    if (showVideo && window.VtInit) window.VtInit();
     loadSummary();
     loadContacts();
     // Agents first: every listing card names the agent handling it, so the
     // roster has to be cached before the cards render.
     loadAgents().then(loadListings);
+  }
+
+  // ── AI tools launcher ───────────────────────────────────────────────
+  // Only one tool is on screen at a time; the rest of the tab is the grid of
+  // cards. Panels keep their state while closed, so backing out of a running
+  // meeting and reopening it lands back on the same step.
+  const TOOL_PANELS = ["tool-meeting", "tool-photo", "tool-video"];
+
+  function openTool(name) {
+    $("acq-launcher").classList.add("hidden");
+    for (const id of TOOL_PANELS) $(id).classList.toggle("hidden", id !== "tool-" + name);
+    // Opening the meeting is the moment to offer back a meeting the browser
+    // lost — a closed tab leaves the transcript on the server with nothing
+    // pointing at it.
+    if (name === "meeting") {
+      syncAcqAgentOptions();
+      if (window.AcqCheckStranded) window.AcqCheckStranded();
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function closeTool() {
+    for (const id of TOOL_PANELS) $(id).classList.add("hidden");
+    $("acq-launcher").classList.remove("hidden");
+  }
+
+  for (const name of ["meeting", "photo", "video"]) {
+    $("launch-" + name + "-btn").addEventListener("click", () => openTool(name));
+    $("acq-back-" + name).addEventListener("click", closeTool);
   }
 
   function showView(name) {
@@ -1305,13 +1763,9 @@
     for (const t of document.querySelectorAll(".tab"))
       t.classList.toggle("active", t.dataset.view === name);
     // Coming back from the Agenti tab may mean a new agent to pick from in a
-    // review that is still open.
-    if (name === "acquisizione") {
+    // review that is still open — but only if the meeting tool is open.
+    if (name === "acquisizione" && !$("tool-meeting").classList.contains("hidden")) {
       syncAcqAgentOptions();
-      // Opening the tool is the moment to offer back a meeting the browser
-      // lost — a closed tab leaves the transcript on the server with nothing
-      // pointing at it.
-      if (window.AcqCheckStranded) window.AcqCheckStranded();
     }
   }
 
@@ -1357,11 +1811,16 @@
     }).format((cents || 0) / 100);
   }
 
-  // "3 foto · 1 riunione" — what this month's credits actually went on.
+  // "3 foto · 1 riunione · 2 video" — what this month's credits actually went
+  // on. Every tool in usage_db.TOOL_PRICES_CENTS needs a line here, or its
+  // spend shows up in the total with nothing accounting for it.
   function creditUses(uses) {
     const u = uses || {};
-    return pluralize("credits_photos", u.photo || 0)
-      + " · " + pluralize("credits_meetings", u.meeting || 0);
+    return [
+      pluralize("credits_photos", u.photo || 0),
+      pluralize("credits_meetings", u.meeting || 0),
+      pluralize("credits_videos", u.video_tour || 0),
+    ].join(" · ");
   }
 
   // How full an allowance is, 0–1. An allowance of zero reads as spent rather
@@ -3304,6 +3763,438 @@
     newBtn.addEventListener("click", resetToConsent);
   })();
 
+
+  // ── ApollonIA Video: address → photos → preview ──────────────────────────
+  // Flow: geocode the typed address → Maps JS map with a draggable marker →
+  // POST /video-tour (which starts the tile capture server-side straight away)
+  // → photos, uploaded in the background → poll the job until the video is up.
+  //
+  // The wizard is deliberately one-way past step 2. By the time step 3 opens,
+  // the backend has already spent money on the confirmed coordinates and is
+  // about to spend more on the photos, so there is nothing useful a "back"
+  // button could do except invalidate paid work.
+  (function () {
+    const section = $("view-acquisizione");
+    if (!section) return;
+
+    const tool = $("vt-tool");
+    const step1 = $("vt-step1"), step2 = $("vt-step2"), step3 = $("vt-step3");
+    const addressInput = $("vt-address");
+    const searchBtn = $("vt-search-btn");
+    const mapEl = $("vt-map"), mapHint = $("vt-map-hint");
+    const confirmBtn = $("vt-confirm-btn");
+    const step1Err = $("vt-step1-err"), step1Body = $("vt-step1-body");
+    const step1Collapsed = $("vt-step1-collapsed");
+    const collapsedAddress = $("vt-collapsed-address");
+    const exteriorPanel = $("vt-exterior-panel"), exteriorInput = $("vt-exterior-input");
+    const exteriorEmpty = $("vt-exterior-empty"), exteriorImg = $("vt-exterior-img");
+    const exteriorState = $("vt-exterior-state");
+    const interiorPanel = $("vt-interior-panel"), interiorInput = $("vt-interior-input");
+    const interiorEmpty = $("vt-interior-empty"), interiorThumbs = $("vt-interior-thumbs");
+    const interiorState = $("vt-interior-state");
+    const continueBtn = $("vt-continue-btn"), step2Err = $("vt-step2-err");
+    const playerWaiting = $("vt-player-waiting"), playerLoader = $("vt-player-loader");
+    const playerStatus = $("vt-player-status"), playerNote = $("vt-player-note");
+    const progressWrap = $("vt-progress"), progressBar = $("vt-progress-bar");
+    const video = $("vt-video"), step3Err = $("vt-step3-err");
+    const downloadLink = $("vt-download-link"), retryBtn = $("vt-retry-btn");
+    const newBtn = $("vt-new-btn");
+
+    const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp"];
+    const POLL_MS = 4000;
+
+    let config = null;          // { maps_key, map_id, max_interior_photos }
+    let mapsLoading = null;     // promise, so the SDK is only fetched once
+    let map = null, marker = null;
+    let picked = null;          // { address, lat, lng } before confirm
+    let jobId = null;
+    let reachedStep3 = false;
+    let pollTimer = null;
+
+    function show(el, on) { el.classList.toggle("hidden", !on); }
+
+    function setStepState(card, state) {
+      card.classList.toggle("is-locked", state === "locked");
+      card.classList.toggle("is-done", state === "done");
+    }
+
+    // ── config + Maps SDK ─────────────────────────────────────────────────
+    async function loadConfig() {
+      if (config) return config;
+      const resp = await api("/video-tour/config");
+      if (!resp.ok) throw new Error("config");
+      config = await resp.json();
+      return config;
+    }
+
+    // The Maps JS SDK is loaded lazily, on the first successful geocode, so an
+    // agency that never opens this tool never pays the script's weight.
+    function loadMaps(key) {
+      if (mapsLoading) return mapsLoading;
+      mapsLoading = new Promise((resolve, reject) => {
+        if (window.google && window.google.maps) return resolve();
+        const cbName = "__vtMapsReady";
+        window[cbName] = () => { delete window[cbName]; resolve(); };
+        const script = document.createElement("script");
+        script.src =
+          "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(key) +
+          "&v=weekly&libraries=marker&loading=async&callback=" + cbName;
+        script.async = true;
+        script.onerror = () => reject(new Error("maps"));
+        document.head.appendChild(script);
+      });
+      return mapsLoading;
+    }
+
+    function placeMarker(lat, lng) {
+      const position = { lat: lat, lng: lng };
+      if (!map) {
+        const options = { center: position, zoom: 18, mapTypeId: "hybrid",
+          streetViewControl: false, fullscreenControl: false, mapTypeControl: false };
+        // AdvancedMarkerElement needs a cloud-configured Map ID. When one is
+        // set we use it; otherwise we fall back to the legacy Marker, which
+        // still drags fine and needs no Map ID.
+        if (config && config.map_id) options.mapId = config.map_id;
+        map = new google.maps.Map(mapEl, options);
+      } else {
+        map.setCenter(position);
+      }
+
+      const useAdvanced = !!(config && config.map_id &&
+        google.maps.marker && google.maps.marker.AdvancedMarkerElement);
+
+      if (marker) {
+        if (useAdvanced) marker.position = position; else marker.setPosition(position);
+        return;
+      }
+      if (useAdvanced) {
+        marker = new google.maps.marker.AdvancedMarkerElement({
+          map: map, position: position, gmpDraggable: true,
+        });
+        marker.addListener("dragend", (evt) => {
+          picked.lat = evt.latLng.lat();
+          picked.lng = evt.latLng.lng();
+        });
+      } else {
+        marker = new google.maps.Marker({ map: map, position: position, draggable: true });
+        marker.addListener("dragend", (evt) => {
+          picked.lat = evt.latLng.lat();
+          picked.lng = evt.latLng.lng();
+        });
+      }
+    }
+
+    // ── step 1 ────────────────────────────────────────────────────────────
+    async function search() {
+      const s = S();
+      step1Err.textContent = "";
+      const address = addressInput.value.trim();
+      if (!address) { step1Err.textContent = s.vt_err_address; return; }
+
+      searchBtn.disabled = true;
+      try {
+        const cfg = await loadConfig();
+        if (!cfg.maps_key) { step1Err.textContent = s.vt_err_maps; return; }
+
+        const resp = await api("/video-tour/geocode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address: address }),
+        });
+        if (!resp.ok) { step1Err.textContent = s.vt_err_geocode; return; }
+        const found = await resp.json();
+
+        picked = { address: found.address, lat: found.lat, lng: found.lng };
+        addressInput.value = found.address;
+
+        await loadMaps(cfg.maps_key);
+        show(mapEl, true);
+        show(mapHint, true);
+        placeMarker(found.lat, found.lng);
+        confirmBtn.disabled = false;
+      } catch (_) {
+        step1Err.textContent = S().vt_err_maps;
+      } finally {
+        searchBtn.disabled = false;
+      }
+    }
+
+    async function confirmLocation() {
+      if (!picked) return;
+      const s = S();
+      confirmBtn.disabled = true;
+      step1Err.textContent = "";
+      try {
+        const resp = await api("/video-tour", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address: picked.address, lat: picked.lat, lng: picked.lng,
+          }),
+        });
+        if (!resp.ok) throw new Error("create");
+        const job = await resp.json();
+        jobId = job.id;
+
+        // Collapse step 1 to its confirmed address and open step 2. The tile
+        // capture is already running server-side at this point.
+        collapsedAddress.textContent = picked.address;
+        show(step1Body, false);
+        show(step1Collapsed, true);
+        setStepState(step1, "done");
+        setStepState(step2, "open");
+      } catch (_) {
+        step1Err.textContent = s.vt_err_maps;
+        confirmBtn.disabled = false;
+      }
+    }
+
+    // ── step 2 ────────────────────────────────────────────────────────────
+    // Uploads are fire-and-forget: the agent is never made to wait on one, and
+    // the exterior photo closes the backend's gate whenever it happens to land.
+    let exteriorReady = false, interiorReady = false;
+
+    function refreshContinue() {
+      // Both are required before step 3 opens. Not a style choice: step 3 has
+      // no way back, and the pipeline cannot finish a tour that is missing
+      // either input — the job would sit in "preparing" forever.
+      continueBtn.disabled = !(exteriorReady && interiorReady);
+    }
+
+    function badType(files) {
+      for (const file of files) {
+        if (file.type && ACCEPTED_TYPES.indexOf(file.type) === -1) return true;
+      }
+      return false;
+    }
+
+    async function uploadExterior(file) {
+      const s = S();
+      step2Err.textContent = "";
+      if (badType([file])) { step2Err.textContent = s.vt_err_type; return; }
+
+      exteriorImg.src = URL.createObjectURL(file);
+      show(exteriorImg, true);
+      show(exteriorEmpty, false);
+      exteriorState.classList.remove("is-error");
+      exteriorState.textContent = s.vt_uploading;
+      exteriorReady = true;   // the agent may move on immediately
+      refreshContinue();
+
+      const body = new FormData();
+      body.append("image", file);
+      try {
+        const resp = await api("/video-tour/" + jobId + "/exterior-photo", {
+          method: "POST", body: body,
+        });
+        if (!resp.ok) throw new Error("upload");
+        exteriorState.textContent = S().vt_uploaded_ok;
+      } catch (_) {
+        exteriorState.classList.add("is-error");
+        exteriorState.textContent = S().vt_err_upload;
+        exteriorReady = false;
+        refreshContinue();
+      }
+    }
+
+    async function uploadInteriors(files) {
+      const s = S();
+      step2Err.textContent = "";
+      const list = Array.prototype.slice.call(files);
+      if (!list.length) return;
+      if (badType(list)) { step2Err.textContent = s.vt_err_type; return; }
+
+      const max = (config && config.max_interior_photos) || 8;
+      if (list.length > max) {
+        // Mirrors the server's cap. Every room is generated (billed) seconds,
+        // so this is a cost ceiling, not a model limit.
+        step2Err.textContent = s.vt_err_too_many.replace("{n}", max);
+        return;
+      }
+
+      interiorThumbs.innerHTML = "";
+      for (const file of list) {
+        const img = document.createElement("img");
+        img.src = URL.createObjectURL(file);
+        interiorThumbs.appendChild(img);
+      }
+      show(interiorThumbs, true);
+      show(interiorEmpty, false);
+      interiorState.classList.remove("is-error");
+      interiorState.textContent = s.vt_uploading;
+      interiorReady = true;
+      refreshContinue();
+
+      const body = new FormData();
+      for (const file of list) body.append("images", file);
+      try {
+        const resp = await api("/video-tour/" + jobId + "/interior-photos", {
+          method: "POST", body: body,
+        });
+        if (!resp.ok) throw new Error("upload");
+        interiorState.textContent = pluralize("vt_rooms_uploaded", list.length);
+      } catch (_) {
+        interiorState.classList.add("is-error");
+        interiorState.textContent = S().vt_err_upload;
+        interiorReady = false;
+        refreshContinue();
+      }
+    }
+
+    // Click-to-pick and drag-and-drop share one handler per panel so the two
+    // entry points cannot drift apart.
+    function wirePanel(panel, input, onFiles) {
+      panel.addEventListener("click", () => input.click());
+      input.addEventListener("change", () => {
+        if (input.files && input.files.length) onFiles(input.files);
+      });
+      panel.addEventListener("dragover", (evt) => {
+        evt.preventDefault();
+        panel.classList.add("is-dragover");
+      });
+      panel.addEventListener("dragleave", () => panel.classList.remove("is-dragover"));
+      panel.addEventListener("drop", (evt) => {
+        evt.preventDefault();
+        panel.classList.remove("is-dragover");
+        if (evt.dataTransfer && evt.dataTransfer.files.length) {
+          onFiles(evt.dataTransfer.files);
+        }
+      });
+    }
+
+    // ── step 3 ────────────────────────────────────────────────────────────
+    function openStep3() {
+      reachedStep3 = true;
+      setStepState(step2, "done");
+      setStepState(step3, "open");
+      // Step 2 stays visible but inert: the uploads it started may still be in
+      // flight, and re-picking a photo now would not reach the generation.
+      step2.classList.add("is-locked");
+      render({ player_state: "preparing", progress_pct: 0 });
+      poll();
+    }
+
+    function render(job) {
+      const s = S();
+      const state = job.player_state;
+      step3Err.textContent = "";
+
+      show(video, state === "ready");
+      show(playerWaiting, state !== "ready");
+      show(playerLoader, state === "preparing" || state === "generating");
+      show(progressWrap, state === "generating");
+      show(retryBtn, state === "error");
+      show(downloadLink, state === "ready");
+      show(newBtn, state === "ready");
+
+      if (state === "preparing") {
+        playerStatus.textContent = s.vt_state_preparing;
+        playerNote.textContent = s.vt_state_preparing_note;
+      } else if (state === "generating") {
+        playerStatus.textContent = s.vt_state_generating;
+        playerNote.textContent = s.vt_state_generating_note;
+        progressBar.style.width = (job.progress_pct || 0) + "%";
+      } else if (state === "ready") {
+        const src = "/video-tour/" + jobId + "/video";
+        if (video.getAttribute("src") !== src) video.setAttribute("src", src);
+        downloadLink.href = src;
+        playerNote.textContent = s.vt_state_ready_note;
+      } else {
+        playerStatus.textContent = s.vt_state_error;
+        playerNote.textContent = s.vt_state_error_note;
+      }
+    }
+
+    async function poll() {
+      clearTimeout(pollTimer);
+      if (!jobId || !reachedStep3) return;
+      try {
+        const resp = await api("/video-tour/" + jobId);
+        if (resp.ok) {
+          const job = await resp.json();
+          render(job);
+          if (job.player_state === "ready" || job.player_state === "error") return;
+        }
+      } catch (_) {
+        // A dropped poll is not a failed job — the next tick picks it up.
+      }
+      pollTimer = setTimeout(poll, POLL_MS);
+    }
+
+    async function retry() {
+      retryBtn.disabled = true;
+      step3Err.textContent = "";
+      try {
+        const resp = await api("/video-tour/" + jobId + "/retry", { method: "POST" });
+        if (!resp.ok) throw new Error("retry");
+        render({ player_state: "generating", progress_pct: 0 });
+        poll();
+      } catch (_) {
+        step3Err.textContent = S().vt_state_error;
+      } finally {
+        retryBtn.disabled = false;
+      }
+    }
+
+    function reset() {
+      clearTimeout(pollTimer);
+      jobId = null; picked = null; marker = null; map = null;
+      exteriorReady = false; interiorReady = false; reachedStep3 = false;
+      addressInput.value = "";
+      step1Err.textContent = ""; step2Err.textContent = ""; step3Err.textContent = "";
+      exteriorState.textContent = ""; interiorState.textContent = "";
+      exteriorInput.value = ""; interiorInput.value = "";
+      interiorThumbs.innerHTML = "";
+      video.removeAttribute("src");
+      show(exteriorImg, false); show(exteriorEmpty, true);
+      show(interiorThumbs, false); show(interiorEmpty, true);
+      show(mapEl, false); show(mapHint, false);
+      mapEl.innerHTML = "";
+      show(step1Body, true); show(step1Collapsed, false);
+      confirmBtn.disabled = true; continueBtn.disabled = true;
+      setStepState(step1, "open"); setStepState(step2, "locked");
+      setStepState(step3, "locked");
+    }
+
+    // A job left at step 1 or 2 has media on disk and no one coming back for
+    // it. Telling the server frees it early instead of holding it for the full
+    // retention window. Beacon, because it has to survive the page going away.
+    window.addEventListener("pagehide", () => {
+      if (jobId && !reachedStep3) {
+        navigator.sendBeacon("/video-tour/" + jobId + "/abandon");
+      }
+    });
+
+    searchBtn.addEventListener("click", search);
+    addressInput.addEventListener("keydown", (evt) => {
+      if (evt.key === "Enter") { evt.preventDefault(); search(); }
+    });
+    confirmBtn.addEventListener("click", confirmLocation);
+    wirePanel(exteriorPanel, exteriorInput, (files) => uploadExterior(files[0]));
+    wirePanel(interiorPanel, interiorInput, uploadInteriors);
+    continueBtn.addEventListener("click", openStep3);
+    retryBtn.addEventListener("click", retry);
+    newBtn.addEventListener("click", reset);
+
+    // Copy that TEXT_IDS cannot reach: the address placeholder, and whatever
+    // the player happens to be showing when the locale changes.
+    window.VtApplyStrings = function () {
+      const s = S();
+      addressInput.placeholder = s.vt_address_placeholder;
+      if (reachedStep3 && playerStatus.textContent) {
+        // Re-render from the next poll rather than guessing the state here.
+        poll();
+      }
+    };
+
+    window.VtInit = function () {
+      loadConfig().catch(() => {});
+      window.VtApplyStrings();
+    };
+
+    setStepState(step2, "locked");
+    setStepState(step3, "locked");
+  })();
   applyStrings();  // localise the login screen before the tenant is known
   init();
 </script>

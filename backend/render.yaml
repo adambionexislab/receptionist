@@ -1,14 +1,31 @@
 services:
   - type: web
     name: ai-receptionist
-    runtime: python
-    plan: starter # persistent disks require a paid instance
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    # Docker, not the native Python runtime, since the AI video tour landed:
+    # ffmpeg is a system binary and Chromium needs system libraries, and the
+    # native runtime offers neither apt nor root. See backend/Dockerfile.
+    #
+    # Both paths below are relative to the REPO ROOT, not to rootDir — that is
+    # Render's rule for these two fields specifically, and it differs from the
+    # old buildCommand/startCommand, which ran from the service's root
+    # directory. Hence ./backend/ on both rather than ./.
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    # starter (512 MB / 0.5 CPU) is not enough once a tile capture runs here:
+    # software-WebGL Chromium plus an ffmpeg encode share this instance with
+    # live phone calls. A Render disk attaches to exactly one service, so the
+    # pipeline cannot be split onto a worker without moving media off-disk.
+    plan: standard
     disk:
       name: data
       mountPath: /data
-      sizeGB: 1
+      # Was 1 GB, which held only the SQLite file. A tour peaks around 145 MB
+      # mid-pipeline and settles near 85 MB, so 1 GB is roughly 10-20 tours —
+      # and a full disk takes receptionist.db down with it, not just the video.
+      # The retention sweeper (videotour/pipeline.py) keeps this from growing
+      # without bound; the headroom is what covers a busy week between sweeps.
+      sizeGB: 10
     envVars:
       - key: PORT
         value: 10000
@@ -76,3 +93,38 @@ services:
         sync: false
       - key: CALENDLY_LINK
         sync: false
+      # ── AI video tour ─────────────────────────────────────────────────────
+      # Ships dark until this is "true", like ACQUISIZIONE_ENABLED above.
+      - key: VIDEO_TOUR_ENABLED
+        value: "false"
+      # Server-side key. Geocoding API must be enabled on it.
+      - key: GOOGLE_GEOCODING_API_KEY
+        sync: false
+      # Embedded in the dashboard page for the draggable-marker map, so this
+      # MUST be a separate key restricted by HTTP referrer, with only the Maps
+      # JavaScript API enabled. Never reuse GOOGLE_PLACES_API_KEY here.
+      # Cloud-configured Map ID. Without it the wizard falls back to the legacy
+      # draggable Marker; set it to use AdvancedMarkerElement instead.
+      - key: GOOGLE_MAPS_MAP_ID
+        sync: false
+      - key: GOOGLE_MAPS_BROWSER_KEY
+        sync: false
+      # Map Tiles API (Photorealistic 3D Tiles), read server-side by the
+      # headless Cesium capture.
+      - key: GOOGLE_MAP_TILES_API_KEY
+        sync: false
+      - key: RUNWAY_API_KEY
+        sync: false
+      - key: RUNWAY_API_VERSION
+        value: "2024-11-06"
+      # Seedance 2.5 is the model because it is the only family in Runway's API
+      # with multi-image reference mode — gen4.5/gen4_turbo take a first frame
+      # only, so they cannot cover several rooms in one generation.
+      - key: RUNWAY_VIDEO_MODEL
+        value: seedance2_5
+      # 854:480 | 1280:720 | 1920:1080 — 20 / 30 / 68 credits per second of
+      # output. This is the single biggest cost lever on the feature.
+      - key: RUNWAY_VIDEO_RATIO
+        value: "1280:720"
+      - key: VIDEO_TOUR_MAX_INTERIOR_PHOTOS
+        value: "8"

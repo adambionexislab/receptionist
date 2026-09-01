@@ -80,7 +80,10 @@ def me(tenant: dict = Depends(current_tenant)):
         "agency_name": tenant["agency_name"],
         "agent_name": tenant.get("agent_name") or "Apollonia",
         "locale": tenant.get("locale") or "it",
-        "features": {"acquisizione": settings.ACQUISIZIONE_ENABLED},
+        "features": {
+            "acquisizione": settings.ACQUISIZIONE_ENABLED,
+            "video_tour": settings.VIDEO_TOUR_ENABLED,
+        },
     }
 
 

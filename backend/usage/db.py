@@ -40,6 +40,16 @@ logger = logging.getLogger(__name__)
 TOOL_PRICES_CENTS = {
     "photo": 50,     # one enhanced/staged property photo
     "meeting": 100,  # one transcribed + extracted seller meeting
+    # One AI video tour (drone fly-in + interior room tour).
+    #
+    # PRICE NOT YET SET BY THE OPERATOR. This is an order of magnitude above
+    # the other two tools and the placeholder reflects cost, not margin: at
+    # 720p Seedance bills 30 credits ($0.30) a second of output, so a 6s
+    # fly-in plus a 30s interior tour is ~1080 credits ≈ €10 of raw API spend
+    # before any margin. Lowering RUNWAY_VIDEO_RATIO to 854:480 cuts that to
+    # roughly €6.60. Note a Base plan includes €15 of tool credits a month,
+    # so at this price one tour is most of that allowance.
+    "video_tour": 1500,
 }
 
 # AI-tool credit allowance included with each subscription tier, in euro cents.

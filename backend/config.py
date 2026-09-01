@@ -104,6 +104,50 @@ class Settings(BaseSettings):
     # Property photo enhancement (declutter/relight/straighten).
     IMAGE_EDIT_MODEL: str = "gpt-image-2"
 
+    # ── AI video tour (drone fly-in + interior room tour) ────────────────────
+    # Ships dark until this is set, exactly like ACQUISIZIONE_ENABLED.
+    VIDEO_TOUR_ENABLED: bool = False
+    # Google Maps Platform. The geocoding key is server-side and must stay
+    # secret; MAPS_BROWSER_KEY is embedded in the dashboard page for the
+    # draggable-marker map, so it must be a SEPARATE, HTTP-referrer-restricted
+    # key. Never reuse GOOGLE_PLACES_API_KEY here — that one is server-side.
+    GOOGLE_GEOCODING_API_KEY: Optional[str] = None
+    GOOGLE_MAPS_BROWSER_KEY: Optional[str] = None
+    # Cloud-configured Map ID. Google's AdvancedMarkerElement requires one; when
+    # this is unset the wizard falls back to the legacy draggable Marker, which
+    # needs no Map ID. Set it to move off the deprecated marker API.
+    GOOGLE_MAPS_MAP_ID: Optional[str] = None
+    # Photorealistic 3D Tiles, streamed into headless Chromium by CesiumJS.
+    GOOGLE_MAP_TILES_API_KEY: Optional[str] = None
+    # Runway. Seedance 2.5 is the model for both clips — not for last-frame
+    # keyframes (we pin no frames), but because it is the only family in
+    # Runway's API with multi-image REFERENCE mode, which is what lets one
+    # generation cover several rooms. gen4.5/gen4_turbo are first-frame only.
+    RUNWAY_API_KEY: Optional[str] = None
+    RUNWAY_API_VERSION: str = "2024-11-06"
+    RUNWAY_VIDEO_MODEL: str = "seedance2_5"
+    # 854:480 | 1280:720 | 1920:1080. Drives cost directly: at 20/30/68 credits
+    # per second of output, a 30-second interior tour is $6.00 / $9.00 / $20.40.
+    RUNWAY_VIDEO_RATIO: str = "1280:720"
+    # Seconds for the drone fly-in. Seedance accepts 4-30 and bills per second.
+    VIDEO_TOUR_DRONE_SECONDS: int = 6
+    # Roughly how long each room gets in the single interior generation. The
+    # total is clamped to Seedance's 30-second ceiling, which doubles as the
+    # per-tour cost cap: 30s is 900 credits at 720p no matter how many rooms.
+    VIDEO_TOUR_SECONDS_PER_ROOM: int = 4
+    # Hard cap on interior photos. Seedance takes up to 30 reference images, so
+    # this is a cost decision, not a model limit — every room added is more
+    # generated seconds. Enforced server-side as well as in the wizard.
+    VIDEO_TOUR_MAX_INTERIOR_PHOTOS: int = 8
+    # Retries spend real Runway credits, so a persistently failing job has to
+    # stop rather than bill the agency in a loop.
+    VIDEO_TOUR_MAX_ATTEMPTS: int = 3
+    # Retention. The disk is shared with the SQLite file every call writes to,
+    # so these are what stop a full disk from becoming an outage.
+    VIDEO_TOUR_KEEP_READY_DAYS: int = 30
+    VIDEO_TOUR_KEEP_DEAD_DAYS: int = 2
+    VIDEO_TOUR_SWEEP_INTERVAL_SECONDS: int = 6 * 3600
+
     model_config = {"env_file": str(_ENV_FILE)}
 
 
