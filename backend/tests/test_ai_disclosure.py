@@ -96,3 +96,14 @@ def test_the_website_demo_opening_carries_it_too(locale):
     note = _flat(demo_router._DEMO_NOTES[locale])
 
     assert VIRTUAL_ASSISTANT[locale] in note
+
+
+@pytest.mark.parametrize(
+    "locale,doubled",
+    [("it", "assistente virtuale di apollonia"), ("sk", "virtuálna asistentka apollonia")],
+)
+def test_the_demo_does_not_make_her_say_her_name_twice(locale, doubled):
+    """In the demo the "agency" is ApollonIA — which is also her own name, so
+    the disclosure came out as "volám sa Apollonia, som virtuálna asistentka
+    ApollonIA". There she declares she is virtual without naming anyone."""
+    assert doubled not in _flat(demo_router._DEMO_NOTES[locale])
