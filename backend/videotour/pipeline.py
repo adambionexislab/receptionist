@@ -42,17 +42,21 @@ def _spawn(coro) -> None:
     task.add_done_callback(_TASKS.discard)
 
 
-async def _meter(tenant_id: str, job_id: str) -> None:
+async def _meter(tenant_id: str, job_id: str, branch_id: str | None = None) -> None:
     """Charge one video tour against the tenant's monthly credits.
 
     Called only once a tour is actually deliverable, and keyed on the job id so
-    a retried job is billed once rather than once per attempt. Never raises:
-    the agency has their video by this point, and failing the request now would
+    a retried job is billed once rather than once per attempt. `branch_id` is
+    the office the job was started from, carried on the job row because this
+    runs from a background task with no request behind it. Never raises: the
+    agency has their video by this point, and failing the request now would
     report a broken tool that is not broken (same reasoning as
     acquisizione/router.py's _meter).
     """
     try:
-        await asyncio.to_thread(usage_db.record, tenant_id, "video_tour", job_id)
+        await asyncio.to_thread(
+            usage_db.record, tenant_id, "video_tour", job_id, branch_id
+        )
     except Exception:
         logger.exception("Failed to meter video tour %s for tenant %s", job_id, tenant_id)
 
@@ -247,7 +251,7 @@ async def _stitch(job: dict[str, Any]) -> None:
 
     stored = storage.rel(tenant_id, job_id, "tour.mp4")
     if await asyncio.to_thread(db.set_ready, job_id, tenant_id, stored):
-        await _meter(tenant_id, job_id)
+        await _meter(tenant_id, job_id, job.get("branch_id"))
         # The working files are ~40% of the job's footprint and nothing reads
         # them again. Dropped here rather than on the sweeper's schedule so the
         # disk is reclaimed the moment the tour is deliverable.

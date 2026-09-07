@@ -130,7 +130,14 @@ CREATE INDEX IF NOT EXISTS idx_video_tour_sweep
 # alter an existing table on a deployed disk, so each is added with an
 # idempotent ALTER on startup — same pattern as tenants/db.py, listings/db.py
 # and acquisizione/db.py.
-_ADDED_COLUMNS: dict[str, str] = {}
+#
+# branch_id: the agency office the dashboard was scoped to when the tour was
+# started. Carried on the job rather than read at metering time because a tour
+# is billed minutes-to-hours later, from a background task with no request
+# behind it (see pipeline._stitch).
+_ADDED_COLUMNS: dict[str, str] = {
+    "branch_id": "TEXT",
+}
 
 _JSON_FIELDS = ("interior_photo_paths",)
 
@@ -189,6 +196,7 @@ def create(
     lat: float,
     lng: float,
     listing_id: Optional[str] = None,
+    branch_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """Open a job at step 1 confirm. Starts in 'rendering_tile' — the tile
     capture is fired by the caller immediately after this returns, so the job
@@ -198,6 +206,7 @@ def create(
         "id": str(uuid.uuid4()),
         "tenant_id": tenant_id,
         "listing_id": listing_id,
+        "branch_id": branch_id,
         "locale": locale or "it",
         "status": RENDERING_TILE,
         "address": address,
@@ -210,13 +219,13 @@ def create(
     with _tenants_db.write_lock:
         conn.execute(
             "INSERT INTO video_tour_jobs "
-            "(id, tenant_id, listing_id, locale, status, address, lat, lng, "
-            " created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "(id, tenant_id, listing_id, branch_id, locale, status, address, "
+            " lat, lng, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                job["id"], job["tenant_id"], job["listing_id"], job["locale"],
-                job["status"], job["address"], job["lat"], job["lng"],
-                job["created_at"], job["updated_at"],
+                job["id"], job["tenant_id"], job["listing_id"], job["branch_id"],
+                job["locale"], job["status"], job["address"], job["lat"],
+                job["lng"], job["created_at"], job["updated_at"],
             ),
         )
         conn.commit()

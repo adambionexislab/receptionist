@@ -62,8 +62,18 @@ CREATE INDEX IF NOT EXISTS idx_contacts_tenant ON contacts(tenant_id, created_at
 # assigned_agent stores the display form ("#2 Marco Rossi"), not an id: it is a
 # record of where a lead was actually sent, and should keep reading true even
 # after that agent is renamed or removed.
+#
+# branch_id, in contrast, IS an id (branches.id): it is a filter, not a label,
+# and the dashboard's branch view is a query over it. It is stamped at persist
+# time from the branch of the agent the lead was routed to (see
+# call/router._persist_call) and never recomputed, so moving an agent between
+# offices next month does not rewrite which office handled last month's calls.
+# NULL means the call belongs to no branch — nobody's listing was involved, or
+# the agent had no office — and such calls are counted only in the whole-agency
+# view. Every call recorded before branches shipped is in that state.
 _ADDED_COLUMNS = {
-    "contacts": {"assigned_agent": "TEXT"},
+    "call_sessions": {"branch_id": "TEXT"},
+    "contacts": {"assigned_agent": "TEXT", "branch_id": "TEXT"},
 }
 
 _initialized = False
@@ -111,6 +121,7 @@ def add_call_session(
     locale: str,
     outcome: str,
     summary: Optional[str],
+    branch_id: Optional[str] = None,
 ) -> int:
     """Record one accepted call. Returns the new row id."""
     conn = _conn()
@@ -118,10 +129,10 @@ def add_call_session(
         cur = conn.execute(
             "INSERT INTO call_sessions "
             "(tenant_id, call_id, caller_number, started_at, ended_at, "
-            " duration_seconds, locale, outcome, summary) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " duration_seconds, locale, outcome, summary, branch_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (tenant_id, call_id, caller_number, started_at, ended_at,
-             duration_seconds, locale, outcome, summary),
+             duration_seconds, locale, outcome, summary, branch_id),
         )
         conn.commit()
         return cur.lastrowid
@@ -137,6 +148,7 @@ def add_contact(
     details: Optional[str],
     created_at: Optional[str],
     assigned_agent: Optional[str] = None,
+    branch_id: Optional[str] = None,
 ) -> int:
     """Record one follow-up-worthy caller. Returns the new row id."""
     conn = _conn()
@@ -144,16 +156,21 @@ def add_contact(
         cur = conn.execute(
             "INSERT INTO contacts "
             "(tenant_id, call_session_id, name, phone, interest, summary, "
-            " details, assigned_agent, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " details, assigned_agent, created_at, branch_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (tenant_id, call_session_id, name, phone, interest, summary,
-             details, assigned_agent, created_at),
+             details, assigned_agent, created_at, branch_id),
         )
         conn.commit()
         return cur.lastrowid
 
 
-def monthly_call_stats(tenant_id: str, start_utc: str, end_utc: str) -> dict[str, int]:
+def monthly_call_stats(
+    tenant_id: str,
+    start_utc: str,
+    end_utc: str,
+    branch_id: Optional[str] = None,
+) -> dict[str, int]:
     """Total call seconds and call count for ONE tenant between two UTC ISO
     instants — the tenant's subscription month, resolved by the caller (see
     billing/period.py) and passed in, so this and the AI-tool credits are
@@ -162,18 +179,25 @@ def monthly_call_stats(tenant_id: str, start_utc: str, end_utc: str) -> dict[str
     started_at is stored as a UTC ISO string and the bounds are UTC ISO
     strings, so the comparison is a plain string comparison. `end_utc` is
     exclusive. Strictly scoped by tenant_id. Data only exists from go-live
-    forward — there is no history before call persistence shipped."""
+    forward — there is no history before call persistence shipped.
+
+    With `branch_id`, only the calls attributed to that office. Note this is a
+    strict subset: the branches' numbers do not add up to the agency's, because
+    a call nobody's listing was involved in belongs to no branch (see
+    _ADDED_COLUMNS). The whole-agency view is the one that bills."""
     conn = _conn()
+    scope = " AND branch_id = ?" if branch_id else ""
+    branch_param: tuple = (branch_id,) if branch_id else ()
     row = conn.execute(
         "SELECT COALESCE(SUM(duration_seconds), 0) AS secs, COUNT(*) AS calls "
         "FROM call_sessions "
-        "WHERE tenant_id = ? AND started_at >= ? AND started_at < ?",
-        (tenant_id, start_utc, end_utc),
+        "WHERE tenant_id = ? AND started_at >= ? AND started_at < ?" + scope,
+        (tenant_id, start_utc, end_utc, *branch_param),
     ).fetchone()
     crow = conn.execute(
         "SELECT COUNT(*) AS c FROM contacts "
-        "WHERE tenant_id = ? AND created_at >= ? AND created_at < ?",
-        (tenant_id, start_utc, end_utc),
+        "WHERE tenant_id = ? AND created_at >= ? AND created_at < ?" + scope,
+        (tenant_id, start_utc, end_utc, *branch_param),
     ).fetchone()
     return {
         "seconds": int(row["secs"] or 0),
@@ -182,18 +206,23 @@ def monthly_call_stats(tenant_id: str, start_utc: str, end_utc: str) -> dict[str
     }
 
 
-def list_contacts(tenant_id: str, limit: int = 200) -> list[dict[str, Any]]:
+def list_contacts(
+    tenant_id: str, limit: int = 200, branch_id: Optional[str] = None
+) -> list[dict[str, Any]]:
     """Most-recent contacts for ONE tenant, joined to their call for outcome and
-    duration. Strictly scoped by tenant_id — this is client data."""
+    duration. Strictly scoped by tenant_id — this is client data.
+
+    With `branch_id`, only the leads that went to that office's agents."""
     limit = max(1, min(limit, 500))
     rows = _conn().execute(
         "SELECT c.id, c.name, c.phone, c.interest, c.summary, c.assigned_agent, "
-        "       c.created_at, cs.outcome, cs.duration_seconds, cs.caller_number "
+        "       c.branch_id, c.created_at, cs.outcome, cs.duration_seconds, "
+        "       cs.caller_number "
         "FROM contacts c "
         "LEFT JOIN call_sessions cs ON cs.id = c.call_session_id "
-        "WHERE c.tenant_id = ? "
+        "WHERE c.tenant_id = ? " + ("AND c.branch_id = ? " if branch_id else "") +
         "ORDER BY c.created_at DESC, c.id DESC "
         "LIMIT ?",
-        (tenant_id, limit),
+        (tenant_id, *((branch_id,) if branch_id else ()), limit),
     ).fetchall()
     return [dict(r) for r in rows]

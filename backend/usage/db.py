@@ -97,6 +97,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_usage_ref
   ON tool_usage(tenant_id, tool, ref) WHERE ref IS NOT NULL;
 """
 
+# Columns added after the table first shipped; CREATE TABLE IF NOT EXISTS won't
+# alter an existing table on a deployed disk, so each is applied with an
+# idempotent ALTER on startup (see _migrate) — same pattern as calls/db.py.
+#
+# branch_id is which office spent the credit: the branch the dashboard was
+# scoped to when the tool ran (see dashboard.router.current_branch). NULL when
+# the tool was run from the whole-agency view, or before branches shipped —
+# that spend is real and is billed, it just isn't attributed to an office.
+_ADDED_COLUMNS = {
+    "branch_id": "TEXT",
+}
+
 _initialized = False
 
 
@@ -109,9 +121,20 @@ def init() -> None:
     with _tenants_db.write_lock:
         if not _initialized:
             conn.executescript(_SCHEMA)
+            _migrate(conn)
             conn.commit()
             _initialized = True
             logger.info("Usage table ready (tool_usage)")
+
+
+def _migrate(conn) -> None:
+    """Add columns introduced after the table first shipped. Idempotent: each
+    column is added only if a pre-existing table is missing it."""
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(tool_usage)")}
+    for column, ddl in _ADDED_COLUMNS.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE tool_usage ADD COLUMN {column} {ddl}")
+            logger.info("Migrated tool_usage table: added column %s", column)
 
 
 def _conn():
@@ -165,7 +188,12 @@ def billable_minutes(seconds: int) -> int:
     return (max(0, int(seconds)) + 30) // 60
 
 
-def record(tenant_id: str, tool: str, ref: Optional[str] = None) -> bool:
+def record(
+    tenant_id: str,
+    tool: str,
+    ref: Optional[str] = None,
+    branch_id: Optional[str] = None,
+) -> bool:
     """Charge one use of `tool` against this tenant's credits.
 
     Returns True when it was charged, False when `ref` names something this
@@ -174,6 +202,10 @@ def record(tenant_id: str, tool: str, ref: Optional[str] = None) -> bool:
 
     Called only after the tool has actually done its work: a failed photo
     enhancement or a session that never opened costs the agency nothing.
+
+    `branch_id` only attributes the spend to an office for the dashboard's
+    branch view; the charge itself is the agency's either way, and a use with
+    no branch is billed identically.
     """
     if tool not in TOOL_PRICES_CENTS:
         raise ValueError(f"Unknown tool: {tool}")
@@ -183,8 +215,9 @@ def record(tenant_id: str, tool: str, ref: Optional[str] = None) -> bool:
     with _tenants_db.write_lock:
         cur = conn.execute(
             "INSERT OR IGNORE INTO tool_usage "
-            "(tenant_id, tool, cost_cents, ref, created_at) VALUES (?, ?, ?, ?, ?)",
-            (tenant_id, tool, TOOL_PRICES_CENTS[tool], ref, now),
+            "(tenant_id, tool, cost_cents, ref, created_at, branch_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (tenant_id, tool, TOOL_PRICES_CENTS[tool], ref, now, branch_id),
         )
         conn.commit()
     charged = cur.rowcount > 0
@@ -196,16 +229,26 @@ def record(tenant_id: str, tool: str, ref: Optional[str] = None) -> bool:
     return charged
 
 
-def monthly_usage(tenant_id: str, start_utc: str, end_utc: str) -> dict[str, Any]:
+def monthly_usage(
+    tenant_id: str,
+    start_utc: str,
+    end_utc: str,
+    branch_id: Optional[str] = None,
+) -> dict[str, Any]:
     """What ONE tenant spent on AI tools between two UTC ISO instants — their
     subscription month, resolved by the caller (see billing/period.py) — with a
-    per-tool count. `end_utc` is exclusive. Strictly scoped by tenant_id."""
+    per-tool count. `end_utc` is exclusive. Strictly scoped by tenant_id.
+
+    With `branch_id`, only what that office spent. Never used to compute a
+    bill: the allowance belongs to the subscription, so only the whole-agency
+    figure (branch_id=None) has an allowance to be measured against."""
     rows = _conn().execute(
         "SELECT tool, COUNT(*) AS uses, COALESCE(SUM(cost_cents), 0) AS cents "
         "FROM tool_usage "
-        "WHERE tenant_id = ? AND created_at >= ? AND created_at < ? "
+        "WHERE tenant_id = ? AND created_at >= ? AND created_at < ? " +
+        ("AND branch_id = ? " if branch_id else "") +
         "GROUP BY tool",
-        (tenant_id, start_utc, end_utc),
+        (tenant_id, start_utc, end_utc, *((branch_id,) if branch_id else ())),
     ).fetchall()
 
     # Every known tool is present at zero, so the dashboard doesn't have to

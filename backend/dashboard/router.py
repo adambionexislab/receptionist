@@ -5,6 +5,13 @@ Auth is a single per-tenant access code (see tenants.access_code). POST
 route depends on `current_tenant`, which reads that cookie and resolves the
 tenant so all queries are strictly scoped to one tenant_id.
 
+Inside a tenant there is a second, non-security scope: the branch (the agency's
+office — see branches/db.py). The page sends the selected one in an X-Branch-Id
+header on every request and `current_branch` resolves it against the tenant, so
+a branch id from another agency is a 404 rather than a filter. No branch header
+means the whole agency, which is what every response looked like before
+branches existed.
+
 The page itself is one static SPA served at /dashboard (and aliased at
 /sk/dashboard for URL continuity with the Slovak site). Locale is driven by the
 logged-in tenant's `locale`, not the URL, so there is no separate Slovak page.
@@ -21,6 +28,7 @@ from pydantic import BaseModel
 
 from agents import db as agents_db
 from billing import period
+from branches import db as branches_db
 from calls import db as calls_db
 from config import settings
 from dashboard import session as sess
@@ -33,6 +41,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _PAGE = Path(__file__).parent / "index.html"
+
+# Header the page sends the selected branch in. A header rather than a query
+# parameter so the one place the page makes requests (its api() helper) can set
+# it for every endpoint at once — including the AI tools, which meter what they
+# spend against the branch that was selected when they ran.
+BRANCH_HEADER = "X-Branch-Id"
 
 
 class LoginRequest(BaseModel):
@@ -51,6 +65,31 @@ def current_tenant(request: Request) -> dict:
     if not tenant or not tenant.get("active"):
         raise HTTPException(status_code=401, detail="Not authenticated")
     return tenant
+
+
+def current_branch(
+    request: Request, tenant: dict = Depends(current_tenant)
+) -> Optional[dict]:
+    """FastAPI dependency: the branch the page is scoped to, or None for the
+    whole agency.
+
+    Resolved against the logged-in tenant, so an id belonging to another agency
+    (or to a branch that has since been closed) is a 404 and never a filter
+    that silently matches nothing. This is a view scope, not a permission
+    boundary: everyone who can log in can see every branch, and switching to
+    the whole agency shows all of it.
+    """
+    branch_id = (request.headers.get(BRANCH_HEADER) or "").strip()
+    if not branch_id:
+        return None
+    branch = branches_db.get(branch_id, tenant["id"])
+    if branch is None:
+        raise HTTPException(status_code=404, detail="Unknown branch")
+    return branch
+
+
+def _branch_id(branch: Optional[dict]) -> Optional[str]:
+    return branch["id"] if branch else None
 
 
 @router.post("/dashboard/login")
@@ -88,14 +127,23 @@ def me(tenant: dict = Depends(current_tenant)):
 
 
 @router.get("/dashboard/api/contacts")
-def contacts(tenant: dict = Depends(current_tenant)):
+def contacts(
+    tenant: dict = Depends(current_tenant),
+    branch: Optional[dict] = Depends(current_branch),
+):
     """Contacts captured by Apollonia for THIS tenant, most recent first.
-    Strictly scoped to the logged-in tenant's id."""
-    return {"contacts": calls_db.list_contacts(tenant["id"])}
+    Strictly scoped to the logged-in tenant's id, and to the selected branch
+    when there is one."""
+    return {
+        "contacts": calls_db.list_contacts(tenant["id"], branch_id=_branch_id(branch))
+    }
 
 
 @router.get("/dashboard/api/summary")
-def summary(tenant: dict = Depends(current_tenant)):
+def summary(
+    tenant: dict = Depends(current_tenant),
+    branch: Optional[dict] = Depends(current_branch),
+):
     """This billing period's numbers for THIS tenant: call activity, and the
     two allowances the plan includes (minutes and AI-tool credits) with what
     the excess will be invoiced. Strictly scoped to the logged-in tenant's id.
@@ -112,29 +160,77 @@ def summary(tenant: dict = Depends(current_tenant)):
 
     Money is sent as integer euro cents — the browser divides for display, and
     nothing that gets invoiced is ever rounded through a float on the way here.
+
+    WITH A BRANCH SELECTED the numbers are that office's activity, and the
+    billing block is deliberately NOT part of the response. Allowances and
+    overage belong to the subscription, which is the agency's: there is no such
+    thing as a branch's remaining credits, and showing one would invent a
+    second bill. What the branch view carries instead is what that office used,
+    plus the agency's totals for the same period, so its share is readable
+    without pretending to be an invoice. The whole-agency view is the one that
+    bills, and it is unchanged.
     """
     start_utc, end_utc = period.tenant_month_utc(tenant)
-    stats = calls_db.monthly_call_stats(tenant["id"], start_utc, end_utc)
-    minutes = usage_db.billable_minutes(stats["seconds"])
+    if branch is None:
+        stats = calls_db.monthly_call_stats(tenant["id"], start_utc, end_utc)
+        minutes = usage_db.billable_minutes(stats["seconds"])
+        return {
+            "scope": "agency",
+            "period_start": start_utc,
+            "period_end": end_utc,
+            "minutes": minutes,
+            "seconds": stats["seconds"],
+            "calls": stats["calls"],
+            "contacts": stats["contacts"],
+            "credits": usage_db.monthly_credits(
+                tenant["id"], tenant.get("plan"), minutes, start_utc, end_utc
+            ),
+        }
+
+    stats = calls_db.monthly_call_stats(tenant["id"], start_utc, end_utc, branch["id"])
+    tools = usage_db.monthly_usage(tenant["id"], start_utc, end_utc, branch["id"])
+    agency_stats = calls_db.monthly_call_stats(tenant["id"], start_utc, end_utc)
+    agency_tools = usage_db.monthly_usage(tenant["id"], start_utc, end_utc)
     return {
+        "scope": "branch",
+        "branch": {"id": branch["id"], "name": branch["name"]},
         "period_start": start_utc,
         "period_end": end_utc,
-        "minutes": minutes,
+        "minutes": usage_db.billable_minutes(stats["seconds"]),
         "seconds": stats["seconds"],
         "calls": stats["calls"],
         "contacts": stats["contacts"],
-        "credits": usage_db.monthly_credits(
-            tenant["id"], tenant.get("plan"), minutes, start_utc, end_utc
-        ),
+        "tools": tools,
+        # The same two figures for the whole agency, so each branch card can
+        # say "x of the agency's y" instead of standing on its own.
+        "agency": {
+            "minutes": usage_db.billable_minutes(agency_stats["seconds"]),
+            "tools_used_cents": agency_tools["used_cents"],
+        },
     }
 
 
 @router.get("/dashboard/api/listings")
-def listings(tenant: dict = Depends(current_tenant)):
+def listings(
+    tenant: dict = Depends(current_tenant),
+    branch: Optional[dict] = Depends(current_branch),
+):
     """The tenant's current listings — the same rows the phone agent searches
     (listings/db.py), so what the agency edits here is what Apollonia says on
-    the phone. Strictly scoped to the logged-in tenant's id."""
-    return {"listings": listings_db.list_for_tenant(tenant["id"])}
+    the phone. Strictly scoped to the logged-in tenant's id.
+
+    A branch's listings are the ones its agents handle. This filter is the
+    dashboard's alone: the phone agent always searches the agency's whole
+    inventory, because a caller ringing the agency's number has not chosen an
+    office. A listing with no agent belongs to no branch and is therefore only
+    visible in the whole-agency view — which is where it should be looked at
+    anyway, since its leads go to the agency inbox.
+    """
+    rows = listings_db.list_for_tenant(tenant["id"])
+    if branch is not None:
+        owned = set(agents_db.ids_for_branch(tenant["id"], branch["id"]))
+        rows = [l for l in rows if l.get("agent_id") in owned]
+    return {"listings": rows}
 
 
 class ListingCreate(BaseModel):
@@ -245,6 +341,9 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 class AgentCreate(BaseModel):
     name: str
     email: str
+    # Which office they work out of. Omitted → the branch the page is scoped to
+    # (adding someone from the Milano view puts them in Milano); "" → none.
+    branch_id: Optional[str] = None
 
 
 class AgentUpdate(BaseModel):
@@ -252,6 +351,9 @@ class AgentUpdate(BaseModel):
     by the server and is not editable."""
     name: Optional[str] = None
     email: Optional[str] = None
+    # Sent as "" to move an agent out of every office, so — like a listing's
+    # agent_id — this one is handled separately from the exclude_none fields.
+    branch_id: Optional[str] = None
 
 
 def _clean_agent_fields(fields: dict) -> dict:
@@ -271,31 +373,69 @@ def _clean_agent_fields(fields: dict) -> dict:
     return cleaned
 
 
+def _resolve_branch_id(value: Optional[str], tenant_id: str) -> Optional[str]:
+    """Validate a branch id sent for an agent. "" / None → no office.
+
+    An id from another agency would put a stranger's office on this agency's
+    reporting, so it is resolved against the tenant before it is stored — the
+    same rule listings apply to agent_id.
+    """
+    branch_id = (value or "").strip() or None
+    if branch_id and not branches_db.get(branch_id, tenant_id):
+        raise HTTPException(status_code=422, detail="Unknown branch")
+    return branch_id
+
+
 @router.get("/dashboard/api/agents")
-def agents(tenant: dict = Depends(current_tenant)):
+def agents(
+    tenant: dict = Depends(current_tenant),
+    branch: Optional[dict] = Depends(current_branch),
+):
     """The agency's agents, in the order they were added, each with how many
     listings they handle — the dashboard shows that count before confirming a
     deletion, since deleting an agent leaves their listings unassigned (and
     their leads going to the agency inbox). Strictly scoped to the logged-in
-    tenant's id."""
-    rows = agents_db.list_for_tenant(tenant["id"])
+    tenant's id, and to the selected branch when there is one."""
+    rows = agents_db.list_for_tenant(tenant["id"], branch_id=_branch_id(branch))
     for agent in rows:
         agent["listing_count"] = listings_db.count_for_agent(tenant["id"], agent["id"])
     return {"agents": rows}
 
 
 @router.post("/dashboard/api/agents")
-def create_agent(data: AgentCreate, tenant: dict = Depends(current_tenant)):
-    """Add an agent. The server assigns their number (see agents/db.py)."""
-    fields = _clean_agent_fields(data.model_dump())
-    return agents_db.create(tenant["id"], fields["name"], fields["email"])
+def create_agent(
+    data: AgentCreate,
+    tenant: dict = Depends(current_tenant),
+    branch: Optional[dict] = Depends(current_branch),
+):
+    """Add an agent. The server assigns their number (see agents/db.py).
+
+    An agent added while the page is scoped to a branch joins that branch
+    unless the form says otherwise — otherwise they would be added to the very
+    view they just disappeared from.
+    """
+    sent = data.model_dump()
+    fields = _clean_agent_fields({"name": sent["name"], "email": sent["email"]})
+    branch_id = (
+        _resolve_branch_id(sent["branch_id"], tenant["id"])
+        if sent["branch_id"] is not None
+        else _branch_id(branch)
+    )
+    return agents_db.create(
+        tenant["id"], fields["name"], fields["email"], branch_id=branch_id
+    )
 
 
 @router.patch("/dashboard/api/agents/{agent_id}")
 def update_agent(
     agent_id: str, data: AgentUpdate, tenant: dict = Depends(current_tenant)
 ):
-    fields = _clean_agent_fields(data.model_dump(exclude_unset=True, exclude_none=True))
+    sent = data.model_dump(exclude_unset=True)
+    fields = _clean_agent_fields(
+        {k: v for k, v in sent.items() if k != "branch_id" and v is not None}
+    )
+    if "branch_id" in sent:
+        fields["branch_id"] = _resolve_branch_id(sent["branch_id"], tenant["id"])
     updated = agents_db.update(agent_id, tenant["id"], fields)
     if updated is None:
         raise HTTPException(status_code=404, detail="Not found")
@@ -305,6 +445,74 @@ def update_agent(
 @router.delete("/dashboard/api/agents/{agent_id}")
 def delete_agent(agent_id: str, tenant: dict = Depends(current_tenant)):
     if not agents_db.delete(agent_id, tenant["id"]):
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"ok": True}
+
+
+# ── branches (the agency's offices) ─────────────────────────────────────────
+class BranchCreate(BaseModel):
+    name: str
+
+
+class BranchUpdate(BaseModel):
+    name: Optional[str] = None
+
+
+def _clean_branch_name(name: Optional[str]) -> str:
+    """A branch is picked from a list by its name, so a nameless one would be an
+    unlabelled entry in the switcher nobody could identify."""
+    cleaned = (name or "").strip()
+    if not cleaned:
+        raise HTTPException(status_code=422, detail="Name is required")
+    return cleaned
+
+
+@router.get("/dashboard/api/branches")
+def branches(tenant: dict = Depends(current_tenant)):
+    """The agency's offices, oldest first, each with how many agents work
+    there — shown on the card, and before confirming a deletion, since closing
+    a branch detaches its agents (see branches/db.py).
+
+    Deliberately NOT filtered by the selected branch: this is the list the
+    switcher is built from, and it has to keep offering the others.
+    """
+    rows = branches_db.list_for_tenant(tenant["id"])
+    for branch in rows:
+        branch["agent_count"] = len(
+            agents_db.ids_for_branch(tenant["id"], branch["id"])
+        )
+    return {"branches": rows}
+
+
+@router.post("/dashboard/api/branches", status_code=201)
+def create_branch(data: BranchCreate, tenant: dict = Depends(current_tenant)):
+    branch = branches_db.create(tenant["id"], _clean_branch_name(data.name))
+    branch["agent_count"] = 0
+    return branch
+
+
+@router.patch("/dashboard/api/branches/{branch_id}")
+def update_branch(
+    branch_id: str, data: BranchUpdate, tenant: dict = Depends(current_tenant)
+):
+    sent = data.model_dump(exclude_unset=True)
+    fields = (
+        {"name": _clean_branch_name(sent["name"])} if "name" in sent else {}
+    )
+    updated = branches_db.update(branch_id, tenant["id"], fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    updated["agent_count"] = len(agents_db.ids_for_branch(tenant["id"], branch_id))
+    return updated
+
+
+@router.delete("/dashboard/api/branches/{branch_id}")
+def delete_branch(branch_id: str, tenant: dict = Depends(current_tenant)):
+    """Close a branch. Its agents stay — they keep their listings and their
+    leads, and simply belong to no office until they are moved to another one.
+    Past calls and tool uses keep pointing at it and stay in the agency's
+    totals; they just stop being reachable through the switcher."""
+    if not branches_db.delete(branch_id, tenant["id"]):
         raise HTTPException(status_code=404, detail="Not found")
     return {"ok": True}
 

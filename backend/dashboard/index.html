@@ -276,10 +276,56 @@
   .agent-actions .spacer { flex: 1; }
   .agent-edit-grid { display: grid; gap: 10px; }
   .agent-edit-grid label { margin-bottom: 4px; }
-  .agent-edit-grid input {
+  .agent-edit-grid input, .agent-edit-grid select {
     background: var(--bg); border: 1px solid var(--border); color: var(--text);
     padding: 8px 10px; border-radius: 8px; font-size: .85rem; width: 100%;
   }
+  /* Which office an agent works out of. Accent-coloured because it is what
+     every branch-scoped number on the overview is resolved through — an agent
+     with no branch is counted only in the whole-agency view. */
+  .agent-branch { font-size: .8rem; color: var(--accent); margin-top: 6px; }
+  .agent-branch.agent-branch-none { color: var(--text-dim); font-style: italic; opacity: .7; }
+  .branch-num svg { width: 17px; height: 17px; }
+
+  /* ── branch scope bar ───────────────────────────────────────────────── */
+  /* Which office everything below is showing. Deliberately the largest text on
+     the page after the numbers themselves: every figure on the overview means
+     something different depending on it, so it must be impossible to read the
+     dashboard without having noticed which scope it is in. Hidden entirely for
+     an agency that has created no branches — there is nothing to switch. */
+  .scope-bar { background: var(--surface); border-bottom: 1px solid var(--border); }
+  .scope-inner { max-width: 1180px; margin: 0 auto; padding: 12px 24px; }
+  .scope-wrap { position: relative; display: inline-block; }
+  .scope-btn {
+    display: inline-flex; align-items: center; gap: 12px; cursor: pointer;
+    background: none; border: 1px solid transparent; border-radius: var(--radius);
+    padding: 6px 12px; margin-left: -12px; color: var(--text);
+    font-family: inherit; text-align: left;
+  }
+  .scope-btn:hover { background: var(--surface-2); border-color: var(--border); }
+  .scope-eyebrow {
+    display: block; font-size: .68rem; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--text-dim); margin-bottom: 2px;
+  }
+  .scope-name { display: block; font-size: 1.45rem; font-weight: 700; line-height: 1.15; }
+  .scope-caret { width: 18px; height: 18px; flex: none; color: var(--text-dim); transition: transform .2s ease; }
+  .scope-btn[aria-expanded="true"] .scope-caret { transform: rotate(180deg); }
+  .scope-menu {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 30;
+    min-width: 280px; max-height: 340px; overflow-y: auto; padding: 6px;
+    background: var(--surface); border: 1px solid var(--card-border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  .scope-opt {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    width: 100%; padding: 9px 12px; border: none; border-radius: 8px;
+    background: none; color: var(--text); font-family: inherit; font-size: .92rem;
+    text-align: left; cursor: pointer;
+  }
+  .scope-opt:hover { background: var(--surface-2); }
+  .scope-opt.is-active { color: var(--accent); font-weight: 700; }
+  .scope-opt-count { color: var(--text-dim); font-size: .76rem; flex: none; }
+  .scope-sep { height: 1px; background: var(--border); margin: 6px 4px; }
 
   /* ── theme switch (light/dark), same pill pattern as the landing page's
      IT/SK language switch (see landingpage/index.html's .lang-switch) ──── */
@@ -554,6 +600,12 @@
     nav.tabs { order: 5; flex-basis: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .tab { padding: 8px 12px; font-size: .88rem; white-space: nowrap; }
 
+    .scope-inner { padding: 10px 14px; }
+    .scope-name { font-size: 1.2rem; }
+    /* Full-width so the office list doesn't spill off a phone screen. */
+    .scope-wrap { display: block; }
+    .scope-menu { min-width: 0; width: 100%; }
+
     main { padding: 16px 14px 60px; }
     main h2 { font-size: 1.1rem; }
     .acq-pad { padding: 16px; }
@@ -648,6 +700,7 @@
       <button class="tab active" id="tab-contacts" data-view="contacts">Contatti</button>
       <button class="tab" id="tab-listings" data-view="listings">Immobili</button>
       <button class="tab" id="tab-agents" data-view="agents">Agenti</button>
+      <button class="tab" id="tab-branches" data-view="branches">Sedi</button>
       <button class="tab hidden" id="tab-acquisizione" data-view="acquisizione">Strumenti AI</button>
     </nav>
     <div class="spacer"></div>
@@ -675,6 +728,27 @@
     <span class="agency" id="agency-name"></span>
     <button class="btn ghost" id="logout-btn">Esci</button>
   </header>
+
+  <!-- Which office everything below is scoped to. Hidden until the agency has
+       at least one branch, so a single-office agency sees the page it always
+       saw. -->
+  <div class="scope-bar hidden" id="scope-bar">
+    <div class="scope-inner">
+      <div class="scope-wrap">
+        <button type="button" class="scope-btn" id="scope-btn" aria-haspopup="true" aria-expanded="false">
+          <span>
+            <span class="scope-eyebrow" id="scope-eyebrow">Vista</span>
+            <span class="scope-name" id="scope-name"></span>
+          </span>
+          <svg class="scope-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+        <div class="scope-menu hidden" id="scope-menu" role="menu"></div>
+      </div>
+    </div>
+  </div>
+
   <main>
     <section id="view-contacts" class="view active">
       <h2 id="contacts-title">Contatti</h2>
@@ -710,7 +784,7 @@
           <div class="bar"><i id="stat-credits-bar"></i></div>
           <div class="sub" id="stat-credits-sub"></div>
         </div>
-        <div class="stat">
+        <div class="stat" id="overage-card">
           <div class="num" id="stat-overage">—</div>
           <div class="lbl" id="stat-overage-lbl">Extra questo mese</div>
           <div class="split hidden" id="stat-overage-split"></div>
@@ -756,6 +830,18 @@
       <div id="agents-grid" class="agents-grid"></div>
       <div class="card">
         <div class="empty hidden" id="agents-empty">Nessun agente ancora.</div>
+      </div>
+    </section>
+
+    <section id="view-branches" class="view">
+      <h2 id="branches-title">Sedi</h2>
+      <p class="period" id="branches-hint"></p>
+      <div class="agents-toolbar">
+        <button class="btn ghost" id="branch-add-btn">+ Aggiungi sede</button>
+      </div>
+      <div id="branches-grid" class="agents-grid"></div>
+      <div class="card">
+        <div class="empty hidden" id="branches-empty">Nessuna sede ancora.</div>
       </div>
     </section>
 
@@ -1121,8 +1207,33 @@
     }
   })();
 
+  // ── branch scope ──────────────────────────────────────────────────────
+  // Which of the agency's offices the whole page is showing: a branch id, or
+  // null for the whole agency (the view every agency had before branches
+  // existed, and the only one that shows the plan's allowances).
+  //
+  // Kept in localStorage so switching office survives a reload — it is a
+  // working context, not a one-off filter. A stored id is never trusted, and
+  // deliberately not adopted at startup: it is taken up only once the list of
+  // offices has come back and it has been found in it (see loadBranches), so a
+  // branch closed in another tab — or the previous tenant's selection on a
+  // shared browser — is never sent on a single request.
+  const SCOPE_KEY = "apollonia_branch";
+  let SCOPE = null;
+  let BRANCHES = [];
+
+  // Every request the page makes goes through here, which is why the selected
+  // branch travels as a header rather than as a query parameter: one place to
+  // set it, and it reaches the AI tools too, so what they spend is attributed
+  // to the office that was on screen when the agent ran them. The backend
+  // resolves it against the logged-in tenant (dashboard/router.current_branch);
+  // sending none means the whole agency.
   async function api(path, opts) {
-    return fetch(path, Object.assign({ credentials: "same-origin" }, opts || {}));
+    const req = Object.assign({ credentials: "same-origin" }, opts || {});
+    if (SCOPE) {
+      req.headers = Object.assign({}, req.headers, { "X-Branch-Id": SCOPE });
+    }
+    return fetch(path, req);
   }
 
   // One dict per locale, identical keys, Italian default — the same pattern the
@@ -1212,6 +1323,36 @@
       agent_name_required: "Inserisci il nome dell'agente.",
       agent_email_required: "Inserisci l'indirizzo email dell'agente.",
       agent_email_invalid: "Indirizzo email non valido.",
+      // ── Sedi (branches) ──────────────────────────────────────────────
+      branches: "Sedi",
+      branches_hint:
+        "Le sedi dell'agenzia. Ogni agente appartiene a una sede, e in alto " +
+        "puoi scegliere quale sede vedere: chiamate, minuti e strumenti AI " +
+        "vengono filtrati per la sede selezionata.",
+      branch_add: "+ Aggiungi sede",
+      branch_name: "Nome della sede",
+      branches_empty: "Nessuna sede ancora.",
+      branch_name_required: "Inserisci il nome della sede.",
+      branch_delete_confirm: "Chiudere questa sede?",
+      branch_agents: "{n} agenti",
+      branch_agents_few: "{n} agenti",
+      branch_agents_one: "1 agente",
+      branch_agents_none: "Nessun agente assegnato",
+      branch_delete_frees: "{n} agenti resteranno senza sede.",
+      branch_delete_frees_few: "{n} agenti resteranno senza sede.",
+      branch_delete_frees_one: "1 agente resterà senza sede.",
+      // Lo switch in alto: quale sede si sta guardando.
+      scope_label: "Vista",
+      scope_all: "Tutta l'agenzia",
+      // Sotto l'opzione "Tutta l'agenzia": è quella che mostra il conto.
+      scope_all_hint: "Tutti i dati e il credito",
+      agent_branch: "Sede",
+      agent_branch_none: "Senza sede",
+      agent_branch_none_opt: "— Nessuna sede —",
+      // Nella vista di una sede i numeri sono di quella sede sola.
+      stat_of_agency: "su {n} dell'agenzia",
+      stat_tools_used: "Strumenti AI usati",
+      stat_tools_of_agency: "su {total} dell'agenzia",
       acq_tab: "Strumenti AI",
       acq_title: "Strumenti AI",
       // Launcher: one card per tool. The names stay in English (product
@@ -1444,6 +1585,33 @@
       agent_name_required: "Zadajte meno makléra.",
       agent_email_required: "Zadajte e-mailovú adresu makléra.",
       agent_email_invalid: "Neplatná e-mailová adresa.",
+      // ── Pobočky (branches) ───────────────────────────────────────────
+      branches: "Pobočky",
+      branches_hint:
+        "Pobočky vašej kancelárie. Každý maklér patrí do jednej pobočky a " +
+        "hore si vyberiete, ktorú pobočku chcete vidieť: hovory, minúty a " +
+        "nástroje AI sa filtrujú podľa vybranej pobočky.",
+      branch_add: "+ Pridať pobočku",
+      branch_name: "Názov pobočky",
+      branches_empty: "Zatiaľ žiadne pobočky.",
+      branch_name_required: "Zadajte názov pobočky.",
+      branch_delete_confirm: "Zrušiť túto pobočku?",
+      branch_agents: "{n} maklérov",
+      branch_agents_few: "{n} makléri",
+      branch_agents_one: "1 maklér",
+      branch_agents_none: "Žiadni priradení makléri",
+      branch_delete_frees: "{n} maklérov ostane bez pobočky.",
+      branch_delete_frees_few: "{n} makléri ostanú bez pobočky.",
+      branch_delete_frees_one: "1 maklér ostane bez pobočky.",
+      scope_label: "Zobrazenie",
+      scope_all: "Celá agentúra",
+      scope_all_hint: "Všetky údaje a kredit",
+      agent_branch: "Pobočka",
+      agent_branch_none: "Bez pobočky",
+      agent_branch_none_opt: "— Bez pobočky —",
+      stat_of_agency: "z {n} celej agentúry",
+      stat_tools_used: "Použité nástroje AI",
+      stat_tools_of_agency: "z {total} celej agentúry",
       acq_tab: "Nástroje AI",
       acq_title: "Nástroje AI",
       acq_tool_open: "Otvoriť",
@@ -1631,6 +1799,9 @@
     "listings-empty": "listings_empty", "listing-add-btn": "listing_add",
     "tab-agents": "agents", "agents-title": "agents",
     "agent-add-btn": "agent_add", "agents-empty": "agents_empty",
+    "tab-branches": "branches", "branches-title": "branches",
+    "branches-hint": "branches_hint", "branch-add-btn": "branch_add",
+    "branches-empty": "branches_empty", "scope-eyebrow": "scope_label",
     "tab-acquisizione": "acq_tab", "acq-title": "acq_title",
     "acq-consent-text": "acq_consent_text", "acq-consent-label": "acq_consent_label",
     "acq-start-btn": "acq_start_btn", "acq-finish-btn": "acq_finish_btn",
@@ -1691,6 +1862,105 @@
     document.title = s.title;
   }
 
+  // ── branch switcher ─────────────────────────────────────────────────────
+  // The bar under the header. It is the whole page's scope, not the overview
+  // tab's: agents, listings and contacts follow it too, so what is on screen
+  // is always one office's business or the agency's, never a mix.
+  const branchById = (id) => BRANCHES.find((b) => b.id === id) || null;
+
+  function scopeName() {
+    const branch = branchById(SCOPE);
+    return branch ? branch.name : S().scope_all;
+  }
+
+  function closeScopeMenu() {
+    $("scope-menu").classList.add("hidden");
+    $("scope-btn").setAttribute("aria-expanded", "false");
+  }
+
+  function renderScope() {
+    // Nothing to switch between until the agency opens its first office.
+    $("scope-bar").classList.toggle("hidden", BRANCHES.length === 0);
+    $("scope-name").textContent = scopeName();
+
+    const menu = $("scope-menu");
+    menu.innerHTML = "";
+    const s = S();
+    menu.appendChild(scopeOption(null, s.scope_all, s.scope_all_hint));
+    if (BRANCHES.length) menu.appendChild(el("div", "scope-sep"));
+    for (const b of BRANCHES) {
+      menu.appendChild(scopeOption(b.id, b.name, pluralize("branch_agents", b.agent_count || 0)));
+    }
+  }
+
+  function scopeOption(id, label, hint) {
+    const opt = el("button", "scope-opt", null);
+    opt.type = "button";
+    opt.setAttribute("role", "menuitem");
+    opt.classList.toggle("is-active", SCOPE === id);
+    opt.appendChild(el("span", null, label));
+    opt.appendChild(el("span", "scope-opt-count", hint || ""));
+    opt.addEventListener("click", () => {
+      closeScopeMenu();
+      setScope(id);
+    });
+    return opt;
+  }
+
+  // Switching office re-reads everything: the numbers, the contacts, the
+  // roster and the listings all mean something different in the new scope, and
+  // a half-switched page would be worse than a slow one.
+  function setScope(branchId) {
+    const next = branchId && branchById(branchId) ? branchId : null;
+    if (next === SCOPE) return;
+    SCOPE = next;
+    rememberScope(next);
+    renderScope();
+    reloadScopedData();
+  }
+
+  function rememberScope(branchId) {
+    try {
+      if (branchId) localStorage.setItem(SCOPE_KEY, branchId);
+      else localStorage.removeItem(SCOPE_KEY);
+    } catch (_) { /* private mode: the selection just won't survive a reload */ }
+  }
+
+  function storedScope() {
+    try { return localStorage.getItem(SCOPE_KEY) || null; } catch (_) { return null; }
+  }
+
+  function reloadScopedData() {
+    loadSummary();
+    loadContacts();
+    // Agents first: every listing card names the agent handling it.
+    loadAgents().then(loadListings);
+  }
+
+  async function loadBranches() {
+    try {
+      const resp = await api("/dashboard/api/branches");
+      if (resp.ok) BRANCHES = (await resp.json()).branches || [];
+    } catch (_) { /* keep whatever we had; the switcher stays usable */ }
+    // A selection is only as good as the list that just came back. On the
+    // first load that means adopting what the last session stored — and only
+    // if that office still exists, which is why nothing has been requested
+    // with it until now. Afterwards it means dropping a selection whose office
+    // was closed in another tab, which would otherwise 404 every request.
+    const wanted = SCOPE_ADOPTED ? SCOPE : storedScope();
+    SCOPE_ADOPTED = true;
+    SCOPE = wanted && branchById(wanted) ? wanted : null;
+    if (!SCOPE) rememberScope(null);
+    renderScope();
+    renderBranches(BRANCHES);
+  }
+
+  // Whether the stored selection has been taken up yet. Only the first
+  // loadBranches() reads localStorage; later ones must not, or a browser that
+  // refuses to store it (private mode) would drop the user back to the whole
+  // agency on the next refresh.
+  let SCOPE_ADOPTED = false;
+
   function showApp(me) {
     $("login").classList.add("hidden");
     $("app").classList.remove("hidden");
@@ -1703,13 +1973,13 @@
     // billed past the plan whether or not this agency has the tools — so the
     // row goes 1-up rather than leaving a hole.
     const hasTools = !!(me.features && (me.features.acquisizione || me.features.video_tour));
+    HAS_TOOLS = hasTools;
     // Each tool inside the AI-tools tab is flagged separately, so an agency
     // can have one without the other.
     const showMeeting = !!(me.features && me.features.acquisizione);
     const showVideo = !!(me.features && me.features.video_tour);
     $("tab-acquisizione").classList.toggle("hidden", !hasTools);
-    $("credits-card").classList.toggle("hidden", !hasTools);
-    $("billing-stats").classList.toggle("stats-one", !hasTools);
+    layoutBillingCards(false);
     // The meeting and photo tools ship together behind ACQUISIZIONE_ENABLED;
     // the video wizard has its own flag. Toggled with .feature-off rather than
     // .hidden: opening and closing a tool drives .hidden on these same panels,
@@ -1721,11 +1991,10 @@
       $(id).classList.toggle("feature-off", !showVideo);
     }
     if (showVideo && window.VtInit) window.VtInit();
-    loadSummary();
-    loadContacts();
-    // Agents first: every listing card names the agent handling it, so the
-    // roster has to be cached before the cards render.
-    loadAgents().then(loadListings);
+    // Branches first, and only then the data: a stored scope has to be checked
+    // against the offices that actually exist before anything is fetched with
+    // it (see loadBranches).
+    loadBranches().then(reloadScopedData);
   }
 
   // ── AI tools launcher ───────────────────────────────────────────────
@@ -1767,6 +2036,9 @@
     if (name === "acquisizione" && !$("tool-meeting").classList.contains("hidden")) {
       syncAcqAgentOptions();
     }
+    // Headcounts are what the branch cards show, and hiring happens on the
+    // Agenti tab — re-read them rather than showing a stale number.
+    if (name === "branches") loadBranches();
   }
 
   async function loadSummary() {
@@ -1778,8 +2050,29 @@
       $("stat-calls").textContent = s.calls ?? 0;
       $("stat-contacts").textContent = s.contacts ?? 0;
       $("period-range").textContent = fmtPeriod(s.period_start, s.period_end);
-      renderCredits(s.credits);
+      // Two different questions, so two different bottom rows: the agency's
+      // view is its bill, a branch's view is its share of what the agency
+      // used. Only the agency has allowances to run out of.
+      layoutBillingCards(s.scope === "branch");
+      if (s.scope === "branch") renderBranchUsage(s);
+      else renderCredits(s.credits);
     } catch (_) { /* leave the placeholder dashes on a transient error */ }
+  }
+
+  // Whether this agency has the AI tools at all (the same flag that hides
+  // their tab) — the credits card is theirs, and goes with them.
+  let HAS_TOOLS = false;
+
+  // Which of the two billing cards are on screen, and how wide. In a branch
+  // view the overage card goes: overage is invoiced to the agency, and putting
+  // a number labelled "extra this month" under one office's name would read as
+  // a bill that office owes.
+  function layoutBillingCards(branchScope) {
+    $("credits-card").classList.toggle("hidden", !HAS_TOOLS);
+    $("overage-card").classList.toggle("hidden", branchScope);
+    const shown = (HAS_TOOLS ? 1 : 0) + (branchScope ? 0 : 1);
+    $("billing-stats").classList.toggle("hidden", shown === 0);
+    $("billing-stats").classList.toggle("stats-one", shown === 1);
   }
 
   // Re-read the overview after an AI tool runs, so the credit cards reflect
@@ -1835,6 +2128,42 @@
     bar.classList.toggle("full", over > 0);
   }
 
+  // One office's share of an agency total. Not the same bar as fillBar above,
+  // which measures an allowance: a whole of zero there means the allowance is
+  // spent, whereas nothing used agency-wide is simply nothing to be a share
+  // of. It also clears the amber, so switching out of an over-allowance agency
+  // view doesn't leave a warning colour under a branch's number.
+  function fillShareBar(id, part, whole) {
+    const bar = $(id);
+    bar.style.width =
+      Math.round((whole > 0 ? Math.min(1, part / whole) : 0) * 100) + "%";
+    bar.classList.remove("full");
+  }
+
+  // One office's month: what it used, and how much of the agency's total that
+  // is. No allowances and no overage — those belong to the subscription, which
+  // is the agency's (see the summary endpoint). The cards are the same
+  // elements the agency view uses, so their labels are set here rather than
+  // left to whatever the other scope wrote into them.
+  function renderBranchUsage(s) {
+    const str = S();
+    const agency = s.agency || {};
+    const tools = s.tools || {};
+
+    const agencyMinutes = agency.minutes || 0;
+    fillShareBar("stat-minutes-bar", s.minutes || 0, agencyMinutes);
+    $("stat-minutes-sub").textContent =
+      str.stat_of_agency.replace("{n}", agencyMinutes.toLocaleString(intlTag()));
+
+    const agencyTools = agency.tools_used_cents || 0;
+    $("stat-credits-lbl").textContent = str.stat_tools_used;
+    $("stat-credits").textContent = fmtEur(tools.used_cents);
+    fillShareBar("stat-credits-bar", tools.used_cents || 0, agencyTools);
+    $("stat-credits-sub").textContent =
+      str.stat_tools_of_agency.replace("{total}", fmtEur(agencyTools)) +
+      " · " + creditUses(tools.uses);
+  }
+
   function renderCredits(c) {
     if (!c) return;
     const s = S();
@@ -1848,8 +2177,10 @@
     $("stat-minutes-sub").textContent =
       s.stat_minutes_of.replace("{n}", included.toLocaleString(intlTag()));
 
-    // AI-tool credits.
+    // AI-tool credits. The label is re-set because the branch view borrows
+    // this same card to show spend instead of what's left.
     const allowance = tools.allowance_cents || 0;
+    $("stat-credits-lbl").textContent = s.stat_credits;
     $("stat-credits").textContent = fmtEur(tools.remaining_cents);
     fillBar("stat-credits-bar", tools.used_cents || 0, allowance, tools.overage_cents || 0);
     $("stat-credits-sub").textContent =
@@ -2290,6 +2621,17 @@
       email.textContent = s.agent_no_email;
     }
     info.appendChild(email);
+    // Which office they work out of — shown only once the agency has any,
+    // since for a single-office agency it is a line that says nothing. This is
+    // what puts their calls, listings and tool use under a branch.
+    if (BRANCHES.length) {
+      const branch = branchById(a.branch_id);
+      info.appendChild(el(
+        "div",
+        branch ? "agent-branch" : "agent-branch agent-branch-none",
+        branch ? branch.name : s.agent_branch_none,
+      ));
+    }
     // How much of the agency's inventory routes its leads to this person.
     info.appendChild(el(
       "div", "agent-listings", pluralize("agent_listings", a.listing_count || 0)
@@ -2337,6 +2679,8 @@
         // Their listings are unassigned server-side; re-render so the cards
         // show it.
         loadListings();
+        // One fewer head in their office.
+        if (a.branch_id) loadBranches();
       } catch (_) {
         yes.disabled = false;
         msg.textContent = S().listing_save_err;
@@ -2372,6 +2716,31 @@
         inputs[name] = input;
       }
     );
+
+    // The office this agent belongs to. Only offered once the agency has any;
+    // a new agent added while one office is selected defaults to that one,
+    // which is almost always the intent — and the alternative is adding
+    // someone who immediately vanishes from the view you added them in.
+    let branchSelect = null;
+    if (BRANCHES.length) {
+      const wrap = el("div");
+      wrap.appendChild(el("label", null, s.agent_branch));
+      branchSelect = document.createElement("select");
+      const noneOpt = document.createElement("option");
+      noneOpt.value = "";
+      noneOpt.textContent = s.agent_branch_none_opt;
+      branchSelect.appendChild(noneOpt);
+      const current = a ? a.branch_id : SCOPE;
+      for (const b of BRANCHES) {
+        const opt = document.createElement("option");
+        opt.value = b.id;
+        opt.textContent = b.name;
+        if (current === b.id) opt.selected = true;
+        branchSelect.appendChild(opt);
+      }
+      wrap.appendChild(branchSelect);
+      grid.appendChild(wrap);
+    }
     card.appendChild(grid);
 
     const err = el("div", "err");
@@ -2385,6 +2754,9 @@
         name: inputs.name.value.trim(),
         email: inputs.email.value.trim(),
       };
+      // Sent as "" to mean "no office" — omitted entirely when the agency has
+      // no branches, so the server keeps whatever the agent already had.
+      if (branchSelect) payload.branch_id = branchSelect.value;
       // The same rules the backend enforces (see _clean_agent_fields), checked
       // here too so a typo is caught without a round trip.
       err.textContent = "";
@@ -2413,6 +2785,14 @@
         const at = AGENTS.findIndex((x) => x.id === saved.id);
         if (at === -1) AGENTS.push(saved); else AGENTS[at] = saved;
         if (a) loadListings();  // a rename shows on every listing card
+        // Hiring someone into an office, or moving them between two, changes
+        // the headcounts in the switcher — and, in a branch view, whether this
+        // agent still belongs on screen at all. Re-read both rather than
+        // guessing which of the two happened.
+        if (branchSelect && (!a || (a.branch_id || "") !== (saved.branch_id || ""))) {
+          loadBranches();
+          loadAgents().then(loadListings);
+        }
       } catch (_) {
         err.textContent = S().listing_save_err;
         saveBtn.disabled = false;
@@ -2457,6 +2837,163 @@
       renderAgents(AGENTS);
       syncAcqAgentOptions();
     } catch (_) { /* leave the grid empty on a transient error */ }
+  }
+
+  // ── Branch cards ────────────────────────────────────────────────────────
+  // The agency's offices. Same read/edit-in-place card as agents and listings;
+  // a branch is only a name, so the edit card is a single field. The list is
+  // never filtered by the selected scope — this is where you go to switch
+  // between offices, so it has to keep showing all of them.
+  const BRANCH_ICON =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M3 21h18"></path><path d="M5 21V7l7-4 7 4v14"></path>' +
+    '<path d="M10 21v-6h4v6"></path></svg>';
+
+  function branchReadCard(b) {
+    const s = S();
+    const card = el("div", "agent-card");
+
+    const head = el("div", "agent-card-head");
+    const icon = el("span", "agent-num branch-num");
+    icon.innerHTML = BRANCH_ICON;
+    head.appendChild(icon);
+    const info = el("div", "agent-info");
+    info.appendChild(el("div", "agent-name", b.name || "—"));
+    info.appendChild(el(
+      "div", "agent-listings", pluralize("branch_agents", b.agent_count || 0)
+    ));
+    head.appendChild(info);
+    card.appendChild(head);
+
+    const actions = el("div", "agent-actions");
+    const editBtn = el("button", "btn ghost", s.listing_edit);
+    editBtn.type = "button";
+    editBtn.addEventListener("click", () => card.replaceWith(branchEditCard(b)));
+    actions.appendChild(editBtn);
+    actions.appendChild(el("div", "spacer"));
+
+    const delBtn = el("button", "btn ghost listing-danger", s.listing_delete);
+    delBtn.type = "button";
+    delBtn.addEventListener("click", () => {
+      actions.replaceWith(branchDeleteConfirm(b, card));
+    });
+    actions.appendChild(delBtn);
+    card.appendChild(actions);
+    return card;
+  }
+
+  function branchDeleteConfirm(b, card) {
+    const s = S();
+    const row = el("div", "agent-actions listing-confirm");
+    // Closing an office doesn't touch its people — they keep their listings
+    // and their leads — but it does leave them counted under no branch, so say
+    // how many before confirming.
+    const count = b.agent_count || 0;
+    const msg = el("span", null, count
+      ? s.branch_delete_confirm + " " + pluralize("branch_delete_frees", count)
+      : s.branch_delete_confirm);
+    row.appendChild(msg);
+    const yes = el("button", "btn ghost listing-danger", s.listing_delete_yes);
+    yes.type = "button";
+    yes.addEventListener("click", async () => {
+      yes.disabled = true;
+      try {
+        const resp = await api("/dashboard/api/branches/" + b.id, { method: "DELETE" });
+        if (!resp.ok) throw new Error("delete " + resp.status);
+        // Looking at an office that no longer exists would 404 every request
+        // on the page, so step back to the whole agency first.
+        if (SCOPE === b.id) setScope(null);
+        // Refills BRANCHES, re-renders this grid and the switcher.
+        await loadBranches();
+        // Their agents are detached server-side; re-render so the cards show it.
+        loadAgents();
+      } catch (_) {
+        yes.disabled = false;
+        msg.textContent = S().listing_save_err;
+      }
+    });
+    const no = el("button", "btn ghost", s.listing_cancel);
+    no.type = "button";
+    no.addEventListener("click", () => card.replaceWith(branchReadCard(b)));
+    row.appendChild(yes);
+    row.appendChild(no);
+    return row;
+  }
+
+  // b === null → the card is a new-branch form: save POSTs instead of
+  // PATCHing, and cancel drops the card instead of reverting it.
+  function branchEditCard(b) {
+    const s = S();
+    const card = el("div", "agent-card");
+    const grid = el("div", "agent-edit-grid");
+
+    const wrap = el("div");
+    wrap.appendChild(el("label", null, s.branch_name));
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = b && b.name != null ? b.name : "";
+    wrap.appendChild(input);
+    grid.appendChild(wrap);
+    card.appendChild(grid);
+
+    const err = el("div", "err");
+    card.appendChild(err);
+
+    const actions = el("div", "agent-actions");
+    const saveBtn = el("button", "btn ghost", s.listing_save);
+    saveBtn.type = "button";
+    saveBtn.addEventListener("click", async () => {
+      const name = input.value.trim();
+      err.textContent = "";
+      // The same rule the backend enforces: a branch is chosen from a list by
+      // its name, so a nameless one is unpickable.
+      if (!name) { err.textContent = S().branch_name_required; return; }
+      saveBtn.disabled = true;
+      try {
+        const resp = await api("/dashboard/api/branches" + (b ? "/" + b.id : ""), {
+          method: b ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name }),
+        });
+        if (!resp.ok) throw new Error("save " + resp.status);
+        // Refills BRANCHES and re-renders both this grid and the switcher —
+        // a renamed office has to change name in the bar above too.
+        await loadBranches();
+        // Agent cards name their office.
+        renderAgents(AGENTS);
+      } catch (_) {
+        err.textContent = S().listing_save_err;
+        saveBtn.disabled = false;
+      }
+    });
+    actions.appendChild(saveBtn);
+
+    const cancelBtn = el("button", "btn ghost", s.listing_cancel);
+    cancelBtn.type = "button";
+    cancelBtn.addEventListener("click", () => {
+      if (b) {
+        card.replaceWith(branchReadCard(b));
+      } else {
+        card.remove();
+        refreshBranchesEmpty();
+      }
+    });
+    actions.appendChild(cancelBtn);
+    card.appendChild(actions);
+    setTimeout(() => input.focus(), 0);
+    return card;
+  }
+
+  function refreshBranchesEmpty() {
+    $("branches-empty").classList.toggle("hidden", $("branches-grid").children.length > 0);
+  }
+
+  function renderBranches(rows) {
+    const grid = $("branches-grid");
+    grid.innerHTML = "";
+    for (const b of rows) grid.appendChild(branchReadCard(b));
+    refreshBranchesEmpty();
   }
 
   function showLogin() {
@@ -2523,6 +3060,32 @@
     $("agents-grid").appendChild(card);
     refreshAgentsEmpty();
     card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  });
+
+  // Appended: branches are listed in the order they were opened.
+  $("branch-add-btn").addEventListener("click", () => {
+    const card = branchEditCard(null);
+    $("branches-grid").appendChild(card);
+    $("branches-empty").classList.add("hidden");
+    card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  });
+
+  // ── the scope switcher's menu ───────────────────────────────────────────
+  $("scope-btn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const menu = $("scope-menu");
+    const open = menu.classList.toggle("hidden");
+    $("scope-btn").setAttribute("aria-expanded", open ? "false" : "true");
+  });
+  // Clicking anywhere else, or pressing Escape, closes it — a menu that only
+  // closes by picking something makes switching feel like a commitment.
+  document.addEventListener("click", (e) => {
+    if (!$("scope-menu").classList.contains("hidden") && !$("scope-menu").contains(e.target)) {
+      closeScopeMenu();
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeScopeMenu();
   });
 
   // ── Acquisizione: live-transcribed seller-meeting capture ────────────────

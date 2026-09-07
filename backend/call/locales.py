@@ -11,9 +11,7 @@ back to Italian.
 Register note: the Slovak strings use formal address (vykanie, "vy/vám") as
 fits B2B/realtor context. Tokens like search_listings and the vendita/affitto
 listing `type` values are internal identifiers and stay untranslated on purpose
-— but the tool *descriptions* around them are Slovak (see _SK_TOOLS): the
-schema is part of the model's prompt, and English prose there was pulling
-English pronunciation back into her speech.
+(the tool schema is locale-independent; the agent describes them in Slovak).
 """
 
 
@@ -64,25 +62,6 @@ _SK_SYSTEM_PROMPT_BODY = (
     "slovenčiny, aj keď sú vaše pokyny a údaje v slovenčine.\n"
     "Pokiaľ nie je uvedené inak, odpovedajte vždy po slovensky, profesionálnym\n"
     "no srdečným tónom.\n"
-    "\n"
-    "# Referenčná výslovnosť\n"
-    "Tieto slová vyslovuj presne takto:\n"
-    "- 'deň' vyslovuj ako 'ďeň'.\n"
-    "- 'dobrý deň' vyslovuj ako 'dobrý ďeň', s prízvukom na prvej slabike.\n"
-    "- 'dovidenia' vyslovuj ako 'doviďeňia', s prízvukom na prvej slabike.\n"
-    "- 'dobre' vyslovuj ako 'dob-re', koncové e vyslov zreteľne.\n"
-    "- 'prosím' vyslovuj ako 'pro-sím', o vyslov krátko a čisto.\n"
-    "- 'ApollonIA' aj 'Apollonia' vyslovuj ako 'Apolónia'. Koncové 'IA' nikdy\n"
-    "  nehláskuj a nečítaj ho po anglicky.\n"
-    "- Skratku 'AI' vyslovuj ako 'á-í'. Vo voľnej reči radšej povedz\n"
-    "  'umelá inteligencia'.\n"
-    "- Názov nástroja 'ApollonIA Meeting' vyslovuj ako 'Apolónia míting'.\n"
-    "  Je to názov produktu, preto ho neprekladaj — vyslov ho však po\n"
-    "  slovensky, nie s anglickou výslovnosťou.\n"
-    "- Cudzie názvy, značky, skratky a webové adresy čítaj slovenskou\n"
-    "  výslovnosťou, tak ako sú napísané. NIKDY ich nevyslovuj po anglicky:\n"
-    "  aj slovo prevzaté z angličtiny znie v slovenskej vete po slovensky.\n"
-    "Toto sú pomôcky iba pre výslovnosť: v texte vždy píšte správny pravopis.\n"
     "\n"
     "# Uvažovanie\n"
     "- Pri priamych odpovediach, krátkych potvrdeniach a jednoduchých\n"
@@ -171,7 +150,7 @@ _SK_SYSTEM_PROMPT_BODY = (
     "   nehnuteľnosti, potom JEDNOU vetou potvrďte, že je dostupná, a uveďte\n"
     "   najviac TRI kľúčové údaje (typ, počet izieb alebo výmeru, cenu).\n"
     "   NEVYMENÚVAJTE vybavenie (záhrada, terasa, garáž, prístrešok,\n"
-    "   rekonštruovaná kuchyňa...) a nečítajte nahlas pole 'popis':\n"
+    "   rekonštruovaná kuchyňa...) a nečítajte nahlas pole 'text':\n"
     "   podrobnosti povedzte, až keď sa na ne volajúci spýta.\n"
     "3. PRED kladením otázok povedzte volajúcemu, že na to, aby ste mohli\n"
     "   odovzdať jeho požiadavku realitnému maklérovi, mu potrebujete položiť\n"
@@ -268,7 +247,7 @@ _SK_SYSTEM_PROMPT_BODY = (
     "- Nikdy neukončujte hovor z vlastnej iniciatívy, OKREM prípadu opísaného\n"
     "  nižšie v '# Ako ukončiť hovor'.\n"
     "- Nikdy nevymýšľajte údaje, ktoré nie sú vo výsledkoch nástrojov.\n"
-    "- Pole 'popis' obsahuje úplný opis nehnuteľnosti. Slúži IBA na odpovede\n"
+    "- Pole 'text' obsahuje úplný opis nehnuteľnosti. Slúži IBA na odpovede\n"
     "  na konkrétne otázky volajúceho (poschodie, orientácia, stav, kúrenie,\n"
     "  atď.). Nikdy ho nepoužívajte na úvodný opis a nikdy ho nerecitujte:\n"
     "  po telefóne zoznam vlastností volajúceho unaví a položí to.\n"
@@ -371,7 +350,6 @@ _SK_FAREWELL_INSTRUCTION = (
     "Povedzte iba slová rozlúčky volajúcemu, v jazyku, ktorý volajúci "
     "používal počas rozhovoru, a nič iné. Príklad po slovensky: 'Ďakujem za "
     "telefonát, prajem pekný deň, dovidenia.' Jedna krátka veta. "
-    "'dovidenia' vyslovuj ako 'doviďeňia', s prízvukom na prvej slabike. "
     "NEOHLASUJTE rozlúčku ani ukončenie hovoru ('rozlúčim sa', 'teraz "
     "zložím', 'ukončím hovor'), nehovorte, čo urobíte ďalej, neklaďte "
     "otázky, nič nepridávajte."
@@ -394,305 +372,11 @@ _SK_ASK_FOR_NUMBER = (
 # in the prompt, the model loses its map of the email.
 _SK_SECTION_COLLECTED = "=== Údaje získané od volajúceho ==="
 _SK_SECTION_INTERESTED = "=== Nehnuteľnosť, o ktorú má záujem ==="
-_SK_SECTION_OTHERS = "=== Ďalšie predstavené nehnuteľnosti ==="
 
 # Spelled out on purpose: "Nehnuteľnosť na predaj" alone reads as the property
 # on offer, and both the agent skimming the mail and the summary model then
 # mistake the caller's own flat for the one he called about.
 _SK_PROPERTY_TO_SELL_LABEL = "Vlastná nehnuteľnosť na predaj pred kúpou"
-
-
-# ── Tool schemas ─────────────────────────────────────────────────────────────
-# The tool definitions are part of what the realtime model reads on every turn,
-# so English descriptions sitting beside a Slovak prompt keep English
-# orthography alive in her context — which is where English pronunciation of
-# shared words creeps back in. Hence a full Slovak set.
-#
-# Only the identifiers stay fixed: tool names, field names, and the enum tokens
-# ("vendita"/"affitto", "normale"/"urgente"), because the handlers in
-# call/router.py dispatch on them and the lead email maps them through
-# `type_display` / `urgency_display`. They are never spoken to the caller, and
-# the descriptions below say so explicitly.
-
-_SK_SEARCH_TOOL = {
-    "type": "function",
-    "name": "search_listings",
-    "description": (
-        "Vyhľadá dostupné nehnuteľnosti v ponuke podľa kritérií volajúceho."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "type": {
-                "type": "string",
-                "enum": ["vendita", "affitto"],
-                "description": (
-                    "Či chce volajúci kúpiť ('vendita') alebo si prenajať "
-                    "('affitto'). Sú to interné hodnoty systému: volajúcemu "
-                    "ich nikdy nehovorte ani nečítajte nahlas."
-                ),
-            },
-            "zone": {
-                "type": "string",
-                "description": (
-                    "Lokalita, mesto alebo mestská časť, o ktorú má volajúci "
-                    "záujem"
-                ),
-            },
-            "rooms_min": {
-                "type": "integer",
-                "description": "Minimálny počet izieb",
-            },
-            "rooms_max": {
-                "type": "integer",
-                "description": "Maximálny počet izieb",
-            },
-            "max_price": {
-                "type": "integer",
-                "description": "Maximálna cena v eurách",
-            },
-        },
-        "required": [],
-    },
-}
-
-_SK_GET_LISTING_TOOL = {
-    "type": "function",
-    "name": "get_listing_by_address",
-    "description": (
-        "Vyhľadá konkrétnu nehnuteľnosť podľa adresy alebo jej časti. "
-        "Použite ho, keď volajúci spomenie konkrétnu nehnuteľnosť alebo "
-        "adresu. Vráti údaje o nehnuteľnosti, alebo prázdny zoznam, ak sa nič "
-        "nenašlo."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "address_query": {
-                "type": "string",
-                "description": (
-                    "Adresa presne tak, ako ju povedal volajúci — skopírujte "
-                    "ju doslovne, neparafrázujte ju ani si ju nedomýšľajte"
-                ),
-            }
-        },
-        "required": ["address_query"],
-    },
-}
-
-_SK_MARK_INTEREST_TOOL = {
-    "type": "function",
-    "name": "mark_listing_interest",
-    "description": (
-        "Zaznamená, že volajúci potvrdil záujem o konkrétnu nehnuteľnosť. "
-        "Zavolajte ho hneď, ako volajúci povie, že ho daná nehnuteľnosť "
-        "zaujíma, a odovzdajte jej presnú adresu."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "address": {
-                "type": "string",
-                "description": (
-                    "Presná adresa nehnuteľnosti, o ktorú má volajúci záujem"
-                ),
-            }
-        },
-        "required": ["address"],
-    },
-}
-
-_SK_RECORD_CALLER_INFO_TOOL = {
-    "type": "function",
-    "name": "record_caller_info",
-    "description": (
-        "Zaznamená kvalifikačné odpovede volajúceho ako štruktúrované údaje, "
-        "aby sa dostali do zhrnutia odoslaného maklérovi. Zavolajte ho iba "
-        "raz, hneď po tom, ako ste získali všetky kvalifikačné odpovede k "
-        "aktuálnej požiadavke (prenájom alebo kúpa) — a skôr, než volajúcemu "
-        "poviete, že jeho požiadavku odovzdáte. Vyplňte iba tie polia, na "
-        "ktoré volajúci naozaj odpovedal; vždy sa uistite, že ste sa "
-        "volajúceho spýtali na meno, ešte než tento nástroj zavoláte. Hneď po "
-        "tom, ako nástroj vráti výsledok, povedzte volajúcemu, že jeho "
-        "požiadavku odovzdáte realitnému maklérovi — nečakajte, kým sa "
-        "volajúci ozve."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "name": {"type": "string", "description": "Meno volajúceho"},
-            "phone": {
-                "type": "string",
-                "description": (
-                    "Telefónne číslo volajúceho na spätné volanie, presne "
-                    "tak, ako ho volajúci povedal. Vyplňte ho iba vtedy, keď "
-                    "ste si oň museli volajúceho požiadať, pretože nebolo "
-                    "dostupné automaticky."
-                ),
-            },
-            "employment_status": {
-                "type": "string",
-                "description": (
-                    "Pracovná situácia, zvyčajne zamestnanec / živnostník "
-                    "alebo podnikateľ / študent — pri prenájme. Tieto "
-                    "kategórie slúžia len na zaradenie odpovede tu; nie sú to "
-                    "možnosti, ktoré by ste mali volajúcemu čítať, keď sa "
-                    "pýtate."
-                ),
-            },
-            "monthly_income": {
-                "type": "string",
-                "description": "Približný čistý mesačný príjem — pri prenájme",
-            },
-            "household_size": {
-                "type": "string",
-                "description": (
-                    "Počet osôb, ktoré by v nehnuteľnosti bývali — pri "
-                    "prenájme"
-                ),
-            },
-            "has_pets": {
-                "type": "string",
-                "description": "Či má volajúci domáce zvieratá — pri prenájme",
-            },
-            "move_in_date": {
-                "type": "string",
-                "description": (
-                    "Želaný dátum nasťahovania — pri prenájme. Zachovajte "
-                    "vlastné slová volajúceho a každý relatívny údaj "
-                    "prepočítajte podľa aktuálneho dátumu vo vašich pokynoch, "
-                    "napríklad 'budúci mesiac (október)'. Nikdy neodhadujte "
-                    "deň v týždni ani dátum."
-                ),
-            },
-            "has_mortgage_preapproval": {
-                "type": "string",
-                "description": (
-                    "Stav predschválenej hypotéky alebo rokovaní s bankou — "
-                    "pri kúpe"
-                ),
-            },
-            "has_property_to_sell": {
-                "type": "string",
-                "description": (
-                    "Či má volajúci nehnuteľnosť, ktorú potrebuje predať pred "
-                    "kúpou — pri kúpe"
-                ),
-            },
-            "sale_timeline": {
-                "type": "string",
-                "description": (
-                    "Želaný časový rámec pre podpis kúpnej zmluvy — pri kúpe"
-                ),
-            },
-            "visit_availability": {
-                "type": "string",
-                "description": (
-                    "Kedy má volajúci čas na obhliadku. Zachovajte vlastné "
-                    "slová volajúceho a každý relatívny údaj prepočítajte "
-                    "podľa aktuálneho dátumu vo vašich pokynoch, napríklad "
-                    "'zajtra (3.8.)' alebo 'budúci týždeň v pondelok (5.8.)'. "
-                    "Nikdy neodhadujte deň v týždni ani dátum — ak nie je "
-                    "jasné, ktorý deň volajúci myslí, spýtajte sa."
-                ),
-            },
-        },
-        "required": [],
-    },
-}
-
-_SK_END_CALL_TOOL = {
-    "type": "function",
-    "name": "end_call",
-    "description": (
-        "Ukončí telefonát. Použite ho AŽ po tom, ako ste volajúcemu povedali, "
-        "že jeho požiadavku odovzdáte realitnému maklérovi, spýtali ste sa, "
-        "či mu môžete pomôcť ešte s niečím, a volajúci odpovedal nie. "
-        "Zavolajte ho mlčky, ako celý svoj ťah: NELÚČTE sa a NEOZNAMUJTE, že "
-        "ukončujete hovor. Rozlúčku za vás vysloví systém hneď po tom, ako "
-        "tento nástroj vráti výsledok."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {},
-        "required": [],
-    },
-}
-
-_SK_LEAVE_MESSAGE_TOOL = {
-    "type": "function",
-    "name": "leave_message",
-    "description": (
-        "Použite ho vtedy, keď sa požiadavka volajúceho netýka hľadania "
-        "nehnuteľnosti na kúpu ani na prenájom a netýka sa ani konkrétnej "
-        "ponuky z ponuky kancelárie. Uloží meno volajúceho, jeho telefónne "
-        "číslo a odkaz, aby sa mu maklér mohol ozvať."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "caller_name": {
-                "type": "string",
-                "description": "Celé meno volajúceho",
-            },
-            "phone": {
-                "type": "string",
-                "description": (
-                    "Telefónne číslo volajúceho na spätné volanie, presne "
-                    "tak, ako ho volajúci povedal. Vyplňte ho iba vtedy, keď "
-                    "ste si oň museli volajúceho požiadať, pretože nebolo "
-                    "dostupné automaticky."
-                ),
-            },
-            "message": {
-                "type": "string",
-                "description": (
-                    "Zrozumiteľné zhrnutie toho, čo volajúci potrebuje, "
-                    "napísané ako poznámka pre makléra, napríklad: 'Volajúci "
-                    "chce ocenenie svojho bytu na Obchodnej 5 v Bratislave. "
-                    "Čas má doobeda.'"
-                ),
-            },
-            "urgency": {
-                "type": "string",
-                "enum": ["normale", "urgente"],
-                "description": (
-                    "Či volajúci naznačil naliehavosť. Sú to interné hodnoty "
-                    "systému: 'normale' = bežná, 'urgente' = urgentná. "
-                    "Volajúcemu ich nikdy nehovorte."
-                ),
-            },
-        },
-        "required": ["caller_name", "message"],
-    },
-}
-
-# Stored column → the key the model sees in a tool result. A tool result is the
-# last thing in her context before she describes a property out loud, so English
-# field names there were the one bit of English left in an otherwise Slovak
-# call. The `type` VALUE stays the internal token ("vendita"/"affitto"): it is
-# also the search_listings enum, so she has to be able to hand it straight back.
-_SK_MODEL_LISTING_FIELDS = {
-    "address": "adresa",
-    "zone": "lokalita",
-    "type": "typ",
-    "rooms": "izby",
-    "size_sqm": "vymera_m2",
-    "price": "cena",
-    "currency": "mena",
-    "available": "dostupna",
-    # Referenced by name in the prompt ("pole 'popis'") — keep the two in step.
-    "text": "popis",
-}
-
-_SK_TOOLS = [
-    _SK_SEARCH_TOOL,
-    _SK_GET_LISTING_TOOL,
-    _SK_MARK_INTEREST_TOOL,
-    _SK_RECORD_CALLER_INFO_TOOL,
-    _SK_END_CALL_TOOL,
-    _SK_LEAVE_MESSAGE_TOOL,
-]
 
 
 SK = {
@@ -719,8 +403,6 @@ SK = {
         "môžete pomôcť."
     ),
     "farewell_instruction": _SK_FAREWELL_INSTRUCTION,
-    "tools": _SK_TOOLS,
-    "model_listing_fields": _SK_MODEL_LISTING_FIELDS,
     "timezone": "Europe/Bratislava",
     "weekdays": (
         "pondelok", "utorok", "streda", "štvrtok", "piatok", "sobota",
@@ -752,13 +434,6 @@ SK = {
         f"- Nehnuteľnosť, o ktorú má volajúci záujem, je IBA tá uvedená pod "
         f"'{_SK_SECTION_INTERESTED}'. Ak je tá sekcia prázdna, volajúci si "
         "žiadnu nevybral: nevymýšľajte si ju.\n"
-        f"- '{_SK_SECTION_OTHERS}' obsahuje nehnuteľnosti, ktoré boli "
-        "volajúcemu počas hovoru predstavené: sú to ponuky, ktoré si "
-        "NEVYBRAL. Nikdy z nej neodvodzujte nehnuteľnosť, o ktorú má "
-        "záujem. Ak sú v tejto sekcii nehnuteľnosti, ale "
-        f"'{_SK_SECTION_INTERESTED}' je prázdna, výsledkom hovoru je "
-        "práve to, že si volajúci žiadnu nevybral: tak to aj napíšte, "
-        "bez menovania tých nehnuteľností.\n"
         f"- '{_SK_SECTION_COLLECTED}' obsahuje kvalifikačné údaje O "
         "volajúcom, nie nehnuteľnosť, ktorú hľadá. Najmä "
         f"'{_SK_PROPERTY_TO_SELL_LABEL}' je nehnuteľnosť, ktorú volajúci už "
@@ -776,7 +451,7 @@ SK = {
     "email_no_data": "Žiadne údaje neboli získané.",
     "email_section_interested": _SK_SECTION_INTERESTED,
     "email_none_specified": "Volajúci žiadnu neuviedol.",
-    "email_section_others": _SK_SECTION_OTHERS,
+    "email_section_others": "=== Ďalšie predstavené nehnuteľnosti ===",
     "email_none": "Žiadne.",
     "email_section_message": "=== Zanechaný odkaz ===",
     "email_name_label": "Meno",

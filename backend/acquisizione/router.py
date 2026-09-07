@@ -27,7 +27,7 @@ from pydantic import BaseModel
 from acquisizione import db, extraction, notify, photos, schema
 from agents import db as agents_db
 from config import settings
-from dashboard.router import current_tenant
+from dashboard.router import current_branch, current_tenant
 from listings import db as listings_db
 from usage import db as usage_db
 
@@ -38,9 +38,18 @@ router = APIRouter(prefix="/acquisizione")
 _OPENAI_CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets"
 
 
-async def _meter(tenant_id: str, tool: str, ref: str | None = None) -> None:
+async def _meter(
+    tenant_id: str,
+    tool: str,
+    ref: str | None = None,
+    branch: dict | None = None,
+) -> None:
     """Charge one use of an AI tool against the tenant's monthly credits
     (usage/db.py). Called only once the tool has actually done its work.
+
+    `branch` is whichever office the dashboard was scoped to when the tool ran
+    (None = the whole-agency view). It only attributes the spend for the branch
+    view — the charge is the agency's either way.
 
     Never raises. By the time this runs the agent already has their transcript
     or their photo, and failing the request now would report a broken tool that
@@ -48,7 +57,9 @@ async def _meter(tenant_id: str, tool: str, ref: str | None = None) -> None:
     is charging for work we didn't deliver.
     """
     try:
-        await asyncio.to_thread(usage_db.record, tenant_id, tool, ref)
+        await asyncio.to_thread(
+            usage_db.record, tenant_id, tool, ref, branch["id"] if branch else None
+        )
     except Exception:
         logger.exception("Failed to meter %s use for tenant %s", tool, tenant_id)
 
@@ -90,7 +101,11 @@ async def autosave_transcript(
 
 
 @router.post("/{record_id}/session-token")
-async def session_token(record_id: str, tenant: dict = Depends(current_tenant)):
+async def session_token(
+    record_id: str,
+    tenant: dict = Depends(current_tenant),
+    branch: dict | None = Depends(current_branch),
+):
     """Mint an ephemeral Realtime client secret for a transcription-only WebRTC
     session, scoped to this record's market. Called once to start the meeting
     and again transparently whenever a session approaches its 60-minute cap or
@@ -153,7 +168,7 @@ async def session_token(record_id: str, tenant: dict = Depends(current_tenant)):
     # the agent has even granted mic permission. Keyed on the record id, so the
     # later mints (60-minute session cap, dropped connection, resuming a
     # stranded meeting) don't charge the same meeting again.
-    await _meter(tenant["id"], "meeting", record_id)
+    await _meter(tenant["id"], "meeting", record_id, branch)
 
     # GA shape: {"value": "ek_...", "expires_at": ..., "session": {...}}.
     # Returned as-is; the browser uses `value` for the WebRTC SDP handshake.
@@ -283,6 +298,7 @@ async def enhance_photo(
     image: UploadFile = File(...),
     mode: str = Form("enhance"),
     tenant: dict = Depends(current_tenant),
+    branch: dict | None = Depends(current_branch),
 ):
     """Enhance one uploaded photo and stream the result straight back. In the
     default 'enhance' mode, the model decides what the photo needs (lighting,
@@ -311,7 +327,7 @@ async def enhance_photo(
     # Charged per delivered photo, and only here — a failed enhancement raised
     # above and costs the agency nothing. No ref: each photo is its own use,
     # including a second pass over the same image.
-    await _meter(tenant["id"], "photo")
+    await _meter(tenant["id"], "photo", branch=branch)
 
     return Response(content=edited, media_type="image/png")
 

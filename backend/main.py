@@ -18,6 +18,7 @@ from acquisizione import db as acquisizione_db
 from acquisizione.router import router as acquisizione_router
 from agents import db as agents_db
 from billing.router import router as billing_router
+from branches import db as branches_db
 from call.router import router as call_router
 from calls import db as calls_db
 from config import settings
@@ -171,6 +172,7 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(calls_db.init)
     await asyncio.to_thread(acquisizione_db.init)
     await asyncio.to_thread(agents_db.init)
+    await asyncio.to_thread(branches_db.init)
     await asyncio.to_thread(listings_db.init)
     await asyncio.to_thread(usage_db.init)
     await asyncio.to_thread(videotour_db.init)

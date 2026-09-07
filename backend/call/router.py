@@ -9,7 +9,7 @@ import re
 import time
 from collections.abc import Awaitable, Callable
 from html import escape
-from typing import Any
+from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -1461,6 +1461,26 @@ def _call_outcome(session: dict[str, Any]) -> str:
     return "call"
 
 
+def _call_branch_id(session: dict[str, Any]) -> Optional[str]:
+    """Which of the agency's offices this call belongs to, or None.
+
+    A call is a branch's call because the property the caller asked about is
+    handled by one of its agents — that is the only link the phone side has to
+    an office, since every branch of an agency answers on the same number. So:
+    the first interested listing whose agent has a branch wins. A caller who
+    asked about two offices' properties is counted under the first one they
+    showed interest in, rather than being double-counted in both.
+
+    None for every call that touched no assigned listing (a message, a seller
+    call, a browse that picked nothing). Those show up only in the whole-agency
+    view — see calls/db.py.
+    """
+    for agent in session.get("interest_agents") or []:
+        if agent.get("branch_id"):
+            return agent["branch_id"]
+    return None
+
+
 def _persist_call(session: dict[str, Any]) -> None:
     """Write one call_sessions row (always, for the minutes metric) and, when the
     call produced someone to follow up on, one contacts row — both scoped to the
@@ -1484,6 +1504,9 @@ def _persist_call(session: dict[str, Any]) -> None:
     callback = _resolve_callback_number(session)
     content = _content(session.get("locale"))
     summary = session.get("summary") or _fallback_lead_summary(content, session)
+    # Stamped once here and never recomputed, so an agent moving office later
+    # doesn't rewrite which office handled this call.
+    branch_id = _call_branch_id(session)
 
     call_session_id = calls_db.add_call_session(
         tenant_id=tenant_id,
@@ -1495,6 +1518,7 @@ def _persist_call(session: dict[str, Any]) -> None:
         locale=session.get("locale") or "it",
         outcome=_call_outcome(session),
         summary=summary,
+        branch_id=branch_id,
     )
 
     # A contact is only worth surfacing if there's a way to act on it — a name
@@ -1532,6 +1556,7 @@ def _persist_call(session: dict[str, Any]) -> None:
         assigned_agent=(
             ", ".join(_agent_display(a) for a in routed_agents) or None
         ),
+        branch_id=branch_id,
     )
 
 
@@ -1762,6 +1787,10 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
     recipients, cc, routed = _resolve_lead_recipients(session, agents)
     # Stash for _persist_call, which records who the lead was routed to.
     session["routed_agents"] = agents if routed else []
+    # Also stash them unfiltered: which office the call belongs to is a
+    # question about whose property the caller asked after, not about whether
+    # that agent happened to have a working email address (see _call_branch_id).
+    session["interest_agents"] = agents
     if not settings.RESEND_API_KEY or not recipients:
         logger.warning("RESEND_API_KEY/lead email not configured — lead email skipped")
         return

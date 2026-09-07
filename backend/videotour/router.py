@@ -25,7 +25,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from config import settings
-from dashboard.router import current_tenant
+from dashboard.router import current_branch, current_tenant
 from videotour import db, ffmpeg, geocode, pipeline, storage
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,11 @@ class CreateRequest(BaseModel):
 
 
 @router.post("", status_code=201)
-async def create_job(data: CreateRequest, tenant: dict = Depends(current_tenant)):
+async def create_job(
+    data: CreateRequest,
+    tenant: dict = Depends(current_tenant),
+    branch: Optional[dict] = Depends(current_branch),
+):
     """Open a job and start the tile capture immediately.
 
     This is what makes step 2 feel instant later: by the time the agent has
@@ -85,6 +89,9 @@ async def create_job(data: CreateRequest, tenant: dict = Depends(current_tenant)
         db.create,
         tenant["id"], tenant.get("locale") or "it",
         data.address.strip(), data.lat, data.lng, data.listing_id,
+        # Stored now, spent later: the credit is charged from a background task
+        # once the tour is deliverable, long after this request is gone.
+        branch["id"] if branch else None,
     )
     await pipeline.start(job)
     return job
