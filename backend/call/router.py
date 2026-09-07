@@ -991,7 +991,10 @@ def _build_accept_config(
     the same way the instructions do."""
     cfg = json.loads(json.dumps(_SESSION_UPDATE["session"]))
     cfg["instructions"] = instructions
-    cfg["tools"] = json.loads(json.dumps(content["tools"]))
+    # A locale that has not localized its tool schemas yet falls back to the
+    # Italian ones: the call still connects, it only loses the locale-matched
+    # descriptions.
+    cfg["tools"] = json.loads(json.dumps(content.get("tools") or _IT_TOOLS))
     cfg["audio"]["input"].pop("format", None)
     cfg["audio"]["output"].pop("format", None)
     return cfg
@@ -1878,8 +1881,11 @@ async def _run_call(
     # conversation, not the accept latency before it.
     session["started_at"] = datetime.datetime.now(datetime.timezone.utc)
 
-    # Bound once: every listing tool result is projected through it.
-    listing_fields = content["model_listing_fields"]
+    # Bound once: every listing tool result is projected through it. A locale
+    # without a rename map reads the stored column names unchanged.
+    listing_fields = content.get("model_listing_fields") or {
+        k: k for k in _MODEL_LISTING_FIELDS
+    }
 
     ws_url = f"wss://api.openai.com/v1/realtime?call_id={call_id}"
     oai_headers = [("Authorization", f"Bearer {settings.OPENAI_API_KEY}")]
