@@ -30,8 +30,8 @@ Každý záujemca príde priamo do e-mailovej schránky hneď, ako je zaznamenan
 **Automaticky viacjazyčná**
 Rozpozná jazyk volajúceho v reálnom čase a podľa toho odpovie. Žiadne jazykové bariéry, žiaden stratený zahraničný klient. Zvládané jazyky: slovenčina, angličtina, nemčina, francúzština, španielčina, taliančina, arabčina, čínština a ďalšie.
 
-**Synchronizácia s immobiliare.it**
-Automaticky načíta všetky karty ponúk — výmeru, cenu, lokalitu, vlastnosti. Každá nová ponuka je prevzatá v reálnom čase, bez ručného zadávania.
+**Pozná vaše ponuky a odpovie na otázky o nich**
+ApollonIA pozná všetky vaše ponuky — rozlohu, cenu, lokalitu, vlastnosti — a dokáže na ne volajúcim odpovedať. Ponuky máte uložené v zákazníckej zóne: buď si ich tam pridáte sami, alebo ich tam za vás uloží nástroj ApollonIA Meeting.
 
 **Prispôsobiteľná**
 Dá sa prispôsobiť, ako sa asistentka predstavuje, aké otázky kladie potenciálnym klientom a ako sa hovory odovzdávajú, tak aby to zodpovedalo tónu a procesom kancelárie.
@@ -40,8 +40,8 @@ Dá sa prispôsobiť, ako sa asistentka predstavuje, aké otázky kladie potenci
 
 ## 3. Ako to funguje
 
-**Krok 1 — Synchronizácia ponúk**
-ApollonIA načíta ponuky z immobiliare.it a automaticky ich importuje. Každá nová ponuka je prevzatá v reálnom čase. Nie je potrebné žiadne ručné zadávanie.
+**Krok 1 — Nahranie ponúk do zákazníckej zóny**
+Svoje ponuky si nahráte v zákazníckej zóne: pridáte nehnuteľnosť a vyplníte jej údaje (adresa, lokalita, typ, počet izieb, výmera, cena, popis). Ak používate nástroj ApollonIA Meeting, ručne to robiť nemusíte — po potvrdení stretnutia s predávajúcim sa nehnuteľnosť uloží medzi vaše ponuky sama, aj s popisom do inzerátu a s prideleným maklérom. ApollonIA odpovedá volajúcim presne z toho, čo je v zákazníckej zóne.
 
 **Krok 2 — Presmerovanie hovorov (vaše číslo, spravované ApollonIA)**
 Prepojenie za pár minút, s dvoma režimami na výber:
@@ -155,7 +155,7 @@ Fakturácia **mesačne** alebo **ročne** (pri ročnej ušetríte **15 %**). Ži
 **Pro** je najčastejšie volený program.
 
 **Čo obsahuje každý program:**
-- **Base:** 500 minút hovorov/mesiac, záujemcovia e-mailom v reálnom čase, synchronizácia s immobiliare.it.
+- **Base:** 500 minút hovorov/mesiac, záujemcovia e-mailom v reálnom čase, znalosť vašich ponúk a odpovede na otázky o nich.
 - **Pro:** všetko z programu Base + 1 000 minút/mesiac.
 - **Max:** všetko z programu Pro + 2 000 minút/mesiac.
 - **Studio:** individuálne minúty, neobmedzené čísla a agenti, individuálne zaškolenie. (Aktivuje sa cez priamy kontakt.)
@@ -175,13 +175,16 @@ Je to recepčná s umelou inteligenciou — virtuálna sekretárka pre realitný
 Je určená pre samostatných realitných maklérov a kancelárie s viacerými spolupracovníkmi, ktorí chcú prestať prichádzať o hovory, rýchlejšie reagovať na potenciálnych klientov a venovať viac času obhliadkam a rokovaniam.
 
 **Aké funkcie obsahuje?**
-Prijíma hovory 24 hodín denne, kvalifikuje potenciálnych klientov, automaticky zvláda viaceré jazyky, synchronizuje ponuky s immobiliare.it a posiela vám každého záujemcu e-mailom hneď, ako ho zaznamená — všetko z jedného panela.
+Prijíma hovory 24 hodín denne, kvalifikuje potenciálnych klientov, automaticky zvláda viaceré jazyky, pozná vaše ponuky a odpovie na otázky o nich a posiela vám každého záujemcu e-mailom hneď, ako ho zaznamená — všetko z jedného panela.
 
 **Môžem si ApollonIA prispôsobiť pre svoju kanceláriu?**
 Áno. Môžete prispôsobiť, ako sa asistentka predstavuje, aké otázky kladie potenciálnym klientom a ako sa hovory odovzdávajú, tak aby to zodpovedalo tónu a procesom vašej kancelárie.
 
 **Integruje sa s nástrojmi, ktoré už používam?**
-Áno. ApollonIA sa napojí na vaše existujúce telefónne číslo, synchronizuje ponuky s immobiliare.it a posiela záujemcov priamo do vašej e-mailovej schránky, takže zapadne do vášho pracovného postupu bez nutnosti meniť nástroje.
+Áno. ApollonIA sa napojí na vaše existujúce telefónne číslo, pozná vaše ponuky a odpovie na otázky o nich a posiela záujemcov priamo do vašej e-mailovej schránky, takže zapadne do vášho pracovného postupu bez nutnosti meniť nástroje.
+
+**Ako sa moje ponuky dostanú do ApollonIA?**
+Ponuky sú uložené v zákazníckej zóne a máte dve možnosti, ako ich tam dostať. Buď si nehnuteľnosť pridáte v zákazníckej zóne sami a vyplníte jej údaje, alebo použijete nástroj ApollonIA Meeting: ten zo stretnutia s predávajúcim pripraví popis nehnuteľnosti a po vašom potvrdení ju uloží medzi ponuky automaticky. ApollonIA potom volajúcim odpovedá presne z toho, čo je v zákazníckej zóne.
 
 **Ako získam podporu počas používania?**
 Náš tím vás sprevádza počas aktivácie a zostáva k dispozícii e-mailom pri akejkoľvek otázke. Programy Pro a Agentúra zahŕňajú prioritnú podporu a pre väčšie kancelárie vyhradeného správcu účtu.
@@ -203,9 +206,10 @@ Nie. ApollonIA sa napojí na vaše existujúce číslo; hovory sa spracúvajú c
 ## 6. Ako začať / Aktivácia
 
 1. Kliknite na **„Zverte hovory ApollonIA"** (vedie do sekcie cien).
-2. Vyberte program a vyplňte formulár (názov kancelárie, odkaz na profil immobiliare.it, telefón, e-mail, program, typ platby, režim spracovania hovorov).
+2. Vyberte program a vyplňte formulár (názov kancelárie, telefón, e-mail, program, typ platby).
 3. Dokončite platbu cez Stripe.
 4. E-mailom dostanete pridelené číslo ApollonIA a kód na aktiváciu presmerovania hovorov.
+5. V zákazníckej zóne si nahráte svoje ponuky — alebo ich necháte pridávať nástroju ApollonIA Meeting priamo zo stretnutí s predávajúcimi.
 
 Aktivácia trvá pár minút.
 
