@@ -55,9 +55,14 @@ _MODEL_LISTING_FIELDS = (
 )
 
 
-def _for_model(listings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _for_model(
+    listings: list[dict[str, Any]], fields: dict[str, str]
+) -> list[dict[str, Any]]:
+    """Project stored listings down to what the model may see, renaming the keys
+    to the tenant's locale on the way (`fields` maps column → key in the tool
+    result). The session keeps the full rows for routing the lead email."""
     return [
-        {k: v for k, v in listing.items() if k in _MODEL_LISTING_FIELDS}
+        {out: listing[src] for src, out in fields.items() if src in listing}
         for listing in listings
     ]
 
@@ -834,6 +839,25 @@ _LEAVE_MESSAGE_TOOL: dict[str, Any] = {
     },
 }
 
+# The tool schemas are prompt text too: the model reads every description on
+# every turn. So they are per-locale content like the system prompt, not a
+# constant — a Slovak tenant gets locales._SK_TOOLS instead of these. Only the
+# tool names, field names and enum tokens are shared, because the handlers
+# dispatch on them.
+_IT_TOOLS: list[dict[str, Any]] = [
+    _SEARCH_TOOL,
+    _GET_LISTING_TOOL,
+    _MARK_INTEREST_TOOL,
+    _RECORD_CALLER_INFO_TOOL,
+    _END_CALL_TOOL,
+    _LEAVE_MESSAGE_TOOL,
+]
+_IT_CONTENT["tools"] = _IT_TOOLS
+# Identity map: the Italian agent reads the stored column names unchanged. The
+# Slovak one renames them (locales._SK_MODEL_LISTING_FIELDS) so that no English
+# reaches the model mid-call.
+_IT_CONTENT["model_listing_fields"] = {k: k for k in _MODEL_LISTING_FIELDS}
+
 _SESSION_UPDATE: dict[str, Any] = {
     "type": "session.update",
     "session": {
@@ -864,14 +888,7 @@ _SESSION_UPDATE: dict[str, Any] = {
                 "voice": "marin",
             },
         },
-        "tools": [
-            _SEARCH_TOOL,
-            _GET_LISTING_TOOL,
-            _MARK_INTEREST_TOOL,
-            _RECORD_CALLER_INFO_TOOL,
-            _END_CALL_TOOL,
-            _LEAVE_MESSAGE_TOOL,
-        ],
+        "tools": _IT_TOOLS,
         "tool_choice": "auto",
     },
 }
@@ -962,12 +979,19 @@ def _find_tenant_by_dialed(dialed: str) -> dict | None:
     return None
 
 
-def _build_accept_config(instructions: str) -> dict[str, Any]:
+def _build_accept_config(
+    instructions: str, content: dict[str, Any]
+) -> dict[str, Any]:
     """Session config for POST /calls/{id}/accept. Reuses the phone agent's
-    tuned VAD, voice, reasoning and tools, but drops the PCM format fields: over
-    SIP, OpenAI negotiates the codec with the carrier and owns the media path."""
+    tuned VAD, voice and reasoning, but drops the PCM format fields: over SIP,
+    OpenAI negotiates the codec with the carrier and owns the media path.
+
+    The tools come from `content`, not from the template: their descriptions are
+    prompt text the model reads every turn, so they follow the tenant's locale
+    the same way the instructions do."""
     cfg = json.loads(json.dumps(_SESSION_UPDATE["session"]))
     cfg["instructions"] = instructions
+    cfg["tools"] = json.loads(json.dumps(content["tools"]))
     cfg["audio"]["input"].pop("format", None)
     cfg["audio"]["output"].pop("format", None)
     return cfg
@@ -1313,7 +1337,11 @@ async def incoming_call(request: Request) -> Response:
     # promptly; OpenAI keeps the call pending until the task accepts it.
     task = asyncio.create_task(
         _run_call(
-            call_id, _build_accept_config(instructions), session, content, tenant_store
+            call_id,
+            _build_accept_config(instructions, content),
+            session,
+            content,
+            tenant_store,
         )
     )
     _active_calls.add(task)
@@ -1821,6 +1849,9 @@ async def _run_call(
     # conversation, not the accept latency before it.
     session["started_at"] = datetime.datetime.now(datetime.timezone.utc)
 
+    # Bound once: every listing tool result is projected through it.
+    listing_fields = content["model_listing_fields"]
+
     ws_url = f"wss://api.openai.com/v1/realtime?call_id={call_id}"
     oai_headers = [("Authorization", f"Bearer {settings.OPENAI_API_KEY}")]
 
@@ -1934,7 +1965,8 @@ async def _run_call(
                                             "type": "function_call_output",
                                             "call_id": fc_id,
                                             "output": json.dumps(
-                                                _for_model(results), ensure_ascii=False
+                                                _for_model(results, listing_fields),
+                                                ensure_ascii=False,
                                             ),
                                         },
                                     }
@@ -1959,7 +1991,8 @@ async def _run_call(
                                     "type": "function_call_output",
                                     "call_id": fc_id,
                                     "output": json.dumps(
-                                        _for_model(results), ensure_ascii=False
+                                        _for_model(results, listing_fields),
+                                        ensure_ascii=False,
                                     ),
                                 },
                             }))

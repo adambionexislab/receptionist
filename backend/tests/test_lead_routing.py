@@ -198,9 +198,32 @@ def test_tool_results_hide_bookkeeping_fields_from_the_phone_agent():
         "size_sqm": 80, "price": 100000, "currency": "EUR", "available": True,
         "text": "descrizione",
     }
-    (projected,) = router._for_model([row])
+    fields = router._content("it")["model_listing_fields"]
+    (projected,) = router._for_model([row], fields)
 
     assert set(projected) == {
         "address", "zone", "type", "rooms", "size_sqm", "price", "currency",
         "available", "text",
     }
+
+
+def test_slovak_tool_results_carry_slovak_field_names():
+    """A tool result is the last thing in her context before she describes a
+    property out loud, so for a Slovak tenant its keys are Slovak too — with the
+    same bookkeeping columns withheld as in Italian."""
+    row = {
+        "id": "row-1", "agent_id": "agent-1", "source": "scrape", "edited": True,
+        "address": "Obchodná 12, Bratislava", "zone": "Bratislava",
+        "type": "affitto", "rooms": 3, "size_sqm": 80, "price": 700,
+        "currency": "EUR", "available": True, "text": "popis bytu",
+    }
+    fields = router._content("sk")["model_listing_fields"]
+    (projected,) = router._for_model([row], fields)
+
+    assert set(projected) == {
+        "adresa", "lokalita", "typ", "izby", "vymera_m2", "cena", "mena",
+        "dostupna", "popis",
+    }
+    # The type stays the internal token: it is also the search_listings enum,
+    # so she has to be able to hand it straight back.
+    assert projected["typ"] == "affitto"

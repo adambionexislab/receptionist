@@ -8,7 +8,7 @@
 
 ## 1. Čo je ApollonIA
 
-ApollonIA je **AI recepčná** — virtuálna sekretárka pre realitných maklérov a kancelárie. Prijíma hovory namiesto makléra, kvalifikuje potenciálnych klientov a posiela záujemcov e-mailom v reálnom čase.
+ApollonIA je **recepčná s umelou inteligenciou** — virtuálna sekretárka pre realitných maklérov a kancelárie. Prijíma hovory namiesto makléra, kvalifikuje potenciálnych klientov a posiela záujemcov e-mailom v reálnom čase.
 
 **Jednou vetou:** ApollonIA zdvihne telefón, kvalifikuje záujemcu a pošle výsledok — takže nestrácate čas s tými, čo len zisťujú, a hovoríte len so skutočne zaujímajúcimi sa klientmi.
 
@@ -160,16 +160,16 @@ Fakturácia **mesačne** alebo **ročne** (pri ročnej ušetríte **15 %**). Ži
 - **Max:** všetko z programu Pro + 2 000 minút/mesiac.
 - **Studio:** individuálne minúty, neobmedzené čísla a agenti, individuálne zaškolenie. (Aktivuje sa cez priamy kontakt.)
 
-Programy Pro a Studio/Agentúra zahŕňajú prioritnú podporu; pre väčšie kancelárie je vyhradený account manažér.
+Programy Pro a Studio/Agentúra zahŕňajú prioritnú podporu; pre väčšie kancelárie je vyhradený správca účtu.
 
 Platby sú bezpečne spracované cez Stripe.
 
 ---
 
-## 5. Časté otázky (FAQ)
+## 5. Časté otázky
 
 **Čo je ApollonIA?**
-Je to AI recepčná — virtuálna sekretárka pre realitných maklérov a kancelárie: prijíma hovory namiesto vás, kvalifikuje potenciálnych klientov a posiela vám záujemcov e-mailom v reálnom čase.
+Je to recepčná s umelou inteligenciou — virtuálna sekretárka pre realitných maklérov a kancelárie: prijíma hovory namiesto vás, kvalifikuje potenciálnych klientov a posiela vám záujemcov e-mailom v reálnom čase.
 
 **Pre koho je ApollonIA užitočná?**
 Je určená pre samostatných realitných maklérov a kancelárie s viacerými spolupracovníkmi, ktorí chcú prestať prichádzať o hovory, rýchlejšie reagovať na potenciálnych klientov a venovať viac času obhliadkam a rokovaniam.
@@ -184,7 +184,7 @@ Prijíma hovory 24 hodín denne, kvalifikuje potenciálnych klientov, automatick
 Áno. ApollonIA sa napojí na vaše existujúce telefónne číslo, synchronizuje ponuky s immobiliare.it a posiela záujemcov priamo do vašej e-mailovej schránky, takže zapadne do vášho pracovného postupu bez nutnosti meniť nástroje.
 
 **Ako získam podporu počas používania?**
-Náš tím vás sprevádza počas aktivácie a zostáva k dispozícii e-mailom pri akejkoľvek otázke. Programy Pro a Agentúra zahŕňajú prioritnú podporu a pre väčšie kancelárie vyhradeného account manažéra.
+Náš tím vás sprevádza počas aktivácie a zostáva k dispozícii e-mailom pri akejkoľvek otázke. Programy Pro a Agentúra zahŕňajú prioritnú podporu a pre väčšie kancelárie vyhradeného správcu účtu.
 
 **Ako môžem začať?**
 Stačí kliknúť na „Zverte hovory ApollonIA", aktivovať asistentku na svojom čísle za pár minút a začať dostávať záujemcov e-mailom — bez záväzkov a s možnosťou kedykoľvek zrušiť.
@@ -213,7 +213,7 @@ Aktivácia trvá pár minút.
 
 ## 7. Kontakt
 
-- **Web:** apollon-ia.com
+- **Webová stránka:** apollon-ia.com
 - **E-mail:** info@apollon-ia.com
 - **Telefón:** +39 389 937 6234
 
