@@ -63,8 +63,8 @@ def test_the_arm_event_turns_interruption_back_on():
 def test_the_arm_event_preserves_the_rest_of_the_vad_tuning():
     """session.update REPLACES a nested object rather than merging into it, so
     an event carrying only the changed flag would reset threshold and
-    silence_duration_ms to the API defaults — silently undoing the endpointing
-    fix mid-call, which is the bug that split spoken numbers in half."""
+    silence_duration_ms to the API defaults a few seconds into every call —
+    retuning endpointing mid-conversation, and doing it invisibly."""
     for field in ("type", "threshold", "prefix_padding_ms", "silence_duration_ms"):
         assert _ARM_VAD[field] == _PHONE_VAD[field], field
 

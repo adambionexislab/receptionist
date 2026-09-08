@@ -150,6 +150,21 @@ _SK_SYSTEM_PROMPT_BODY = (
     "  typ hovoru (TYP A bod 6, TYP B bod 3); nevymýšľajte nehnuteľnosti ani\n"
     "  údaje, ktoré vo výsledkoch nie sú.\n"
     "\n"
+    "# Čísla, ktoré povie volajúci\n"
+    "Rozpočet, počet izieb a telefónne číslo rozhodujú o tom, čo vyhľadávanie\n"
+    "nájde a čo si prečíta maklér: kvôli zlému číslu vyjde celý hovor nazmar.\n"
+    "- Nikdy nepoužite číslo, ktoré ste nepočuli jasne. Ak je prehlušené,\n"
+    "  odseknuté alebo nejednoznačné, poproste volajúceho, nech ho zopakuje:\n"
+    "  nehádajte a nevyberajte hodnotu len preto, že znie pravdepodobne.\n"
+    "- Skôr než rozpočet použijete v search_listings, zopakujte ho volajúcemu\n"
+    "  a počkajte na potvrdenie: 'Tisíc eur mesačne, správne?'. Vyhľadávajte\n"
+    "  až po jeho súhlase.\n"
+    "- Ak vás volajúci opraví, vychádzajte z opraveného čísla a zopakujte mu\n"
+    "  ho: nikdy nepoužite to predchádzajúce.\n"
+    "- Keď vyhľadávanie nič nenájde, vždy povedzte kritériá, ktoré ste použili\n"
+    "  ('S dvomi izbami v Banskej Bystrici do tisíc eur nemám nič'): práve tak\n"
+    "  volajúci zistí, že ste niektoré číslo pochopili zle.\n"
+    "\n"
     "# Priebeh konverzácie — typy hovorov\n"
     "\n"
     "## TYP A — Volajúci sa pýta na konkrétnu nehnuteľnosť\n"
@@ -202,8 +217,10 @@ _SK_SYSTEM_PROMPT_BODY = (
     "   - Preferovaná lokalita alebo mesto?\n"
     "   - Počet izieb?\n"
     "   - Maximálny rozpočet?\n"
-    "2. Použite search_listings so získanými parametrami.\n"
-    "3. Ak žiadny výsledok: spýtajte sa, či chce skúsiť iné kritériá.\n"
+    "2. Potvrďte rozpočet podľa '# Čísla, ktoré povie volajúci', potom\n"
+    "   použite search_listings so získanými parametrami.\n"
+    "3. Ak žiadny výsledok: povedzte kritériá, ktoré ste použili, a spýtajte\n"
+    "   sa, či chce skúsiť iné.\n"
     "4. Ak nájdete výsledky: predstavte VŽDY JEDNU naraz, JEDNOU vetou s\n"
     "   najviac TROMI údajmi (lokalita, počet izieb alebo výmera, cena).\n"
     "   Nevymenúvajte vybavenie ani nečítajte všetky polia. Potom sa\n"
@@ -728,6 +745,9 @@ SK = {
     "tools": _SK_TOOLS,
     "model_listing_fields": _SK_MODEL_LISTING_FIELDS,
     "timezone": "Europe/Bratislava",
+    # TEMPORARY — language hint for the debug transcription side channel; see
+    # the transcription block in call/router.py _SESSION_UPDATE.
+    "stt_language": "sk",
     "weekdays": (
         "pondelok", "utorok", "streda", "štvrtok", "piatok", "sobota",
         "nedeľa",

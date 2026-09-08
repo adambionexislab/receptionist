@@ -227,6 +227,22 @@ _SYSTEM_PROMPT_BODY = (
     "  del tipo di chiamata in corso (TIPO A punto 6, TIPO B punto 3); non\n"
     "  inventare immobili o dati assenti dai risultati.\n"
     "\n"
+    "# Numeri detti dal chiamante\n"
+    "Budget, numero di camere e numero di telefono decidono cosa trova la\n"
+    "ricerca e cosa legge l'agente: un numero sbagliato manda a vuoto tutta\n"
+    "la chiamata.\n"
+    "- Non usare mai un numero che non hai sentito con chiarezza. Se è\n"
+    "  coperto, tagliato o ambiguo, chiedi di ripeterlo: non tirare a\n"
+    "  indovinare e non scegliere un valore solo perché suona plausibile.\n"
+    "- Prima di passare un budget a search_listings, ripetilo al chiamante e\n"
+    "  aspetta che confermi: 'Mille euro al mese, giusto?'. Cerca solo dopo\n"
+    "  il sì.\n"
+    "- Se il chiamante ti corregge, riparti dal numero corretto e ripetiglielo:\n"
+    "  non riutilizzare mai quello di prima.\n"
+    "- Quando una ricerca non dà risultati, di' sempre i criteri che hai usato\n"
+    "  ('Con due camere a Lodi fino a mille euro non ho nulla'): è così che il\n"
+    "  chiamante si accorge se hai capito male un numero.\n"
+    "\n"
     "# Flusso della conversazione — tipi di chiamata\n"
     "\n"
     "## TIPO A — Il chiamante chiede di un immobile specifico\n"
@@ -280,8 +296,10 @@ _SYSTEM_PROMPT_BODY = (
     "   - Zona o città preferita?\n"
     "   - Numero di camere?\n"
     "   - Budget massimo?\n"
-    "2. Usa search_listings con i parametri raccolti.\n"
-    "3. Se nessun risultato: chiedi se vuole provare criteri diversi.\n"
+    "2. Conferma il budget come indicato in '# Numeri detti dal chiamante',\n"
+    "   poi usa search_listings con i parametri raccolti.\n"
+    "3. Se nessun risultato: di' i criteri che hai usato e chiedi se vuole\n"
+    "   provare criteri diversi.\n"
     "4. Se trovi risultati: presentane UNO alla volta, in UNA frase con al\n"
     "   massimo TRE dati (zona, locali o metratura, prezzo). Non elencare le\n"
     "   dotazioni e non leggere tutti i campi. Poi chiedi al chiamante se\n"
@@ -509,6 +527,9 @@ _IT_CONTENT: dict[str, Any] = {
     ),
     "farewell_instruction": _FAREWELL_INSTRUCTION,
     "timezone": "Europe/Rome",
+    # TEMPORARY — language hint for the debug transcription side channel; see
+    # the transcription block in _SESSION_UPDATE.
+    "stt_language": "it",
     "weekdays": (
         "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato",
         "domenica",
@@ -884,6 +905,19 @@ _SESSION_UPDATE: dict[str, Any] = {
         "audio": {
             "input": {
                 "format": {"type": "audio/pcm", "rate": 24000},
+                # TEMPORARY — debugging misheard numbers. A parallel ASR pass
+                # over the caller's audio. It does NOT change what she hears:
+                # gpt-realtime consumes the audio directly and this transcript
+                # is a side channel, so it only tells US what reached her. It is
+                # here because a captured budget kept coming out wrong (1000 ->
+                # 600) with no way to tell a mishearing from a guess.
+                #
+                # Take it out once that is understood: it bills a second audio
+                # pass on every call, and it puts caller speech into the logs
+                # for the first time — the SIP migration deliberately keeps no
+                # recordings. `language` is filled in per tenant by
+                # _build_accept_config.
+                "transcription": {"model": "gpt-4o-transcribe"},
                 # server VAD decides when the caller's turn ends and only then
                 # does the model reply. threshold is how loud audio must be to
                 # count as speech: too high and quiet/short utterances never
@@ -893,21 +927,21 @@ _SESSION_UPDATE: dict[str, Any] = {
                 # think mid-answer ends their turn early and then talks over the
                 # reply they just triggered.
                 #
-                # 600ms — where this started — was too short for a spoken
-                # number. On a Slovak call the caller answered the budget
-                # question in two halves with ~750ms between them: the turn
-                # closed on the first half, a reply started generating, and the
-                # rest of the number landed as an interruption. She then
-                # guessed rather than asking — search_listings ran with 650,
-                # then 650 again, then 750, and only reached the real 1500 on
-                # the caller's fourth attempt, 67 seconds after asking. A
-                # ~665ms pause split a district answer in the same call, so
-                # this is not specific to numbers; numbers are just where half
-                # a turn cannot be reconstructed from context. 1000ms clears
-                # both observed pauses with headroom, at ~400ms more silence
-                # per turn on top of the ~1.6-2.3s the caller already waits
-                # (most of which is generation, not this). Barge-in is
-                # untouched: interrupting her fires on speech_started.
+                # 600ms is a deliberate latency choice, kept knowing what it
+                # costs. It was raised to 1000ms for a while to stop mid-answer
+                # splits — one Slovak call split two answers, at ~665ms and
+                # ~747ms pauses, one of them a budget that then came back wrong
+                # — and the splitting did stop. The numbers stayed wrong anyway
+                # (a clean, unsplit 0.78s turn still produced 600 for a spoken
+                # 1000), which is what showed the cause was her guessing at a
+                # number she could not decode rather than the turn breaking in
+                # half. That is handled conversationally now: she reads the
+                # budget back before searching, and says her criteria when a
+                # search finds nothing (see "# Numeri detti dal chiamante" in
+                # the prompt). With accuracy no longer riding on it, 400ms of
+                # extra silence on every turn stopped being worth paying. If
+                # mid-answer splits resurface, ~800ms covers both pauses
+                # observed above for half that latency.
                 #
                 # interrupt_response starts FALSE so nothing can cut the
                 # opening. That first sentence carries the legally required AI
@@ -925,7 +959,7 @@ _SESSION_UPDATE: dict[str, Any] = {
                     "type": "server_vad",
                     "threshold": 0.5,
                     "prefix_padding_ms": 300,
-                    "silence_duration_ms": 1000,
+                    "silence_duration_ms": 600,
                     "interrupt_response": False,
                 },
             },
@@ -946,8 +980,9 @@ _SESSION_UPDATE: dict[str, Any] = {
 # The WHOLE turn_detection object is sent, not just the changed flag —
 # session.update replaces a nested object rather than merging into it, so
 # omitting threshold/silence_duration_ms here would silently reset them to the
-# API defaults and undo the endpointing fix above. Built from the template for
-# the same reason: one place to edit, no second copy to drift.
+# API defaults partway through every call, quietly retuning endpointing behind
+# your back. Built from the template for the same reason: one place to edit, no
+# second copy to drift.
 _ARM_BARGE_IN: dict[str, Any] = {
     "type": "session.update",
     "session": {
@@ -1102,6 +1137,13 @@ def _build_accept_config(
     _inject_branch_enum(cfg["tools"], branch_names or [])
     cfg["audio"]["input"].pop("format", None)
     cfg["audio"]["output"].pop("format", None)
+    # TEMPORARY — see the transcription block in _SESSION_UPDATE. The ASR side
+    # channel follows the tenant's language, or a Slovak call gets transcribed
+    # as though it were Italian. Written defensively so deleting the field from
+    # the template is the only edit needed to remove the feature.
+    transcription = cfg["audio"]["input"].get("transcription")
+    if transcription is not None:
+        transcription["language"] = content.get("stt_language", "it")
     return cfg
 
 
@@ -2359,6 +2401,30 @@ async def _run_call(
                         # a dropped reply goes missing at.
                         session["awaiting_reply_since"] = asyncio.get_event_loop().time()
                         logger.info("Caller finished speaking")
+
+                    elif (
+                        etype
+                        == "conversation.item.input_audio_transcription.completed"
+                    ):
+                        # TEMPORARY — see the transcription block in
+                        # _SESSION_UPDATE. Logged next to "Apollonia: ..." so a
+                        # call reads as a dialogue: when a captured number is
+                        # wrong, this line says whether the audio arrived
+                        # decodable at all. Not a record of what SHE heard — it
+                        # is a second opinion from a different model on the same
+                        # audio — so treat a mismatch as a lead, not a verdict.
+                        heard = (msg.get("transcript") or "").strip()
+                        logger.info("Caller: %s", heard or "(nothing intelligible)")
+
+                    elif (
+                        etype == "conversation.item.input_audio_transcription.failed"
+                    ):
+                        # TEMPORARY — see above. A failure here costs nothing
+                        # but the debug line: the call itself never depended on
+                        # this transcript.
+                        logger.warning(
+                            "Caller transcription failed: %s", msg.get("error")
+                        )
 
                     elif etype == "error":
                         # Pull the code out rather than dumping the envelope:
