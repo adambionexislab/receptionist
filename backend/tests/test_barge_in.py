@@ -44,6 +44,16 @@ def test_the_opening_cannot_be_interrupted():
     assert _PHONE_VAD["interrupt_response"] is False
 
 
+def test_nothing_else_may_speak_during_the_opening():
+    """interrupt_response alone was not enough. It stopped the greeting response
+    being cancelled — so the "Caller interrupted" log line vanished and it read
+    as fixed — but create_response still fired at the end of the caller's turn,
+    and that second response's audio displaced the greeting still playing out
+    over SIP. The caller heard the same truncation, and the log hid it, because
+    the transcript event reports generated text, not what was played."""
+    assert _PHONE_VAD["create_response"] is False
+
+
 def test_the_accepted_sip_session_carries_it():
     """_build_accept_config rebuilds the session for SIP and strips the PCM
     format fields; the VAD tuning has to survive that trip, or the greeting
@@ -58,6 +68,14 @@ def test_the_accepted_sip_session_carries_it():
 
 def test_the_arm_event_turns_interruption_back_on():
     assert _ARM_VAD["interrupt_response"] is True
+
+
+def test_the_arm_event_turns_auto_response_back_on():
+    """Both flags go off together for the opening and have to come back
+    together: leaving create_response off would mean every later caller turn
+    sits unanswered until the nudge watchdog notices, four seconds of dead air
+    per turn for the whole call."""
+    assert _ARM_VAD["create_response"] is True
 
 
 def test_the_arm_event_preserves_the_rest_of_the_vad_tuning():
@@ -120,11 +138,15 @@ def test_the_window_outlasts_a_spoken_greeting():
 # ── The browser demo, which has no control socket ────────────────────────────
 
 
-def test_the_demo_does_not_inherit_the_off_switch():
+@pytest.mark.parametrize("flag", ["interrupt_response", "create_response"])
+def test_the_demo_does_not_inherit_the_off_switches(flag):
     """The demo browser talks straight to OpenAI, so nothing on our side can
-    send it the re-arm — inheriting interrupt_response=False would leave the
-    demo unable to be interrupted for the entire session."""
-    assert "interrupt_response" not in _DEMO_TURN_DETECTION
+    send it the re-arm. Inheriting interrupt_response=False would leave the demo
+    uninterruptible; inheriting create_response=False would leave it silent —
+    no turn would ever produce a reply. Parametrised rather than asserted once
+    because the second flag was added later and the demo kept stripping only
+    the first, which is exactly the bug this guards."""
+    assert flag not in _DEMO_TURN_DETECTION
 
 
 def test_the_demo_still_inherits_the_tuned_vad():

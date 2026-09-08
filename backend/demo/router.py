@@ -58,15 +58,18 @@ _DEMO_VOICE = _SESSION_UPDATE["session"]["audio"]["output"]["voice"]
 # are more trigger-happy: on a noisy browser mic the defaults create spurious
 # "user turns" that the model can mis-detect as another language.
 #
-# interrupt_response is dropped, not inherited. The phone agent holds it off for
-# the opening and hands it back over its control WebSocket a few seconds in; the
-# demo has no control socket — the browser talks straight to OpenAI — so it would
-# inherit the "off" and never get barge-in back for the whole session. A copy,
-# not a reference, so editing one can't reach into the other's dict.
+# The two greeting flags are dropped, not inherited. The phone agent turns
+# interrupt_response and create_response off so nothing can take the line from
+# its opening, then hands both back over its control WebSocket a few seconds in.
+# The demo has no control socket — the browser talks straight to OpenAI — so it
+# would inherit the "off" with nothing to ever turn it back on: no barge-in, and
+# with create_response off, no replies at all for the whole session. A copy, not
+# a reference, so editing one can't reach into the other's dict.
+_GREETING_ONLY_VAD_FLAGS = ("interrupt_response", "create_response")
 _DEMO_TURN_DETECTION = {
     k: v
     for k, v in _SESSION_UPDATE["session"]["audio"]["input"]["turn_detection"].items()
-    if k != "interrupt_response"
+    if k not in _GREETING_ONLY_VAD_FLAGS
 }
 
 # Demo override: there are no listing tools in the WebRTC demo, so Apollonia must

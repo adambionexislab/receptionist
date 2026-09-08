@@ -80,37 +80,20 @@ def test_the_disclosure_is_never_omitted_in_another_language(locale):
 
 
 @pytest.mark.parametrize("locale", LOCALES)
-def test_an_unfinished_disclosure_is_repeated(locale):
-    """Cut off before the end, the caller never heard it — so the opening has to
-    start again rather than continue as though it had been said."""
+def test_a_cut_off_disclosure_is_repeated(locale):
+    """Cut off partway, the caller never heard it, so the opening starts again.
+
+    Deliberately NOT narrowed to "only repeat if you didn't reach the end of the
+    sentence" — that was tried and reverted. She reaches the end of the
+    generated TEXT every time; whether the caller heard it depends on audio
+    playout, which she cannot observe. Conditioning the disclosure on something
+    invisible to her risks skipping it. Repeating an opening the caller already
+    heard is a wasted sentence; skipping one they didn't is a legal problem."""
     prompt = _flat(router._content(locale)["opening_section"])
 
     marker = {
-        "it": "prima che tu abbia finito la dichiarazione",
-        "sk": "skôr, než vyhlásenie dokončíte",
-    }[locale]
-    assert marker in prompt
-
-
-@pytest.mark.parametrize("locale", LOCALES)
-def test_a_finished_disclosure_is_never_repeated(locale):
-    """Regression: she delivered the whole opening, the caller said one word over
-    the end of it, and she read the entire greeting out a second time:
-
-        22:24:20,716  Apollonia: Dobrý deň, volám sa Apollonia, ... môžem pomôcť?
-        22:24:21,219  Caller finished speaking
-        22:24:23,428  Apollonia: Dobrý deň, volám sa Apollonia, ... môžem pomôcť?
-
-    No interruption was logged — the audio was never cut, because the opening
-    runs with interrupt_response=False. She restarted because the rule keyed on
-    "something interrupted you" rather than on whether the sentence actually
-    finished, and a caller turn arriving mid-greeting reads as an interruption.
-    Being talked over is not the test; not finishing is."""
-    prompt = _flat(router._content(locale)["opening_section"])
-
-    marker = {
-        "it": "non ripeterla mai, nemmeno se il chiamante ha parlato",
-        "sk": "nikdy ju neopakujte, ani keď volajúci hovoril",
+        "it": "ripeti la frase di apertura per intero",
+        "sk": "zopakujte celú úvodnú vetu od začiatku",
     }[locale]
     assert marker in prompt
 

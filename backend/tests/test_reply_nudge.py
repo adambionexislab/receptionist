@@ -23,7 +23,14 @@ from call.router import _should_nudge_reply
 
 
 def _session(**overrides):
-    session = {"awaiting_reply_since": None, "ending_at": None}
+    """A normal mid-call session. barge_in_armed is True because every turn
+    except the opening is one: the greeting window is the exception, and it has
+    its own test below."""
+    session = {
+        "awaiting_reply_since": None,
+        "ending_at": None,
+        "barge_in_armed": True,
+    }
     session.update(overrides)
     return session
 
@@ -51,6 +58,25 @@ def test_stays_quiet_before_the_grace_period_is_up():
     session = _session(awaiting_reply_since=100.0)
 
     assert not _should_nudge_reply(session, False, 100.0 + NUDGE - 0.1)
+
+
+def test_stays_quiet_while_the_opening_is_still_playing():
+    """The greeting runs with create_response=False, so anything that scored as
+    speech during it is committed and deliberately unanswered. Nudging would
+    answer it — talking over the tail of the AI disclosure to reply to what was
+    most likely line noise. The greeting's own "how can I help you?" is the
+    prompt a real caller needs."""
+    session = _session(awaiting_reply_since=100.0, barge_in_armed=False)
+
+    assert not _should_nudge_reply(session, False, 100.0 + NUDGE + 10.0)
+
+
+def test_the_nudge_resumes_once_barge_in_is_armed():
+    """Only the opening is excluded, not the rest of the call — the dead-air
+    recovery this whole module exists for has to still work afterwards."""
+    session = _session(awaiting_reply_since=100.0, barge_in_armed=True)
+
+    assert _should_nudge_reply(session, False, 100.0 + NUDGE + 0.1)
 
 
 def test_stays_quiet_once_the_call_is_ending():

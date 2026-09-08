@@ -14,8 +14,13 @@ no rule telling her to ask, guessing was the only move the prompt left her.
 
 Worse, she never said the number out loud — she went straight from the question
 to the tool to "nothing matches your budget" — so the caller had no way to catch
-it. Hence the two halves of the fix pinned here: confirm the budget before
-searching, and say the criteria back when a search finds nothing.
+it. The fix pinned here is one read-back turn before the search: it caught a
+real one on the next call, "Osemdesiat eur mesačne, správne?" for a spoken
+osemsto, corrected in a single turn.
+
+The read-back is the whole safety net, on purpose. A second net after the search
+— reciting the criteria and offering to change them — was tried and removed: it
+turned a zero result into a three-question interrogation the caller hung up on.
 """
 
 import re
@@ -38,7 +43,6 @@ SECTION = {"it": "# numeri detti dal chiamante", "sk": "# čísla, ktoré povie 
 DONT_GUESS = {"it": "non tirare a indovinare", "sk": "nehádajte"}
 CONFIRM_BUDGET = {"it": "aspetta che confermi", "sk": "počkajte na potvrdenie"}
 DROP_OLD_VALUE = {"it": "non riutilizzare mai quello di prima", "sk": "nikdy nepoužite to predchádzajúce"}
-SAY_CRITERIA = {"it": "di' sempre i criteri che hai usato", "sk": "vždy povedzte kritériá"}
 # The TYPE B step that routes into the section rather than restating it.
 TYPE_B_POINTER = {"it": "conferma il budget come indicato", "sk": "potvrďte rozpočet podľa"}
 
@@ -72,17 +76,24 @@ def test_a_correction_replaces_the_old_value(locale):
 
 
 @pytest.mark.parametrize("locale", LOCALES)
-def test_zero_results_state_the_criteria_used(locale):
-    """The only reason the 1500 call was ever diagnosed is that she happened to
-    say "do 650 eur" out loud. This makes that the rule rather than luck."""
-    assert SAY_CRITERIA[locale] in _prompt(locale)
-
-
-@pytest.mark.parametrize("locale", LOCALES)
 def test_type_b_points_at_the_section_instead_of_restating_it(locale):
     """gpt-realtime-2 pays for instruction conflict, so the search flow refers
     to the rule rather than keeping a second copy that can drift from it."""
     assert TYPE_B_POINTER[locale] in _prompt(locale)
+
+
+@pytest.mark.parametrize("locale", LOCALES)
+def test_the_zero_result_step_stays_a_single_open_question(locale):
+    """Deliberately NOT expanded. Making her recite the criteria and offer to
+    change them turned a dead end into an interrogation — location, budget,
+    rooms, three answers, no second search, caller hung up. Callers do not
+    change their mind about the city, so the read-back before the search is the
+    whole safety net; after a zero result she asks once and stops."""
+    step = {
+        "it": "3. se nessun risultato: chiedi se vuole provare criteri diversi.",
+        "sk": "3. ak žiadny výsledok: spýtajte sa, či chce skúsiť iné kritériá.",
+    }[locale]
+    assert step in _prompt(locale)
 
 
 @pytest.mark.parametrize("locale", LOCALES)

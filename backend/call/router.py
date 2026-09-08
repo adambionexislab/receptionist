@@ -239,9 +239,6 @@ _SYSTEM_PROMPT_BODY = (
     "  il sì.\n"
     "- Se il chiamante ti corregge, riparti dal numero corretto e ripetiglielo:\n"
     "  non riutilizzare mai quello di prima.\n"
-    "- Quando una ricerca non dà risultati, di' sempre i criteri che hai usato\n"
-    "  ('Con due camere a Lodi fino a mille euro non ho nulla'): è così che il\n"
-    "  chiamante si accorge se hai capito male un numero.\n"
     "\n"
     "# Flusso della conversazione — tipi di chiamata\n"
     "\n"
@@ -298,8 +295,7 @@ _SYSTEM_PROMPT_BODY = (
     "   - Budget massimo?\n"
     "2. Conferma il budget come indicato in '# Numeri detti dal chiamante',\n"
     "   poi usa search_listings con i parametri raccolti.\n"
-    "3. Se nessun risultato: di' i criteri che hai usato e chiedi se vuole\n"
-    "   provare criteri diversi.\n"
+    "3. Se nessun risultato: chiedi se vuole provare criteri diversi.\n"
     "4. Se trovi risultati: presentane UNO alla volta, in UNA frase con al\n"
     "   massimo TRE dati (zona, locali o metratura, prezzo). Non elencare le\n"
     "   dotazioni e non leggere tutti i campi. Poi chiedi al chiamante se\n"
@@ -435,13 +431,9 @@ _OPENING_SECTION = (
     "- La dichiarazione non si omette mai e non si rimanda: se apri la\n"
     "  chiamata in una lingua diversa dall'italiano (vedi '# Lingua'), falla\n"
     "  in quella lingua.\n"
-    "- Se qualcosa ti interrompe PRIMA che tu abbia finito la dichiarazione,\n"
-    "  la dichiarazione non è stata fatta: ripeti la frase di apertura per\n"
+    "- Se qualcosa ti interrompe a metà della frase di apertura, la\n"
+    "  dichiarazione non è stata fatta: ripeti la frase di apertura per\n"
     "  intero, dall'inizio, invece di proseguire come se l'avessi già detta.\n"
-    "- Se invece sei arrivata in fondo alla frase di apertura, la\n"
-    "  dichiarazione È stata fatta: non ripeterla mai, nemmeno se il\n"
-    "  chiamante ha parlato mentre la dicevi. Rispondi a quello che ti ha\n"
-    "  detto e prosegui normalmente.\n"
     "- Non presentarti mai come una persona e non lasciar credere di esserlo:\n"
     "  se più avanti il chiamante ti chiede se sei una persona vera, conferma\n"
     "  sempre, con chiarezza e senza scusarti, di essere un assistente\n"
@@ -943,24 +935,37 @@ _SESSION_UPDATE: dict[str, Any] = {
                 # mid-answer splits resurface, ~800ms covers both pauses
                 # observed above for half that latency.
                 #
-                # interrupt_response starts FALSE so nothing can cut the
-                # opening. That first sentence carries the legally required AI
-                # disclosure, and something at pickup — line noise, the connect
-                # tone, or her own voice echoing back — kept scoring above
-                # threshold and cancelling it: she got a few words in, stopped,
-                # and then, per the prompt rule that an interrupted disclosure
-                # has not been made (locales.py "zopakujte celú úvodnú vetu"),
-                # started the whole greeting over, sometimes twice. VAD still
-                # commits whatever the caller says during the opening, so no
-                # audio is lost — it just no longer kills the response, and she
-                # answers it on the next turn. The control socket hands barge-in
-                # back a few seconds later; see _ARM_BARGE_IN.
+                # Both flags start FALSE so nothing can take the line away from
+                # the opening. That first sentence carries the legally required
+                # AI disclosure, and something at pickup — line noise, the
+                # connect tone, her own voice echoing back — kept scoring above
+                # threshold: the greeting stopped a few words in and started
+                # over, sometimes twice.
+                #
+                # It takes BOTH. interrupt_response=False alone stops the
+                # greeting response being cancelled, which is why the
+                # "Caller interrupted" log line went away and it looked fixed —
+                # but create_response then still fired at the end of the
+                # caller's turn, and that second response's audio displaced the
+                # greeting still playing on the SIP leg. Same truncation,
+                # quieter. Note it is invisible in the log either way: the
+                # transcript event reports the text the model GENERATED, so a
+                # greeting cut off mid-word still logs in full.
+                #
+                # The caller's audio is still committed, just not answered:
+                # whatever they said during the opening arrives as a pending
+                # turn and nothing replies to it. That is deliberate — the
+                # greeting ends with "how can I help you?", which is itself the
+                # cue to speak, so a caller with something to say repeats it and
+                # noise costs nothing. The control socket hands both flags back
+                # a few seconds later; see _ARM_BARGE_IN.
                 "turn_detection": {
                     "type": "server_vad",
                     "threshold": 0.5,
                     "prefix_padding_ms": 300,
                     "silence_duration_ms": 600,
                     "interrupt_response": False,
+                    "create_response": False,
                 },
             },
             "output": {
@@ -973,9 +978,10 @@ _SESSION_UPDATE: dict[str, Any] = {
     },
 }
 
-# Sent over the control socket once the opening has been delivered, to undo the
-# interrupt_response=False above. From here on barge-in is the feature working:
-# a caller who starts talking mid-answer should cut her off.
+# Sent over the control socket once the opening has been delivered, to undo both
+# of the False flags above. From here on barge-in is the feature working: a
+# caller who starts talking mid-answer should cut her off, and their turn should
+# get an answer without waiting on the nudge watchdog.
 #
 # The WHOLE turn_detection object is sent, not just the changed flag —
 # session.update replaces a nested object rather than merging into it, so
@@ -992,6 +998,7 @@ _ARM_BARGE_IN: dict[str, Any] = {
                 "turn_detection": {
                     **_SESSION_UPDATE["session"]["audio"]["input"]["turn_detection"],
                     "interrupt_response": True,
+                    "create_response": True,
                 }
             }
         },
@@ -1221,10 +1228,19 @@ def _should_nudge_reply(
     for a reply on their behalf.
 
     Deliberately conservative — every condition here is a reason NOT to speak:
-    nothing is owed, she is already generating an answer, or the call is in the
-    middle of ending and the farewell owns the next turn."""
+    nothing is owed, she is already generating an answer, the opening is still
+    playing, or the call is in the middle of ending and the farewell owns the
+    next turn.
+
+    The opening is a hard exclusion. Anything that scored as speech while the
+    greeting played is unanswered by design (see the turn_detection block), and
+    nudging would answer it — talking over the tail of the disclosure to reply
+    to what was most likely line noise. The greeting's own closing question is
+    the only prompt a real caller needs."""
     awaiting = session.get("awaiting_reply_since")
     if not awaiting or response_active or session.get("ending_at"):
+        return False
+    if not session.get("barge_in_armed"):
         return False
     return now - awaiting > _REPLY_NUDGE_SECONDS
 
@@ -2427,6 +2443,11 @@ async def _run_call(
                         # call is ending anyway, and a retry every second would
                         # bury the log.
                         session["barge_in_armed"] = True
+                        # Whatever was committed during the opening stays
+                        # unanswered: clearing this is what stops the nudge
+                        # firing the instant the gate opens and replying to a
+                        # cough from eight seconds ago.
+                        session["awaiting_reply_since"] = None
                         try:
                             await send_event(_ARM_BARGE_IN)
                             logger.info("Barge-in armed for call %s", call_id)
