@@ -431,9 +431,11 @@ _OPENING_SECTION = (
     "- La dichiarazione non si omette mai e non si rimanda: se apri la\n"
     "  chiamata in una lingua diversa dall'italiano (vedi '# Lingua'), falla\n"
     "  in quella lingua.\n"
-    "- Se qualcosa ti interrompe a metà della frase di apertura, la\n"
-    "  dichiarazione non è stata fatta: ripeti la frase di apertura per\n"
-    "  intero, dall'inizio, invece di proseguire come se l'avessi già detta.\n"
+    "- Se qualcosa ti interrompe a metà della frase di apertura, NON\n"
+    "  ricominciarla e non rimetterti a dire chi sei: la dichiarazione l'hai\n"
+    "  fatta. Vai avanti da lì e occupati di quello che ti ha detto il\n"
+    "  chiamante. Ripetere l'apertura fa perdere tempo al chiamante e lo fa\n"
+    "  sentire come se non lo avessi ascoltato.\n"
     "- Non presentarti mai come una persona e non lasciar credere di esserlo:\n"
     "  se più avanti il chiamante ti chiede se sei una persona vera, conferma\n"
     "  sempre, con chiarezza e senza scusarti, di essere un assistente\n"
@@ -888,6 +890,36 @@ _IT_CONTENT["tools"] = _IT_TOOLS
 # reaches the model mid-call.
 _IT_CONTENT["model_listing_fields"] = {k: k for k in _MODEL_LISTING_FIELDS}
 
+# The phone agent's tuned server VAD, live from the moment the call is accepted.
+# Shared with the browser demo (demo/router.py), which is why it is a constant
+# rather than an inline literal.
+#
+# server VAD decides when the caller's turn ends and only then does the model
+# reply. threshold is how loud audio must be to count as speech: too high and
+# quiet or short utterances never register, so she stays silent until the caller
+# repeats themselves. 0.5 is the API default. silence_duration_ms is how long a
+# pause ends the turn: shorter is snappier, but a caller who pauses to think
+# mid-answer ends their turn early and then talks over the reply they just
+# triggered.
+#
+# 600ms is a deliberate latency choice, kept knowing what it costs. It was
+# raised to 1000ms for a while to stop mid-answer splits — one Slovak call split
+# two answers, at ~665ms and ~747ms pauses, one of them a budget that then came
+# back wrong — and the splitting did stop. The numbers stayed wrong anyway (a
+# clean, unsplit 0.78s turn still produced 600 for a spoken 1000), which is what
+# showed the cause was her guessing at a number she could not decode rather than
+# the turn breaking in half. That is handled conversationally now: she reads the
+# budget back before searching (see "# Numeri detti dal chiamante" in the
+# prompt). With accuracy no longer riding on it, 400ms of extra silence on every
+# turn stopped being worth paying. If mid-answer splits resurface, ~800ms covers
+# both pauses observed above for half that latency.
+_TURN_DETECTION: dict[str, Any] = {
+    "type": "server_vad",
+    "threshold": 0.5,
+    "prefix_padding_ms": 300,
+    "silence_duration_ms": 600,
+}
+
 _SESSION_UPDATE: dict[str, Any] = {
     "type": "session.update",
     "session": {
@@ -910,63 +942,34 @@ _SESSION_UPDATE: dict[str, Any] = {
                 # That disagreement was itself the finding — the audio is
                 # decodable, and her wrong numbers were guesses, not mishearings.
                 #
-                # server VAD decides when the caller's turn ends and only then
-                # does the model reply. threshold is how loud audio must be to
-                # count as speech: too high and quiet/short utterances never
-                # register, so she stays silent until the caller repeats. 0.5 is
-                # the API default. silence_duration is how long a pause ends the
-                # turn: shorter = snappier replies, but a caller who pauses to
-                # think mid-answer ends their turn early and then talks over the
-                # reply they just triggered.
+                # Server-side suppression of what isn't speech, applied before
+                # VAD sees the audio. This is the only lever that stops the
+                # opening being cut in the first place: something at pickup —
+                # line noise, the connect tone, her own voice echoing back —
+                # scores above the threshold, and VAD DETECTING speech truncates
+                # her playout a layer below anything the session flags reach.
                 #
-                # 600ms is a deliberate latency choice, kept knowing what it
-                # costs. It was raised to 1000ms for a while to stop mid-answer
-                # splits — one Slovak call split two answers, at ~665ms and
-                # ~747ms pauses, one of them a budget that then came back wrong
-                # — and the splitting did stop. The numbers stayed wrong anyway
-                # (a clean, unsplit 0.78s turn still produced 600 for a spoken
-                # 1000), which is what showed the cause was her guessing at a
-                # number she could not decode rather than the turn breaking in
-                # half. That is handled conversationally now: she reads the
-                # budget back before searching, and says her criteria when a
-                # search finds nothing (see "# Numeri detti dal chiamante" in
-                # the prompt). With accuracy no longer riding on it, 400ms of
-                # extra silence on every turn stopped being worth paying. If
-                # mid-answer splits resurface, ~800ms covers both pauses
-                # observed above for half that latency.
+                # Three attempts to fix that above this layer all failed, and
+                # the audio was cut identically in each: defaults (response
+                # cancelled, greeting restarted); interrupt_response=False (not
+                # cancelled, but create_response made a second response whose
+                # audio displaced the greeting — same truncation, minus the one
+                # log line that had been evidence of it); both False (cut, and
+                # nothing regenerated, so she went silent for the rest of the
+                # call). Holding VAD off entirely for the opening did protect
+                # it, at the price of ignoring the caller for eight seconds,
+                # which cost more than the stutter did.
                 #
-                # Both flags start FALSE so nothing can take the line away from
-                # the opening. That first sentence carries the legally required
-                # AI disclosure, and something at pickup — line noise, the
-                # connect tone, her own voice echoing back — kept scoring above
-                # threshold: the greeting stopped a few words in and started
-                # over, sometimes twice.
+                # far_field is the aggressive setting, chosen because the target
+                # is line noise rather than a room. If callers start getting
+                # clipped or going unheard, near_field is the gentler one.
                 #
-                # It takes BOTH. interrupt_response=False alone stops the
-                # greeting response being cancelled, which is why the
-                # "Caller interrupted" log line went away and it looked fixed —
-                # but create_response then still fired at the end of the
-                # caller's turn, and that second response's audio displaced the
-                # greeting still playing on the SIP leg. Same truncation,
-                # quieter. Note it is invisible in the log either way: the
-                # transcript event reports the text the model GENERATED, so a
-                # greeting cut off mid-word still logs in full.
-                #
-                # The caller's audio is still committed, just not answered:
-                # whatever they said during the opening arrives as a pending
-                # turn and nothing replies to it. That is deliberate — the
-                # greeting ends with "how can I help you?", which is itself the
-                # cue to speak, so a caller with something to say repeats it and
-                # noise costs nothing. The control socket hands both flags back
-                # a few seconds later; see _ARM_BARGE_IN.
-                "turn_detection": {
-                    "type": "server_vad",
-                    "threshold": 0.5,
-                    "prefix_padding_ms": 300,
-                    "silence_duration_ms": 600,
-                    "interrupt_response": False,
-                    "create_response": False,
-                },
+                # Worth knowing when reading logs: a cut greeting is invisible
+                # there. The transcript event reports the text the model
+                # GENERATED, so one truncated mid-word still logs in full. Every
+                # round of this was diagnosed by ear, never from the log.
+                "noise_reduction": {"type": "far_field"},
+                "turn_detection": _TURN_DETECTION,
             },
             "output": {
                 "format": {"type": "audio/pcm", "rate": 24000},
@@ -975,33 +978,6 @@ _SESSION_UPDATE: dict[str, Any] = {
         },
         "tools": _IT_TOOLS,
         "tool_choice": "auto",
-    },
-}
-
-# Sent over the control socket once the opening has been delivered, to undo both
-# of the False flags above. From here on barge-in is the feature working: a
-# caller who starts talking mid-answer should cut her off, and their turn should
-# get an answer without waiting on the nudge watchdog.
-#
-# The WHOLE turn_detection object is sent, not just the changed flag —
-# session.update replaces a nested object rather than merging into it, so
-# omitting threshold/silence_duration_ms here would silently reset them to the
-# API defaults partway through every call, quietly retuning endpointing behind
-# your back. Built from the template for the same reason: one place to edit, no
-# second copy to drift.
-_ARM_BARGE_IN: dict[str, Any] = {
-    "type": "session.update",
-    "session": {
-        "type": "realtime",
-        "audio": {
-            "input": {
-                "turn_detection": {
-                    **_SESSION_UPDATE["session"]["audio"]["input"]["turn_detection"],
-                    "interrupt_response": True,
-                    "create_response": True,
-                }
-            }
-        },
     },
 }
 
@@ -1211,16 +1187,6 @@ _FAREWELL_TIMEOUT_SECONDS = 12.0
 # and the caller having to prod her is a bug however it came about.
 _REPLY_NUDGE_SECONDS = 4.0
 
-# How long after the greeting is triggered before barge-in is handed back (see
-# _ARM_BARGE_IN). Clocked from the trigger rather than from the greeting's
-# response.done because response.done only means generation finished — the audio
-# is still draining down the SIP leg for seconds after it, exactly as the
-# farewell hang-up has to allow for. Generous on purpose: arming late is nearly
-# free, since interrupt_response only matters while a response is actually
-# playing, and by then the opening is over. Arming early is the bug this fixes.
-_BARGE_IN_ARM_SECONDS = 8.0
-
-
 def _should_nudge_reply(
     session: dict[str, Any], response_active: bool, now: float
 ) -> bool:
@@ -1228,36 +1194,12 @@ def _should_nudge_reply(
     for a reply on their behalf.
 
     Deliberately conservative — every condition here is a reason NOT to speak:
-    nothing is owed, she is already generating an answer, the opening is still
-    playing, or the call is in the middle of ending and the farewell owns the
-    next turn.
-
-    The opening is a hard exclusion. Anything that scored as speech while the
-    greeting played is unanswered by design (see the turn_detection block), and
-    nudging would answer it — talking over the tail of the disclosure to reply
-    to what was most likely line noise. The greeting's own closing question is
-    the only prompt a real caller needs."""
+    nothing is owed, she is already generating an answer, or the call is in the
+    middle of ending and the farewell owns the next turn."""
     awaiting = session.get("awaiting_reply_since")
     if not awaiting or response_active or session.get("ending_at"):
         return False
-    if not session.get("barge_in_armed"):
-        return False
     return now - awaiting > _REPLY_NUDGE_SECONDS
-
-
-def _should_arm_barge_in(session: dict[str, Any], now: float) -> bool:
-    """Whether the opening has been delivered long enough to let the caller
-    interrupt again (see _ARM_BARGE_IN).
-
-    False once armed: the session.update goes out exactly once per call, and
-    re-sending it on every tick would rewrite turn_detection mid-conversation
-    for no reason. `is None` rather than a falsy test because loop-clock zero is
-    a real timestamp here — treating it as "not greeted yet" would leave a call
-    unable to be interrupted for its whole length."""
-    greeting_at = session.get("greeting_at")
-    if greeting_at is None or session.get("barge_in_armed"):
-        return False
-    return now - greeting_at > _BARGE_IN_ARM_SECONDS
 
 
 class _ResponseGate:
@@ -2190,8 +2132,6 @@ async def _run_call(
             logger.info("Greeting triggered for call %s", call_id)
 
             session["last_speech_at"] = asyncio.get_event_loop().time()
-            # Starts the clock on handing barge-in back (see _ARM_BARGE_IN).
-            session["greeting_at"] = session["last_speech_at"]
 
             async def event_loop() -> None:
                 try:
@@ -2428,36 +2368,6 @@ async def _run_call(
                 while True:
                     await asyncio.sleep(1)
                     now = asyncio.get_event_loop().time()
-                    # The opening has been delivered: hand barge-in back so the
-                    # rest of the call can be interrupted normally. Done from
-                    # this loop rather than a task of its own — it already ticks
-                    # every second and is already cancelled with the call.
-                    if _should_arm_barge_in(session, now):
-                        # Flag first, and swallow a failed send: this loop is
-                        # one of the two tasks the call waits on, so letting the
-                        # exception out would hang up on a caller mid-sentence
-                        # over a comfort feature. The cost of losing this one
-                        # event is that she can't be interrupted for the rest of
-                        # the call — worth a warning, not a dropped call. Not
-                        # retried next tick either: if the socket is gone the
-                        # call is ending anyway, and a retry every second would
-                        # bury the log.
-                        session["barge_in_armed"] = True
-                        # Whatever was committed during the opening stays
-                        # unanswered: clearing this is what stops the nudge
-                        # firing the instant the gate opens and replying to a
-                        # cough from eight seconds ago.
-                        session["awaiting_reply_since"] = None
-                        try:
-                            await send_event(_ARM_BARGE_IN)
-                            logger.info("Barge-in armed for call %s", call_id)
-                        except Exception as exc:
-                            logger.warning(
-                                "Could not arm barge-in for call %s: %s — she "
-                                "stays uninterruptible for the rest of it",
-                                call_id,
-                                exc,
-                            )
                     # Once end_call has fired the only thing owed is the
                     # farewell. If that response never lands, don't hold the
                     # caller on an open line for the full silence timeout.

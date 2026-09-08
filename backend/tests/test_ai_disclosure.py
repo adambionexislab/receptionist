@@ -80,22 +80,23 @@ def test_the_disclosure_is_never_omitted_in_another_language(locale):
 
 
 @pytest.mark.parametrize("locale", LOCALES)
-def test_a_cut_off_disclosure_is_repeated(locale):
-    """Cut off partway, the caller never heard it, so the opening starts again.
+def test_an_interrupted_opening_is_not_started_over(locale):
+    """She used to restart the whole greeting when anything spoke over it, and
+    since noise at pickup interrupts her fairly often, callers heard the same
+    sentence two or three times before getting a word in.
 
-    Deliberately NOT narrowed to "only repeat if you didn't reach the end of the
-    sentence" — that was tried and reverted. She reaches the end of the
-    generated TEXT every time; whether the caller heard it depends on audio
-    playout, which she cannot observe. Conditioning the disclosure on something
-    invisible to her risks skipping it. Repeating an opening the caller already
-    heard is a wasted sentence; skipping one they didn't is a legal problem."""
+    The declaration is treated as made once she has said it — the attempt is
+    what's recorded, and the transcript logs the full sentence either way.
+    Adam's call, made knowing an early cut can mean the caller heard less than
+    the log shows. Everything protecting the sentence from being cut at all now
+    lives at the audio layer (noise_reduction), not in this rule."""
     prompt = _flat(router._content(locale)["opening_section"])
 
     marker = {
-        "it": "ripeti la frase di apertura per intero",
-        "sk": "zopakujte celú úvodnú vetu od začiatku",
+        "it": "non\n  ricominciarla",
+        "sk": "nezačínajte ju odznova",
     }[locale]
-    assert marker in prompt
+    assert _flat(marker) in prompt
 
 
 @pytest.mark.parametrize("locale", LOCALES)
