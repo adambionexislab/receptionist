@@ -34,7 +34,7 @@ _ROME = ZoneInfo("Europe/Rome")
 # NOTE: live-mode price IDs (require sk_live_ keys + live webhook secret).
 # Test-mode IDs are recorded in project memory for switching back.
 _PRICE_TO_PLAN = {
-    "price_1TgQYV17IdyiO0xX72ug1Pig": "Base (Mensile)",
+    "price_1UDMZ017IdyiO0xXQvT6jqGY": "Base (Mensile)",
     "price_1TgQVJ17IdyiO0xXUcMAkGrW": "Pro (Mensile)",
     "price_1TgQaJ17IdyiO0xXBB4Dl52v": "Max (Mensile)",
     "price_1Tfofo17IdyiO0xXUnRm0P96": "Base (Annuale)",

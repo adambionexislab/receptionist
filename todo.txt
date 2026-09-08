@@ -64,5 +64,7 @@ doplnit datum do VOP
 add all depenedencies env and accounts for the video tour. ask for everything that is needed in the apollonia video tour feature... session
 statistika nových leadov a dalsich udajov
 
-
+ked volajuci hovori inym jazykom treba to dat do mailu
+change landing page so studio takes you to the form.
+change pricing on base
 

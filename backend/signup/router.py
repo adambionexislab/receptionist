@@ -34,7 +34,7 @@ _SIGNUPS_CSV = _DATA_DIR / "signups.csv"
 _ROME        = ZoneInfo("Europe/Rome")
 _csv_lock    = threading.Lock()
 
-_PLAN_PRICES = {"Base": "€145/mese", "Pro": "€395/mese", "Max": "€795/mese"}
+_PLAN_PRICES = {"Base": "€195/mese", "Pro": "€395/mese", "Max": "€795/mese"}
 
 # Form values → tenant management_mode
 _MODALITA_MAP = {
