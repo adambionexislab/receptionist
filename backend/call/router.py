@@ -19,6 +19,8 @@ from fastapi.responses import Response
 
 from agents import db as agents_db
 from call import locales
+from branches import db as branches_db
+from branches import routing as branch_routing
 from calls import db as calls_db
 from config import settings
 from listings.store import store, tenant_stores
@@ -325,7 +327,10 @@ _SYSTEM_PROMPT_BODY = (
     "3. Chiedi quando sarebbe disponibile per un incontro con l'agente.\n"
     "4. Usa leave_message: nel campo 'message' scrivi che il chiamante vuole\n"
     "   vendere il proprio immobile, di che tipo e dove, e quando è\n"
-    "   disponibile per l'incontro.\n"
+    "   disponibile per l'incontro. Nel campo 'area' metti SOLO il luogo\n"
+    "   dell'immobile (comune, frazione o quartiere) come l'ha detto il\n"
+    "   chiamante — è il dato che hai già raccolto al punto 2, non chiederlo\n"
+    "   una seconda volta.\n"
     "5. Dopo che leave_message ha risposto con status 'saved', di' al\n"
     "   chiamante che inoltrerai la sua richiesta a un agente immobiliare e\n"
     "   che un agente lo contatterà a breve. Questo è l'UNICO tipo di\n"
@@ -819,6 +824,17 @@ _LEAVE_MESSAGE_TOOL: dict[str, Any] = {
                     "their number because it wasn't available automatically."
                 ),
             },
+            "area": {
+                "type": "string",
+                "description": (
+                    "Where the property is, exactly as the caller said it — "
+                    "a town, village or district, with a street if they gave "
+                    "one ('Badín', 'Via Roma 5, Lodi'). Set this whenever the "
+                    "caller mentions where the property is, which for a seller "
+                    "is something you already asked. Leave it out if they "
+                    "never said."
+                ),
+            },
             "message": {
                 "type": "string",
                 "description": (
@@ -979,8 +995,40 @@ def _find_tenant_by_dialed(dialed: str) -> dict | None:
     return None
 
 
+def _inject_branch_enum(tools: list[dict[str, Any]], branch_names: list[str]) -> None:
+    """Let the model hand back an office the caller named, in place.
+
+    The office names go in the tool schema and NOWHERE in the prompt. A tool
+    schema is never spoken; prompt text is, and this codebase has already paid
+    for that lesson once — a parenthesised list of categories in the qualifying
+    questions taught her to read example answers aloud after every question
+    (see tests/test_question_style.py). She should only ever say an office name
+    back to a caller who said it first.
+
+    Below two offices there is nothing to choose between, so the property is
+    removed outright: a one-office agency's model never learns the concept
+    exists and cannot invent a question about it.
+    """
+    for tool in tools:
+        if tool.get("name") != "leave_message":
+            continue
+        properties = tool["parameters"]["properties"]
+        if len(branch_names) < 2:
+            properties.pop("branch", None)
+            continue
+        properties["branch"] = {
+            "type": "string",
+            "enum": branch_names,
+            "description": (
+                "The agency office the caller asked for by name. Only set "
+                "this if the caller named one themselves — never ask which "
+                "office they want, and never read this list aloud."
+            ),
+        }
+
+
 def _build_accept_config(
-    instructions: str, content: dict[str, Any]
+    instructions: str, content: dict[str, Any], branch_names: Optional[list[str]] = None
 ) -> dict[str, Any]:
     """Session config for POST /calls/{id}/accept. Reuses the phone agent's
     tuned VAD, voice and reasoning, but drops the PCM format fields: over SIP,
@@ -995,6 +1043,9 @@ def _build_accept_config(
     # Italian ones: the call still connects, it only loses the locale-matched
     # descriptions.
     cfg["tools"] = json.loads(json.dumps(content.get("tools") or _IT_TOOLS))
+    # That copy is per call, which is what lets one tenant's office list be
+    # injected without ever mutating the module-level tool definitions.
+    _inject_branch_enum(cfg["tools"], branch_names or [])
     cfg["audio"]["input"].pop("format", None)
     cfg["audio"]["output"].pop("format", None)
     return cfg
@@ -1279,12 +1330,25 @@ async def incoming_call(request: Request) -> Response:
 
     locale = (tenant.get("locale") if tenant else None) or "it"
     content = _content(locale)
+    # The agency's offices, read once per call. Only their names reach the
+    # model (as a tool enum — see _inject_branch_enum); which office a seller's
+    # property belongs to is worked out server-side afterwards.
+    branch_names: list[str] = []
     if tenant is not None:
         instructions = _build_system_prompt(
             content, tenant["agency_name"], tenant["agent_name"]
         )
         tenant_store = tenant_stores.get_or_create(tenant["id"])
         lead_email = tenant.get("lead_email") or settings.LEAD_EMAIL
+        try:
+            branch_names = [
+                b["name"] for b in branches_db.list_for_tenant(tenant["id"])
+            ]
+        except Exception:
+            # Never fail a call over the office list: without it she simply
+            # can't be handed one by name, and routing falls back to the
+            # agency inbox exactly as it did before branches existed.
+            logger.exception("Could not read branches for tenant %s", tenant["id"])
     else:
         # Env-var fallback: demo behaviour, global store, owner's lead email.
         instructions = _build_system_prompt(content, None, None)
@@ -1322,6 +1386,11 @@ async def incoming_call(request: Request) -> Response:
         "interested_listings": [],
         "caller_info": {},
         "left_message": None,
+        # Which office this call belongs to, when it was resolved from where
+        # the caller said their property is (see the leave_message handler).
+        # Only ever set on message/seller calls, which touch no listing — the
+        # listing's agent decides it for every other kind of call.
+        "branch_id": None,
         "last_speech_at": 0.0,
         # Set when the farewell response actually goes out: the next thing she
         # says is the goodbye, after which we hang up. ending_at is the loop
@@ -1341,7 +1410,7 @@ async def incoming_call(request: Request) -> Response:
     task = asyncio.create_task(
         _run_call(
             call_id,
-            _build_accept_config(instructions, content),
+            _build_accept_config(instructions, content, branch_names),
             session,
             content,
             tenant_store,
@@ -1464,6 +1533,39 @@ def _call_outcome(session: dict[str, Any]) -> str:
     return "call"
 
 
+async def _resolve_call_branch(session: dict[str, Any], args: dict[str, Any]) -> None:
+    """Resolve where the caller's property is to one of the agency's offices,
+    and remember it on the session.
+
+    Only message and seller calls reach here — they are the ones that touch no
+    listing, and so the ones that would otherwise reach no office. What the
+    caller said about the location is the only signal available, which is why
+    the seller script asks for it (it always did; it just used to dissolve into
+    the free-text note).
+
+    Never raises and never blocks for long: branches/routing.py owns that
+    contract, and this only adds a last guard because it runs mid-call.
+    """
+    tenant_id = session.get("tenant_id")
+    if not tenant_id:
+        return
+    try:
+        branch = await branch_routing.resolve(
+            tenant_id,
+            args.get("area"),
+            args.get("branch"),
+            session.get("locale") or "it",
+        )
+    except Exception:
+        logger.exception("Branch routing failed — leaving this lead with the agency")
+        return
+    if branch:
+        session["branch_id"] = branch["id"]
+        logger.info(
+            "Call routed to branch %r from area %r", branch["name"], args.get("area"),
+        )
+
+
 def _call_branch_id(session: dict[str, Any]) -> Optional[str]:
     """Which of the agency's offices this call belongs to, or None.
 
@@ -1474,10 +1576,18 @@ def _call_branch_id(session: dict[str, Any]) -> Optional[str]:
     asked about two offices' properties is counted under the first one they
     showed interest in, rather than being double-counted in both.
 
-    None for every call that touched no assigned listing (a message, a seller
-    call, a browse that picked nothing). Those show up only in the whole-agency
+    A message or seller call has no listing at all, so for those the office is
+    resolved from where the caller said the property is and stashed on the
+    session (see _resolve_call_branch). The two can never disagree — a call
+    that touched a listing doesn't go through that path — so checking it first
+    costs nothing.
+
+    Still None for a browse that picked nothing, a call with no location given,
+    and anything routing couldn't place. Those show up only in the whole-agency
     view — see calls/db.py.
     """
+    if session.get("branch_id"):
+        return session["branch_id"]
     for agent in session.get("interest_agents") or []:
         if agent.get("branch_id"):
             return agent["branch_id"]
@@ -1591,6 +1701,26 @@ def _interest_agents(session: dict[str, Any]) -> list[dict[str, Any]]:
     # dict.fromkeys keeps first-seen order; ids missing from by_id were deleted
     # between the call and now, or belong to another tenant.
     return [by_id[aid] for aid in dict.fromkeys(ids) if aid in by_id]
+
+
+def _branch_agents(session: dict[str, Any]) -> list[dict[str, Any]]:
+    """Everyone working at the office this call was routed to, in agency
+    numbering order — the recipients for a seller lead with no listing behind
+    it. The agency inbox still gets a Cc (see _resolve_lead_recipients).
+
+    Empty on any failure, and empty for an office with nobody in it yet, which
+    both fall back to the inbox: an unrouted lead is recoverable, a lost one
+    is not.
+    """
+    tenant_id = session.get("tenant_id")
+    branch_id = session.get("branch_id")
+    if not tenant_id or not branch_id:
+        return []
+    try:
+        return branch_routing.lead_agents(tenant_id, branch_id)
+    except Exception:
+        logger.exception("Failed to resolve branch agents — routing to the agency inbox")
+        return []
 
 
 def _resolve_lead_recipients(
@@ -1787,6 +1917,13 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
     # Who handles the property the caller is interested in decides where this
     # lead lands; see _resolve_lead_recipients for the fallbacks.
     agents = _interest_agents(session)
+    # No listing, but we worked out which office the caller's own property sits
+    # in — a seller call. Send it to that office's agents instead of dropping
+    # it in the shared agency inbox, which is where every one of these used to
+    # go. This is the point of resolving the branch at all: a seller lead is
+    # the most valuable call Apollonia takes.
+    if not agents and session.get("branch_id"):
+        agents = _branch_agents(session)
     recipients, cc, routed = _resolve_lead_recipients(session, agents)
     # Stash for _persist_call, which records who the lead was routed to.
     session["routed_agents"] = agents if routed else []
@@ -2085,6 +2222,13 @@ async def _run_call(
                                 args = {}
                             session["left_message"] = args
                             logger.info("leave_message: %s", args)
+                            # Work out which office this belongs to before
+                            # answering, so the result is already on the
+                            # session by the time the lead email is composed at
+                            # teardown. Bounded and non-raising by contract
+                            # (branches/routing.py): the worst case is no
+                            # office and the lead goes to the agency inbox.
+                            await _resolve_call_branch(session, args)
                             await ws.send(json.dumps({
                                 "type": "conversation.item.create",
                                 "item": {

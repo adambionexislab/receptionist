@@ -104,6 +104,20 @@ class Settings(BaseSettings):
     # Property photo enhancement (declutter/relight/straighten).
     IMAGE_EDIT_MODEL: str = "gpt-image-2"
 
+    # ── Branch routing (which office a seller call belongs to) ───────────────
+    # How far an office can be from a property and still be treated as covering
+    # it, when nothing else matched (see branches/routing.py). The point of the
+    # cap is that "nearest" is meaningless at national distances: a property
+    # 200 km from the only office is not that office's, and the lead belongs
+    # with the agency instead. Raise it for agencies that genuinely work a whole
+    # region from one address.
+    BRANCH_MATCH_RADIUS_KM: float = 60.0
+    # Geocoding budget while a caller is on the line and Apollonia's turn is
+    # blocked on the answer. Deliberately far below the 15s the video wizard
+    # allows: past a few seconds, silence on the phone costs more than the
+    # attribution is worth, and the lead still reaches the agency inbox.
+    BRANCH_GEOCODE_TIMEOUT_SECONDS: float = 3.0
+
     # ── AI video tour (drone fly-in + interior room tour) ────────────────────
     # Ships dark until this is set, exactly like ACQUISIZIONE_ENABLED.
     VIDEO_TOUR_ENABLED: bool = False

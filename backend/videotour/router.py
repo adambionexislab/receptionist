@@ -26,7 +26,8 @@ from pydantic import BaseModel
 
 from config import settings
 from dashboard.router import current_branch, current_tenant
-from videotour import db, ffmpeg, geocode, pipeline, storage
+from geo import geocode
+from videotour import db, ffmpeg, pipeline, storage
 
 logger = logging.getLogger(__name__)
 

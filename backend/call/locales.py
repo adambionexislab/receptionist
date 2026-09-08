@@ -249,6 +249,9 @@ _SK_SYSTEM_PROMPT_BODY = (
     "3. Spýtajte sa, kedy by mal čas na stretnutie s maklérom.\n"
     "4. Použite leave_message: do poľa 'message' zapíšte, že volajúci chce\n"
     "   predať svoju nehnuteľnosť, aký typ a kde, a kedy má čas na stretnutie.\n"
+    "   Do poľa 'area' dajte LEN lokalitu nehnuteľnosti (obec, mesto alebo\n"
+    "   mestskú časť) tak, ako ju volajúci povedal — je to údaj, ktorý ste už\n"
+    "   získali v bode 2, nepýtajte sa naň druhýkrát.\n"
     "5. Po tom, ako leave_message odpovie so stavom 'saved', povedzte\n"
     "   volajúcemu, že jeho požiadavku odovzdáte realitnému maklérovi a maklér\n"
     "   ho čoskoro bude kontaktovať. Toto je JEDINÝ typ hovoru, v ktorom\n"
@@ -634,6 +637,17 @@ _SK_LEAVE_MESSAGE_TOOL = {
                     "tak, ako ho volajúci povedal. Vyplňte ho iba vtedy, keď "
                     "ste si oň museli volajúceho požiadať, pretože nebolo "
                     "dostupné automaticky."
+                ),
+            },
+            "area": {
+                "type": "string",
+                "description": (
+                    "Kde sa nehnuteľnosť nachádza, presne tak, ako to "
+                    "volajúci povedal — obec, mesto alebo mestská časť, aj s "
+                    "ulicou, ak ju uviedol ('Badín', 'Obchodná 5, "
+                    "Bratislava'). Vyplňte vždy, keď volajúci povie, kde "
+                    "nehnuteľnosť je — pri predajcovi ste sa naň už pýtali. "
+                    "Ak to nepovedal, pole vynechajte."
                 ),
             },
             "message": {

@@ -286,6 +286,12 @@
   .agent-branch { font-size: .8rem; color: var(--accent); margin-top: 6px; }
   .agent-branch.agent-branch-none { color: var(--text-dim); font-style: italic; opacity: .7; }
   .branch-num svg { width: 17px; height: 17px; }
+  /* An office with no address can never receive a seller call — the one state
+     on this card that costs the agency leads, so it reads as a warning. */
+  .branch-warn { font-size: .8rem; color: var(--amber); margin-top: 4px; }
+  .branch-hint { font-size: .74rem; color: var(--text-dim); margin-top: 5px; line-height: 1.45; }
+  .branch-areas { min-height: 82px; font-size: .85rem; }
+  .branch-suggest { margin-top: 8px; font-size: .78rem; padding: 6px 10px; }
 
   /* ── branch scope bar ───────────────────────────────────────────────── */
   /* Which office everything below is showing. Deliberately the largest text on
@@ -1328,9 +1334,25 @@
       branches_hint:
         "Le sedi dell'agenzia. Ogni agente appartiene a una sede, e in alto " +
         "puoi scegliere quale sede vedere: chiamate, minuti e strumenti AI " +
-        "vengono filtrati per la sede selezionata.",
+        "vengono filtrati per la sede selezionata. L'indirizzo serve anche ad " +
+        "Apollonia: quando un venditore chiama, la richiesta va alla sede che " +
+        "copre il comune dell'immobile.",
       branch_add: "+ Aggiungi sede",
       branch_name: "Nome della sede",
+      branch_address: "Indirizzo",
+      branch_address_hint:
+        "Da qui ricaviamo la provincia della sede: è così che un immobile in " +
+        "una frazione arriva alla sede giusta.",
+      branch_no_address: "⚠ Senza indirizzo: le chiamate dei venditori non arrivano qui.",
+      // Provincia in Italia, okres in Slovacchia — la stessa cosa.
+      branch_district: "Provincia: {d}",
+      branch_areas: "Comuni serviti",
+      branch_areas_hint:
+        "Uno per riga, solo se vuoi correggere l'assegnazione automatica.",
+      branch_suggest: "+ Aggiungi {n} dai tuoi immobili",
+      branch_areas_count: "{n} comuni serviti",
+      branch_areas_count_few: "{n} comuni serviti",
+      branch_areas_count_one: "1 comune servito",
       branches_empty: "Nessuna sede ancora.",
       branch_name_required: "Inserisci il nome della sede.",
       branch_delete_confirm: "Chiudere questa sede?",
@@ -1590,9 +1612,24 @@
       branches_hint:
         "Pobočky vašej kancelárie. Každý maklér patrí do jednej pobočky a " +
         "hore si vyberiete, ktorú pobočku chcete vidieť: hovory, minúty a " +
-        "nástroje AI sa filtrujú podľa vybranej pobočky.",
+        "nástroje AI sa filtrujú podľa vybranej pobočky. Adresa slúži aj " +
+        "Apollonii: keď zavolá predávajúci, dopyt pôjde na pobočku, ktorá " +
+        "pokrýva obec jeho nehnuteľnosti.",
       branch_add: "+ Pridať pobočku",
       branch_name: "Názov pobočky",
+      branch_address: "Adresa",
+      branch_address_hint:
+        "Z adresy zistíme okres pobočky — vďaka tomu sa nehnuteľnosť v obci " +
+        "dostane na správnu pobočku.",
+      branch_no_address: "⚠ Bez adresy sem hovory predávajúcich neprídu.",
+      branch_district: "Okres: {d}",
+      branch_areas: "Obsluhované obce",
+      branch_areas_hint:
+        "Jedna na riadok, len ak chcete opraviť automatické priradenie.",
+      branch_suggest: "+ Pridať {n} z vašich nehnuteľností",
+      branch_areas_count: "{n} obsluhovaných obcí",
+      branch_areas_count_few: "{n} obsluhované obce",
+      branch_areas_count_one: "1 obsluhovaná obec",
       branches_empty: "Zatiaľ žiadne pobočky.",
       branch_name_required: "Zadajte názov pobočky.",
       branch_delete_confirm: "Zrušiť túto pobočku?",
@@ -1942,6 +1979,11 @@
       const resp = await api("/dashboard/api/branches");
       if (resp.ok) BRANCHES = (await resp.json()).branches || [];
     } catch (_) { /* keep whatever we had; the switcher stays usable */ }
+    try {
+      // Best-effort: without it the coverage lists just have to be typed.
+      const resp = await api("/dashboard/api/branches/coverage-suggestions");
+      if (resp.ok) SUGGESTED_AREAS = (await resp.json()).suggestions || {};
+    } catch (_) { /* ignore */ }
     // A selection is only as good as the list that just came back. On the
     // first load that means adopting what the last session stored — and only
     // if that office still exists, which is why nothing has been requested
@@ -2844,6 +2886,10 @@
   // a branch is only a name, so the edit card is a single field. The list is
   // never filtered by the selected scope — this is where you go to switch
   // between offices, so it has to keep showing all of them.
+  // branch id → the places its own agents' listings are in, offered as a
+  // one-click coverage list. Refilled alongside the branches themselves.
+  let SUGGESTED_AREAS = {};
+
   const BRANCH_ICON =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
     'stroke-linecap="round" stroke-linejoin="round">' +
@@ -2860,6 +2906,25 @@
     head.appendChild(icon);
     const info = el("div", "agent-info");
     info.appendChild(el("div", "agent-name", b.name || "—"));
+    // The address, and what routing got out of it. An office with no address
+    // still works everywhere else in the dashboard but can never receive a
+    // seller call, so that gap is stated rather than left to be inferred.
+    if (b.address) {
+      info.appendChild(el("div", "agent-email agent-email-empty", b.address));
+      if (b.district) {
+        info.appendChild(el(
+          "div", "agent-branch", s.branch_district.replace("{d}", b.district)
+        ));
+      }
+    } else {
+      info.appendChild(el("div", "branch-warn", s.branch_no_address));
+    }
+    const areas = (b.areas || "").split("\n").filter((a) => a.trim()).length;
+    if (areas) {
+      info.appendChild(el(
+        "div", "agent-listings", pluralize("branch_areas_count", areas)
+      ));
+    }
     info.appendChild(el(
       "div", "agent-listings", pluralize("branch_agents", b.agent_count || 0)
     ));
@@ -2935,6 +3000,47 @@
     input.value = b && b.name != null ? b.name : "";
     wrap.appendChild(input);
     grid.appendChild(wrap);
+
+    // The address. Typed once; the province/okres and coordinates behind the
+    // seller-call routing are derived from it server-side on save.
+    const addrWrap = el("div");
+    addrWrap.appendChild(el("label", null, s.branch_address));
+    const addressInput = document.createElement("input");
+    addressInput.type = "text";
+    addressInput.value = b && b.address != null ? b.address : "";
+    addrWrap.appendChild(addressInput);
+    addrWrap.appendChild(el("div", "branch-hint", s.branch_address_hint));
+    grid.appendChild(addrWrap);
+
+    // The override list. Deliberately last and framed as optional — the
+    // address alone handles the ordinary case, and an agency that starts
+    // typing municipalities here has misunderstood what it's for.
+    const areasWrap = el("div");
+    areasWrap.appendChild(el("label", null, s.branch_areas));
+    const areasInput = document.createElement("textarea");
+    areasInput.className = "acq-textarea branch-areas";
+    areasInput.value = b && b.areas != null ? b.areas : "";
+    areasWrap.appendChild(areasInput);
+    areasWrap.appendChild(el("div", "branch-hint", s.branch_areas_hint));
+
+    // Everything this office's own agents already work, offered in one click.
+    // Nobody should type a list the agency's inventory already describes.
+    const missing = (SUGGESTED_AREAS[b && b.id] || []).filter((zone) => {
+      const have = areasInput.value.split("\n").map((x) => x.trim().toLowerCase());
+      return !have.includes(zone.trim().toLowerCase());
+    });
+    if (missing.length) {
+      const add = el("button", "btn ghost branch-suggest",
+        s.branch_suggest.replace("{n}", missing.length));
+      add.type = "button";
+      add.addEventListener("click", () => {
+        const lines = areasInput.value.split("\n").filter((x) => x.trim());
+        areasInput.value = lines.concat(missing).join("\n");
+        add.remove();
+      });
+      areasWrap.appendChild(add);
+    }
+    grid.appendChild(areasWrap);
     card.appendChild(grid);
 
     const err = el("div", "err");
@@ -2954,7 +3060,11 @@
         const resp = await api("/dashboard/api/branches" + (b ? "/" + b.id : ""), {
           method: b ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name }),
+          body: JSON.stringify({
+            name: name,
+            address: addressInput.value.trim(),
+            areas: areasInput.value.trim(),
+          }),
         });
         if (!resp.ok) throw new Error("save " + resp.status);
         // Refills BRANCHES and re-renders both this grid and the switcher —

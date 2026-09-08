@@ -17,6 +17,7 @@ The page itself is one static SPA served at /dashboard (and aliased at
 logged-in tenant's `locale`, not the URL, so there is no separate Slovak page.
 """
 
+import asyncio
 import logging
 import re
 from pathlib import Path
@@ -32,7 +33,9 @@ from branches import db as branches_db
 from calls import db as calls_db
 from config import settings
 from dashboard import session as sess
+from geo import geocode
 from listings import db as listings_db
+from listings import store
 from tenants import db
 from usage import db as usage_db
 
@@ -452,10 +455,20 @@ def delete_agent(agent_id: str, tenant: dict = Depends(current_tenant)):
 # ── branches (the agency's offices) ─────────────────────────────────────────
 class BranchCreate(BaseModel):
     name: str
+    # The office's street address. Not decoration: geocoding it is what gives
+    # the branch its district and coordinates, and those are what route a
+    # seller call to it (see branches/routing.py).
+    address: str = ""
+    # Places this office covers, one per line. Optional — the district derived
+    # from the address already covers the ordinary case. This is the override
+    # for when it doesn't, and the way two offices in one city are separated.
+    areas: str = ""
 
 
 class BranchUpdate(BaseModel):
     name: Optional[str] = None
+    address: Optional[str] = None
+    areas: Optional[str] = None
 
 
 def _clean_branch_name(name: Optional[str]) -> str:
@@ -465,6 +478,38 @@ def _clean_branch_name(name: Optional[str]) -> str:
     if not cleaned:
         raise HTTPException(status_code=422, detail="Name is required")
     return cleaned
+
+
+async def _locate_branch(branch: dict, tenant: dict) -> dict:
+    """Geocode an office's address into the district and coordinates that route
+    calls to it, and store them.
+
+    Runs on every save that touched the address, and clears the derived fields
+    when it can't resolve one — stale coordinates from a previous address would
+    quietly route seller calls to where the office used to be, which is worse
+    than not routing them at all.
+
+    Never raises: an office with no coordinates still works everywhere else in
+    the dashboard, it just stops being reachable by the last two steps of the
+    routing chain. The agency sees that on the card.
+    """
+    address = (branch.get("address") or "").strip()
+    lat = lng = None
+    district = ""
+    if address:
+        try:
+            located = await geocode.lookup(address, tenant.get("locale") or "it")
+            lat, lng = located["lat"], located["lng"]
+            district = located.get("district") or ""
+        except Exception as exc:
+            logger.info(
+                "Could not locate branch %s at %r: %s", branch["id"], address, exc
+            )
+    await asyncio.to_thread(
+        branches_db.set_location, branch["id"], tenant["id"], lat, lng, district
+    )
+    branch["lat"], branch["lng"], branch["district"] = lat, lng, district
+    return branch
 
 
 @router.get("/dashboard/api/branches")
@@ -485,25 +530,77 @@ def branches(tenant: dict = Depends(current_tenant)):
 
 
 @router.post("/dashboard/api/branches", status_code=201)
-def create_branch(data: BranchCreate, tenant: dict = Depends(current_tenant)):
-    branch = branches_db.create(tenant["id"], _clean_branch_name(data.name))
+async def create_branch(data: BranchCreate, tenant: dict = Depends(current_tenant)):
+    branch = await asyncio.to_thread(
+        branches_db.create,
+        tenant["id"],
+        _clean_branch_name(data.name),
+        (data.address or "").strip(),
+        (data.areas or "").strip(),
+    )
+    branch = await _locate_branch(branch, tenant)
     branch["agent_count"] = 0
     return branch
 
 
 @router.patch("/dashboard/api/branches/{branch_id}")
-def update_branch(
+async def update_branch(
     branch_id: str, data: BranchUpdate, tenant: dict = Depends(current_tenant)
 ):
     sent = data.model_dump(exclude_unset=True)
-    fields = (
-        {"name": _clean_branch_name(sent["name"])} if "name" in sent else {}
+    fields: dict = {}
+    if "name" in sent:
+        fields["name"] = _clean_branch_name(sent["name"])
+    if "address" in sent:
+        fields["address"] = (sent["address"] or "").strip()
+    if "areas" in sent:
+        fields["areas"] = (sent["areas"] or "").strip()
+
+    updated = await asyncio.to_thread(
+        branches_db.update, branch_id, tenant["id"], fields
     )
-    updated = branches_db.update(branch_id, tenant["id"], fields)
     if updated is None:
         raise HTTPException(status_code=404, detail="Not found")
+    # Only when the address actually changed: geocoding is a paid round trip,
+    # and renaming an office must not spend one.
+    if "address" in fields:
+        updated = await _locate_branch(updated, tenant)
     updated["agent_count"] = len(agents_db.ids_for_branch(tenant["id"], branch_id))
     return updated
+
+
+@router.get("/dashboard/api/branches/coverage-suggestions")
+def branch_coverage_suggestions(tenant: dict = Depends(current_tenant)):
+    """Which places each office already works, derived from the listings its own
+    agents handle: {branch_id: ["Bratislava", "Pezinok", ...]}.
+
+    Nobody should have to type a coverage list that the agency's own inventory
+    already describes. A listing has a zone and an agent; that agent has an
+    office; so the split is sitting in the data — this just reads it back so
+    the Sedi tab can offer it as a starting point.
+
+    Note what this does NOT cover, and why the district lookup exists: a seller
+    calls about a village the agency has no listings in yet. Deriving from
+    inventory is strong exactly where the agency already operates and blind
+    everywhere else, which is the opposite of the geocoded-district step, and
+    that is why routing has both.
+    """
+    branch_of_agent = {
+        agent["id"]: agent.get("branch_id")
+        for agent in agents_db.list_for_tenant(tenant["id"])
+    }
+    found: dict[str, list[str]] = {}
+    for listing in listings_db.list_for_tenant(tenant["id"], available_only=False):
+        branch_id = branch_of_agent.get(listing.get("agent_id"))
+        zone = (listing.get("zone") or "").strip()
+        if not branch_id or not zone:
+            continue
+        zones = found.setdefault(branch_id, [])
+        # Case/diacritic-insensitive de-dup, keeping the first spelling seen so
+        # the agency reads back its own wording rather than a normalised one.
+        if not any(store.normalize_place(zone) == store.normalize_place(z) for z in zones):
+            zones.append(zone)
+    return {"suggestions": {bid: sorted(zones) for bid, zones in found.items()}}
 
 
 @router.delete("/dashboard/api/branches/{branch_id}")

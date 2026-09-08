@@ -111,6 +111,14 @@ def _word_in(query_word: str, text: str) -> bool:
     return False
 
 
+# Public aliases. branches/routing.py matches a caller's spoken place name
+# against an office's coverage list, which is the same problem as matching a
+# caller's spoken zone against a listing's — and it has to tolerate the same
+# declensions ("v Badíne" → "Badín"). One tuned matcher, not two.
+normalize_place = _norm
+place_word_in = _word_in
+
+
 class ListingsStore:
     def __init__(
         self,
