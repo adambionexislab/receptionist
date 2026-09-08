@@ -80,6 +80,42 @@ def test_the_disclosure_is_never_omitted_in_another_language(locale):
 
 
 @pytest.mark.parametrize("locale", LOCALES)
+def test_an_unfinished_disclosure_is_repeated(locale):
+    """Cut off before the end, the caller never heard it — so the opening has to
+    start again rather than continue as though it had been said."""
+    prompt = _flat(router._content(locale)["opening_section"])
+
+    marker = {
+        "it": "prima che tu abbia finito la dichiarazione",
+        "sk": "skôr, než vyhlásenie dokončíte",
+    }[locale]
+    assert marker in prompt
+
+
+@pytest.mark.parametrize("locale", LOCALES)
+def test_a_finished_disclosure_is_never_repeated(locale):
+    """Regression: she delivered the whole opening, the caller said one word over
+    the end of it, and she read the entire greeting out a second time:
+
+        22:24:20,716  Apollonia: Dobrý deň, volám sa Apollonia, ... môžem pomôcť?
+        22:24:21,219  Caller finished speaking
+        22:24:23,428  Apollonia: Dobrý deň, volám sa Apollonia, ... môžem pomôcť?
+
+    No interruption was logged — the audio was never cut, because the opening
+    runs with interrupt_response=False. She restarted because the rule keyed on
+    "something interrupted you" rather than on whether the sentence actually
+    finished, and a caller turn arriving mid-greeting reads as an interruption.
+    Being talked over is not the test; not finishing is."""
+    prompt = _flat(router._content(locale)["opening_section"])
+
+    marker = {
+        "it": "non ripeterla mai, nemmeno se il chiamante ha parlato",
+        "sk": "nikdy ju neopakujte, ani keď volajúci hovoril",
+    }[locale]
+    assert marker in prompt
+
+
+@pytest.mark.parametrize("locale", LOCALES)
 def test_the_greeting_turn_asks_for_the_introduction(locale):
     """The greeting is generated from this one user message; if it only says
     'greet the caller', that is the turn where the disclosure goes missing."""

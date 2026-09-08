@@ -435,9 +435,13 @@ _OPENING_SECTION = (
     "- La dichiarazione non si omette mai e non si rimanda: se apri la\n"
     "  chiamata in una lingua diversa dall'italiano (vedi '# Lingua'), falla\n"
     "  in quella lingua.\n"
-    "- Se qualcosa ti interrompe a metà della frase di apertura, la\n"
-    "  dichiarazione non è stata fatta: ripeti la frase di apertura per\n"
+    "- Se qualcosa ti interrompe PRIMA che tu abbia finito la dichiarazione,\n"
+    "  la dichiarazione non è stata fatta: ripeti la frase di apertura per\n"
     "  intero, dall'inizio, invece di proseguire come se l'avessi già detta.\n"
+    "- Se invece sei arrivata in fondo alla frase di apertura, la\n"
+    "  dichiarazione È stata fatta: non ripeterla mai, nemmeno se il\n"
+    "  chiamante ha parlato mentre la dicevi. Rispondi a quello che ti ha\n"
+    "  detto e prosegui normalmente.\n"
     "- Non presentarti mai come una persona e non lasciar credere di esserlo:\n"
     "  se più avanti il chiamante ti chiede se sei una persona vera, conferma\n"
     "  sempre, con chiarezza e senza scusarti, di essere un assistente\n"
@@ -527,9 +531,6 @@ _IT_CONTENT: dict[str, Any] = {
     ),
     "farewell_instruction": _FAREWELL_INSTRUCTION,
     "timezone": "Europe/Rome",
-    # TEMPORARY — language hint for the debug transcription side channel; see
-    # the transcription block in _SESSION_UPDATE.
-    "stt_language": "it",
     "weekdays": (
         "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato",
         "domenica",
@@ -905,19 +906,18 @@ _SESSION_UPDATE: dict[str, Any] = {
         "audio": {
             "input": {
                 "format": {"type": "audio/pcm", "rate": 24000},
-                # TEMPORARY — debugging misheard numbers. A parallel ASR pass
-                # over the caller's audio. It does NOT change what she hears:
-                # gpt-realtime consumes the audio directly and this transcript
-                # is a side channel, so it only tells US what reached her. It is
-                # here because a captured budget kept coming out wrong (1000 ->
-                # 600) with no way to tell a mishearing from a guess.
+                # No input transcription here on purpose. gpt-realtime consumes
+                # the caller's audio directly, so a transcription block buys no
+                # accuracy — it is a second, parallel ASR pass whose only reader
+                # would be our logs, at the price of a second audio charge per
+                # call and caller speech on disk, which the SIP migration
+                # deliberately avoids. Tried once (gpt-4o-transcribe, 2026-09-08)
+                # to debug misheard budgets and removed the same day: it
+                # transcribed Slovak telephony audio worse than she understood
+                # it, so the log disagreed with her even on turns she got right.
+                # That disagreement was itself the finding — the audio is
+                # decodable, and her wrong numbers were guesses, not mishearings.
                 #
-                # Take it out once that is understood: it bills a second audio
-                # pass on every call, and it puts caller speech into the logs
-                # for the first time — the SIP migration deliberately keeps no
-                # recordings. `language` is filled in per tenant by
-                # _build_accept_config.
-                "transcription": {"model": "gpt-4o-transcribe"},
                 # server VAD decides when the caller's turn ends and only then
                 # does the model reply. threshold is how loud audio must be to
                 # count as speech: too high and quiet/short utterances never
@@ -1137,13 +1137,6 @@ def _build_accept_config(
     _inject_branch_enum(cfg["tools"], branch_names or [])
     cfg["audio"]["input"].pop("format", None)
     cfg["audio"]["output"].pop("format", None)
-    # TEMPORARY — see the transcription block in _SESSION_UPDATE. The ASR side
-    # channel follows the tenant's language, or a Slovak call gets transcribed
-    # as though it were Italian. Written defensively so deleting the field from
-    # the template is the only edit needed to remove the feature.
-    transcription = cfg["audio"]["input"].get("transcription")
-    if transcription is not None:
-        transcription["language"] = content.get("stt_language", "it")
     return cfg
 
 
@@ -2401,30 +2394,6 @@ async def _run_call(
                         # a dropped reply goes missing at.
                         session["awaiting_reply_since"] = asyncio.get_event_loop().time()
                         logger.info("Caller finished speaking")
-
-                    elif (
-                        etype
-                        == "conversation.item.input_audio_transcription.completed"
-                    ):
-                        # TEMPORARY — see the transcription block in
-                        # _SESSION_UPDATE. Logged next to "Apollonia: ..." so a
-                        # call reads as a dialogue: when a captured number is
-                        # wrong, this line says whether the audio arrived
-                        # decodable at all. Not a record of what SHE heard — it
-                        # is a second opinion from a different model on the same
-                        # audio — so treat a mismatch as a lead, not a verdict.
-                        heard = (msg.get("transcript") or "").strip()
-                        logger.info("Caller: %s", heard or "(nothing intelligible)")
-
-                    elif (
-                        etype == "conversation.item.input_audio_transcription.failed"
-                    ):
-                        # TEMPORARY — see above. A failure here costs nothing
-                        # but the debug line: the call itself never depended on
-                        # this transcript.
-                        logger.warning(
-                            "Caller transcription failed: %s", msg.get("error")
-                        )
 
                     elif etype == "error":
                         # Pull the code out rather than dumping the envelope:

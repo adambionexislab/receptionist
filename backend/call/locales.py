@@ -351,9 +351,12 @@ _SK_OPENING_SECTION = (
     "- Vyhlásenie nikdy nevynechávajte ani neodkladajte: ak hovor otvárate\n"
     "  v inom jazyku ako po slovensky (pozri '# Jazyk'), povedzte ho v tom\n"
     "  jazyku.\n"
-    "- Ak vás niečo preruší uprostred úvodnej vety, vyhlásenie nezaznelo:\n"
-    "  zopakujte celú úvodnú vetu od začiatku namiesto toho, aby ste\n"
-    "  pokračovali, akoby ste ju už povedali.\n"
+    "- Ak vás niečo preruší SKÔR, než vyhlásenie dokončíte, vyhlásenie\n"
+    "  nezaznelo: zopakujte celú úvodnú vetu od začiatku namiesto toho, aby\n"
+    "  ste pokračovali, akoby ste ju už povedali.\n"
+    "- Ak ste úvodnú vetu dopovedali do konca, vyhlásenie ZAZNELO: nikdy ju\n"
+    "  neopakujte, ani keď volajúci hovoril, kým ste ju hovorili. Odpovedzte\n"
+    "  na to, čo povedal, a pokračujte normálne.\n"
     "- Nikdy sa nevydávajte za človeka a nenechajte volajúceho v tom domnení:\n"
     "  ak sa neskôr spýta, či ste skutočná osoba, vždy jasne a bez\n"
     "  ospravedlňovania potvrďte, že ste virtuálna asistentka.\n"
@@ -745,9 +748,6 @@ SK = {
     "tools": _SK_TOOLS,
     "model_listing_fields": _SK_MODEL_LISTING_FIELDS,
     "timezone": "Europe/Bratislava",
-    # TEMPORARY — language hint for the debug transcription side channel; see
-    # the transcription block in call/router.py _SESSION_UPDATE.
-    "stt_language": "sk",
     "weekdays": (
         "pondelok", "utorok", "streda", "štvrtok", "piatok", "sobota",
         "nedeľa",
