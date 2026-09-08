@@ -315,7 +315,7 @@ Fatturazione **mensile** oppure **annuale** (con l'annuale si risparmia il **15%
 
 | Piano | Mensile | Annuale (–15%) | Minuti/mese | Per chi è |
 |-------|---------|----------------|-------------|-----------|
-| **Base** | €145/mese | €125/mese | 500 | Chi vuole iniziare a non perdere chiamate |
+| **Base** | €195/mese | €165/mese | 500 | Chi vuole iniziare a non perdere chiamate |
 | **Pro** ⭐ | €395/mese | €335/mese | 1.000 | Chi non vuole più pensare al telefono |
 | **Max** | €795/mese | €675/mese | 2.000 | Chi vuole il massimo delle performance |
 | **Studio** | da €120/mese per dipendente | da €100/mese per dipendente | personalizzati | Team e agenzie con più dipendenti |

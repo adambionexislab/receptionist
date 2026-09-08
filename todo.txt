@@ -66,5 +66,5 @@ statistika nových leadov a dalsich udajov
 
 ked volajuci hovori inym jazykom treba to dat do mailu
 change landing page so studio takes you to the form.
-change pricing on base
+
 

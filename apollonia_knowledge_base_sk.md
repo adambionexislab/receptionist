@@ -147,7 +147,7 @@ Fakturácia **mesačne** alebo **ročne** (pri ročnej ušetríte **15 %**). Ži
 
 | Program | Mesačne | Ročne (–15 %) | Minúty/mesiac | Pre koho je |
 |---------|---------|---------------|---------------|-------------|
-| **Base** | 145 €/mesiac | 125 €/mesiac | 500 | Pre tých, čo chcú prestať prichádzať o hovory |
+| **Base** | 195 €/mesiac | 165 €/mesiac | 500 | Pre tých, čo chcú prestať prichádzať o hovory |
 | **Pro** ⭐ | 395 €/mesiac | 335 €/mesiac | 1 000 | Pre tých, čo už nechcú myslieť na telefón |
 | **Max** | 795 €/mesiac | 675 €/mesiac | 2 000 | Pre tých, čo chcú maximálny výkon |
 | **Studio** | od 120 €/mesiac za zamestnanca | od 100 €/mesiac za zamestnanca | individuálne | Tímy a kancelárie s viacerými zamestnancami |
