@@ -892,11 +892,41 @@ _SESSION_UPDATE: dict[str, Any] = {
                 # turn: shorter = snappier replies, but a caller who pauses to
                 # think mid-answer ends their turn early and then talks over the
                 # reply they just triggered.
+                #
+                # 600ms — where this started — was too short for a spoken
+                # number. On a Slovak call the caller answered the budget
+                # question in two halves with ~750ms between them: the turn
+                # closed on the first half, a reply started generating, and the
+                # rest of the number landed as an interruption. She then
+                # guessed rather than asking — search_listings ran with 650,
+                # then 650 again, then 750, and only reached the real 1500 on
+                # the caller's fourth attempt, 67 seconds after asking. A
+                # ~665ms pause split a district answer in the same call, so
+                # this is not specific to numbers; numbers are just where half
+                # a turn cannot be reconstructed from context. 1000ms clears
+                # both observed pauses with headroom, at ~400ms more silence
+                # per turn on top of the ~1.6-2.3s the caller already waits
+                # (most of which is generation, not this). Barge-in is
+                # untouched: interrupting her fires on speech_started.
+                #
+                # interrupt_response starts FALSE so nothing can cut the
+                # opening. That first sentence carries the legally required AI
+                # disclosure, and something at pickup — line noise, the connect
+                # tone, or her own voice echoing back — kept scoring above
+                # threshold and cancelling it: she got a few words in, stopped,
+                # and then, per the prompt rule that an interrupted disclosure
+                # has not been made (locales.py "zopakujte celú úvodnú vetu"),
+                # started the whole greeting over, sometimes twice. VAD still
+                # commits whatever the caller says during the opening, so no
+                # audio is lost — it just no longer kills the response, and she
+                # answers it on the next turn. The control socket hands barge-in
+                # back a few seconds later; see _ARM_BARGE_IN.
                 "turn_detection": {
                     "type": "server_vad",
                     "threshold": 0.5,
                     "prefix_padding_ms": 300,
-                    "silence_duration_ms": 600,
+                    "silence_duration_ms": 1000,
+                    "interrupt_response": False,
                 },
             },
             "output": {
@@ -906,6 +936,30 @@ _SESSION_UPDATE: dict[str, Any] = {
         },
         "tools": _IT_TOOLS,
         "tool_choice": "auto",
+    },
+}
+
+# Sent over the control socket once the opening has been delivered, to undo the
+# interrupt_response=False above. From here on barge-in is the feature working:
+# a caller who starts talking mid-answer should cut her off.
+#
+# The WHOLE turn_detection object is sent, not just the changed flag —
+# session.update replaces a nested object rather than merging into it, so
+# omitting threshold/silence_duration_ms here would silently reset them to the
+# API defaults and undo the endpointing fix above. Built from the template for
+# the same reason: one place to edit, no second copy to drift.
+_ARM_BARGE_IN: dict[str, Any] = {
+    "type": "session.update",
+    "session": {
+        "type": "realtime",
+        "audio": {
+            "input": {
+                "turn_detection": {
+                    **_SESSION_UPDATE["session"]["audio"]["input"]["turn_detection"],
+                    "interrupt_response": True,
+                }
+            }
+        },
     },
 }
 
@@ -1115,6 +1169,15 @@ _FAREWELL_TIMEOUT_SECONDS = 12.0
 # and the caller having to prod her is a bug however it came about.
 _REPLY_NUDGE_SECONDS = 4.0
 
+# How long after the greeting is triggered before barge-in is handed back (see
+# _ARM_BARGE_IN). Clocked from the trigger rather than from the greeting's
+# response.done because response.done only means generation finished — the audio
+# is still draining down the SIP leg for seconds after it, exactly as the
+# farewell hang-up has to allow for. Generous on purpose: arming late is nearly
+# free, since interrupt_response only matters while a response is actually
+# playing, and by then the opening is over. Arming early is the bug this fixes.
+_BARGE_IN_ARM_SECONDS = 8.0
+
 
 def _should_nudge_reply(
     session: dict[str, Any], response_active: bool, now: float
@@ -1129,6 +1192,21 @@ def _should_nudge_reply(
     if not awaiting or response_active or session.get("ending_at"):
         return False
     return now - awaiting > _REPLY_NUDGE_SECONDS
+
+
+def _should_arm_barge_in(session: dict[str, Any], now: float) -> bool:
+    """Whether the opening has been delivered long enough to let the caller
+    interrupt again (see _ARM_BARGE_IN).
+
+    False once armed: the session.update goes out exactly once per call, and
+    re-sending it on every tick would rewrite turn_detection mid-conversation
+    for no reason. `is None` rather than a falsy test because loop-clock zero is
+    a real timestamp here — treating it as "not greeted yet" would leave a call
+    unable to be interrupted for its whole length."""
+    greeting_at = session.get("greeting_at")
+    if greeting_at is None or session.get("barge_in_armed"):
+        return False
+    return now - greeting_at > _BARGE_IN_ARM_SECONDS
 
 
 class _ResponseGate:
@@ -2061,6 +2139,8 @@ async def _run_call(
             logger.info("Greeting triggered for call %s", call_id)
 
             session["last_speech_at"] = asyncio.get_event_loop().time()
+            # Starts the clock on handing barge-in back (see _ARM_BARGE_IN).
+            session["greeting_at"] = session["last_speech_at"]
 
             async def event_loop() -> None:
                 try:
@@ -2297,6 +2377,31 @@ async def _run_call(
                 while True:
                     await asyncio.sleep(1)
                     now = asyncio.get_event_loop().time()
+                    # The opening has been delivered: hand barge-in back so the
+                    # rest of the call can be interrupted normally. Done from
+                    # this loop rather than a task of its own — it already ticks
+                    # every second and is already cancelled with the call.
+                    if _should_arm_barge_in(session, now):
+                        # Flag first, and swallow a failed send: this loop is
+                        # one of the two tasks the call waits on, so letting the
+                        # exception out would hang up on a caller mid-sentence
+                        # over a comfort feature. The cost of losing this one
+                        # event is that she can't be interrupted for the rest of
+                        # the call — worth a warning, not a dropped call. Not
+                        # retried next tick either: if the socket is gone the
+                        # call is ending anyway, and a retry every second would
+                        # bury the log.
+                        session["barge_in_armed"] = True
+                        try:
+                            await send_event(_ARM_BARGE_IN)
+                            logger.info("Barge-in armed for call %s", call_id)
+                        except Exception as exc:
+                            logger.warning(
+                                "Could not arm barge-in for call %s: %s — she "
+                                "stays uninterruptible for the rest of it",
+                                call_id,
+                                exc,
+                            )
                     # Once end_call has fired the only thing owed is the
                     # farewell. If that response never lands, don't hold the
                     # caller on an open line for the full silence timeout.

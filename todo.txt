@@ -68,3 +68,4 @@ ked volajuci hovori inym jazykom treba to dat do mailu
 change landing page so studio takes you to the form.
 unfinished seassion - pobočky section for rancehs
 test geocoding on seller call
+add hint to lisitng page that they can use apollonia meeting

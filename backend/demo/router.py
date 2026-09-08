@@ -57,7 +57,17 @@ _DEMO_VOICE = _SESSION_UPDATE["session"]["audio"]["output"]["voice"]
 # Reuse the phone agent's tuned server VAD instead of the Realtime defaults, which
 # are more trigger-happy: on a noisy browser mic the defaults create spurious
 # "user turns" that the model can mis-detect as another language.
-_DEMO_TURN_DETECTION = _SESSION_UPDATE["session"]["audio"]["input"]["turn_detection"]
+#
+# interrupt_response is dropped, not inherited. The phone agent holds it off for
+# the opening and hands it back over its control WebSocket a few seconds in; the
+# demo has no control socket — the browser talks straight to OpenAI — so it would
+# inherit the "off" and never get barge-in back for the whole session. A copy,
+# not a reference, so editing one can't reach into the other's dict.
+_DEMO_TURN_DETECTION = {
+    k: v
+    for k, v in _SESSION_UPDATE["session"]["audio"]["input"]["turn_detection"].items()
+    if k != "interrupt_response"
+}
 
 # Demo override: there are no listing tools in the WebRTC demo, so Apollonia must
 # decline property searches instead of pretending to run them. It also replaces
