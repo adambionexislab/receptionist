@@ -39,6 +39,26 @@ def _prompt(locale):
 
 
 @pytest.mark.parametrize("locale", LOCALES)
+def test_a_preamble_never_announces_the_next_step(locale):
+    """Regression: five times in one call she narrated a plan instead of acting.
+
+        Dobre, zaznačím váš záujem a potom sa posunieme k ďalšiemu kroku.
+        Dobre, zapíšem si to a potom to odovzdám maklérovi.
+        Dobre, chvíľu si to zhrniem a uložím vaše údaje pre makléra.
+
+    The preamble rule tells her to describe the action she is taking, and the
+    "and then..." half is what turns that into narration: the caller waits
+    through a sentence about the future to hear nothing about the present.
+    A standing rule against announcing next steps already existed elsewhere in
+    the prompt; it needed to be where the preamble is defined."""
+    text = {
+        "it": "descrivi solo quello che stai facendo adesso",
+        "sk": "opíšte iba to, čo robíte práve teraz",
+    }[locale]
+    assert text in _prompt(locale)
+
+
+@pytest.mark.parametrize("locale", LOCALES)
 def test_the_question_list_still_covers_employment(locale):
     """Removing the examples must not remove the question."""
     assert EMPLOYMENT_QUESTION[locale] in _prompt(locale)

@@ -172,6 +172,11 @@ _SYSTEM_PROMPT_BODY = (
     "  'Registro i suoi dati, un momento.'\n"
     "- Tieni il preambolo a UNA frase breve e varia le parole tra un turno\n"
     "  e l'altro: non ripetere sempre la stessa formula.\n"
+    "- Descrivi SOLO quello che stai facendo adesso, mai quello che farai\n"
+    "  dopo: niente 'e poi...', 'e successivamente...', 'e passiamo a...'.\n"
+    "  Frasi come 'Registro i suoi dati e poi li passo all'agente' o\n"
+    "  'segno il suo interesse e poi passiamo al prossimo passo' non dicono\n"
+    "  niente al chiamante e lo lasciano solo ad aspettare.\n"
     "- NON usare un preambolo quando la risposta è diretta e immediata,\n"
     "  quando il chiamante sta solo confermando, correggendo o rifiutando,\n"
     "  o quando devi solo fare una domanda qualificante.\n"
@@ -475,8 +480,13 @@ _DATETIME_SECTION = (
     "  E la data concreta, es. 'domani (3/8)' o 'lunedì prossimo (5/8)'.\n"
     "  L'agente legge l'email più tardi, quando 'domani' non è più lo stesso\n"
     "  giorno.\n"
-    "- Se non è chiaro quale giorno intenda il chiamante, chiediglielo invece\n"
-    "  di supporlo.\n"
+    "- Una risposta vaga è una risposta valida. Se il chiamante dice 'la\n"
+    "  settimana prossima' o 'a settembre', registralo con le sue parole e\n"
+    "  NON chiedere il giorno preciso: l'appuntamento lo fissa l'agente, e\n"
+    "  spesso il chiamante è vago perché ancora non lo sa.\n"
+    "- Chiedi solo quando dovresti tirare a indovinare un giorno concreto —\n"
+    "  per esempio dice 'lunedì' e non si capisce se questo o il prossimo —\n"
+    "  e comunque chiedilo una volta sola.\n"
 )
 
 
@@ -805,8 +815,9 @@ _RECORD_CALLER_INFO_TOOL: dict[str, Any] = {
                     "caller's own words and resolve any relative reference "
                     "against the current date in your instructions, e.g. "
                     "'tomorrow (3 Aug)', 'next Monday (5 Aug)'. Never guess a "
-                    "weekday or date — if it is unclear which day the caller "
-                    "means, ask."
+                    "weekday or date. A vague answer ('next week') is a valid "
+                    "answer: record it as spoken and do not ask for an exact "
+                    "day."
                 ),
             },
         },

@@ -69,4 +69,4 @@ change landing page so studio takes you to the form.
 unfinished seassion - pobočky section for rancehs
 test geocoding on seller call
 add hint to lisitng page that they can use apollonia meeting
-geolocating the listings so we can search for something close
+geolocating the listings so we can search for something close or fi they say im looking for something 20km from ... she should find listings that match that

@@ -77,6 +77,41 @@ def test_the_prompt_forbids_guessing_a_date(locale):
 
 
 @pytest.mark.parametrize("locale", LOCALES)
+def test_a_vague_date_is_accepted_as_an_answer(locale):
+    """The other half of "never guess a date", and the half that was missing.
+    Told only not to guess and to ask when a day was unclear, she treated "next
+    week" as an unanswered question and interrogated the caller for a weekday —
+    twice, on two separate fields:
+
+        00:09:27  ...ktorý konkrétny deň budúceho týždňa vám vyhovuje?
+        00:09:44  ...ktorý konkrétny deň budúceho týždňa by ste sa chceli
+                  nasťahovať? ...aspoň približný dátum potrebujem zapísať.
+
+    Callers are vague because they don't know yet, and the agent fixes the
+    appointment anyway. Recording their words is the answer."""
+    prompt = router._build_system_prompt(router._content(locale), None, None, SATURDAY)
+
+    marker = {
+        "it": "una risposta vaga è una risposta valida",
+        "sk": "neurčitá odpoveď je platná odpoveď",
+    }[locale]
+    assert marker in prompt.lower()
+
+
+@pytest.mark.parametrize("locale", LOCALES)
+def test_the_viewing_field_does_not_demand_an_exact_day(locale):
+    """The prompt rule alone was not the whole source — the tool description
+    for visit_availability carried its own "if unclear, ask", and tool
+    descriptions are prompt text the model reads on every turn."""
+    tools = {t["name"]: t for t in router._content(locale)["tools"]}
+    field = tools["record_caller_info"]["parameters"]["properties"]
+    text = field["visit_availability"]["description"].lower()
+
+    marker = {"it": "vague answer", "sk": "neurčitá odpoveď"}[locale]
+    assert marker in text
+
+
+@pytest.mark.parametrize("locale", LOCALES)
 def test_the_tenant_name_still_leads_the_prompt(locale):
     """The date section is appended, so it must not displace the first line the
     tenant's agency name goes into."""
