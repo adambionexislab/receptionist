@@ -1010,7 +1010,10 @@ _SESSION_UPDATE: dict[str, Any] = {
                 # there. The transcript event reports the text the model
                 # GENERATED, so one truncated mid-word still logs in full. Every
                 # round of this was diagnosed by ear, never from the log.
-                "noise_reduction": {"type": "far_field"},
+                #
+                # Currently OFF, to hear what the line sounds like without it.
+                # Put it back by uncommenting.
+                # "noise_reduction": {"type": "far_field"},
                 "turn_detection": _TURN_DETECTION,
             },
             "output": {
