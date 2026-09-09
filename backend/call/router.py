@@ -237,6 +237,10 @@ _SYSTEM_PROMPT_BODY = (
     "- Prima di passare un budget a search_listings, ripetilo al chiamante e\n"
     "  aspetta che confermi: 'Mille euro al mese, giusto?'. Cerca solo dopo\n"
     "  il sì.\n"
+    "  Questa conferma è SOLO la domanda, nient'altro: niente preambolo\n"
+    "  davanti e nessun annuncio di quello che farai dopo. Non dire mai cose\n"
+    "  come 'ora confermiamo il budget e poi guardo cosa c'è': il chiamante\n"
+    "  sente solo una frase in più prima di poterti rispondere.\n"
     "- Se il chiamante ti corregge, riparti dal numero corretto e ripetiglielo:\n"
     "  non riutilizzare mai quello di prima.\n"
     "\n"
@@ -476,6 +480,18 @@ _DATETIME_SECTION = (
 )
 
 
+# Spoken when the caller has gone quiet — see _should_check_caller_is_there.
+# Kept to one short question on purpose: the caller may be thinking, and an
+# assistant that fills a five-second pause with a paragraph is the thing that
+# makes people hang up.
+_SILENCE_CHECK_INSTRUCTION = (
+    "Il chiamante non dice nulla da un po'. Chiedigli con UNA sola frase "
+    "breve se è ancora in linea, nella lingua che ha usato finora — per "
+    "esempio 'Pronto, mi sente?'. Non dire altro: non ripetere la domanda "
+    "precedente, non riassumere, non aggiungere spiegazioni e non salutare."
+)
+
+
 _FAREWELL_INSTRUCTION = (
     "Di' soltanto le parole di commiato al chiamante, nella lingua che il "
     "chiamante ha usato durante la conversazione, e nient'altro. Esempio in "
@@ -524,6 +540,7 @@ _IT_CONTENT: dict[str, Any] = {
         "virtuale) e chiedi come puoi aiutarlo."
     ),
     "farewell_instruction": _FAREWELL_INSTRUCTION,
+    "silence_check_instruction": _SILENCE_CHECK_INSTRUCTION,
     "timezone": "Europe/Rome",
     "weekdays": (
         "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato",
@@ -943,26 +960,40 @@ _SESSION_UPDATE: dict[str, Any] = {
                 # decodable, and her wrong numbers were guesses, not mishearings.
                 #
                 # Server-side suppression of what isn't speech, applied before
-                # VAD sees the audio. This is the only lever that stops the
-                # opening being cut in the first place: something at pickup —
-                # line noise, the connect tone, her own voice echoing back —
-                # scores above the threshold, and VAD DETECTING speech truncates
-                # her playout a layer below anything the session flags reach.
-                #
-                # Three attempts to fix that above this layer all failed, and
-                # the audio was cut identically in each: defaults (response
-                # cancelled, greeting restarted); interrupt_response=False (not
-                # cancelled, but create_response made a second response whose
-                # audio displaced the greeting — same truncation, minus the one
-                # log line that had been evidence of it); both False (cut, and
-                # nothing regenerated, so she went silent for the rest of the
-                # call). Holding VAD off entirely for the opening did protect
-                # it, at the price of ignoring the caller for eight seconds,
-                # which cost more than the stutter did.
+                # VAD sees the audio. The only lever that stops the opening
+                # being cut in the first place, rather than handling it after:
+                # something at pickup — line noise, the connect tone, her own
+                # voice echoing back — scores above the threshold, and VAD
+                # DETECTING speech truncates her playout a layer below anything
+                # the session flags reach.
                 #
                 # far_field is the aggressive setting, chosen because the target
-                # is line noise rather than a room. If callers start getting
-                # clipped or going unheard, near_field is the gentler one.
+                # is line noise rather than a room. It was briefly suspected of
+                # gating out callers' speech too — a call went silent right
+                # after it shipped — and cleared: the next calls showed normal
+                # detection and correct comprehension, and the silence turned
+                # out to be a missing feature (see _should_check_caller_is_there)
+                # rather than this. Keep the failure mode in mind anyway, since
+                # it is not a noisy call but a dead one: if callers start going
+                # unheard, near_field is the gentler setting and removing the
+                # field entirely is the known-good state.
+                #
+                # Note you cannot confirm from the API that it applied — OpenAI
+                # echoes the field back as null.
+                #
+                # What it does NOT fix is a greeting cut by the caller genuinely
+                # talking. That is handled in the prompt: she no longer restarts
+                # the opening when something talks over it, which is what made
+                # the truncation audible as a stutter. Three attempts to fix it
+                # via session flags all failed first, the audio being cut
+                # identically each time: defaults (response cancelled, greeting
+                # restarted); interrupt_response=False (not cancelled, but
+                # create_response made a second response whose audio displaced
+                # the greeting — same truncation, minus the one log line that
+                # was evidence of it); both False (cut, and nothing regenerated,
+                # so she went silent for the rest of the call). The cut happens
+                # when VAD DETECTS speech, a layer below anything those flags
+                # reach.
                 #
                 # Worth knowing when reading logs: a cut greeting is invisible
                 # there. The transcript event reports the text the model
@@ -1202,6 +1233,43 @@ def _should_nudge_reply(
     return now - awaiting > _REPLY_NUDGE_SECONDS
 
 
+# How long the line may be quiet, after SHE last spoke, before she checks the
+# caller is still there. The mirror image of the nudge above: that one covers
+# "the caller spoke and got nothing back", this one "she spoke and got nothing
+# back", and neither could ever fire for the other's case — the nudge needs a
+# completed caller turn, which is exactly what is missing here.
+#
+# Measured from her transcript, which lands BEFORE her audio finishes playing
+# out over SIP, so the real silence a caller experiences is several seconds
+# shorter than this number. Hence 12 rather than the ~8 that would feel right if
+# the clock started when she stopped talking.
+_CALLER_SILENCE_SECONDS = 12.0
+
+# Asked once, not repeatedly. A caller who does not answer "are you still
+# there?" is gone, on hold, or does not want to talk, and a second and third
+# ask is the behaviour that makes an agent feel like a machine. After this the
+# line just runs out to the 100s hang-up.
+_MAX_SILENCE_PROMPTS = 1
+
+
+def _should_check_caller_is_there(
+    session: dict[str, Any], response_active: bool, now: float
+) -> bool:
+    """Whether the caller has gone quiet long enough to ask if they are still
+    on the line.
+
+    Every condition is a reason NOT to: she is mid-answer, a reply is already
+    owed to the caller (the nudge owns that case, and both firing would have her
+    speak twice), the call is ending, or she has already asked once."""
+    if response_active or session.get("ending_at"):
+        return False
+    if session.get("awaiting_reply_since"):
+        return False
+    if session.get("silence_prompts", 0) >= _MAX_SILENCE_PROMPTS:
+        return False
+    return now - session["last_speech_at"] > _CALLER_SILENCE_SECONDS
+
+
 class _ResponseGate:
     """Serialises `response.create` against the Realtime response lifecycle.
 
@@ -1264,6 +1332,24 @@ class _ResponseGate:
         await self._send(event)
         if on_sent is not None:
             on_sent()
+
+
+def _silence_check_response_event(content: dict[str, Any]) -> dict[str, Any]:
+    """The `response.create` that asks whether the caller is still on the line.
+
+    Instructions replace the session prompt for this one turn, the same trick
+    the farewell uses and for the same reason: given the full prompt she treats
+    the silence as her cue to continue the flow, and re-asks the qualifying
+    question the caller has just failed to answer. This turn has one job.
+    `tool_choice: none` because there is nothing to look up — the caller has
+    said nothing to act on."""
+    return {
+        "type": "response.create",
+        "response": {
+            "instructions": content["silence_check_instruction"],
+            "tool_choice": "none",
+        },
+    }
 
 
 def _farewell_response_event(content: dict[str, Any]) -> dict[str, Any]:
@@ -2394,6 +2480,22 @@ async def _run_call(
                         )
                         session["awaiting_reply_since"] = None
                         await gate.request()
+
+                    # She asked something and the line went quiet. Nothing was
+                    # owed to the caller, so the nudge above cannot cover this —
+                    # without it she waits in silence until the 100s hang-up,
+                    # which is what a caller reads as the call having died.
+                    if _should_check_caller_is_there(session, gate.active, now):
+                        session["silence_prompts"] = (
+                            session.get("silence_prompts", 0) + 1
+                        )
+                        logger.info(
+                            "Caller silent %.0fs — checking they are still "
+                            "there on call %s",
+                            _CALLER_SILENCE_SECONDS,
+                            call_id,
+                        )
+                        await gate.request(_silence_check_response_event(content))
 
                     if now - session["last_speech_at"] > 100:
                         logger.info("100s silence — hanging up call %s", call_id)

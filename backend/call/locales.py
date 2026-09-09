@@ -159,6 +159,10 @@ _SK_SYSTEM_PROMPT_BODY = (
     "- Skôr než rozpočet použijete v search_listings, zopakujte ho volajúcemu\n"
     "  a počkajte na potvrdenie: 'Tisíc eur mesačne, správne?'. Vyhľadávajte\n"
     "  až po jeho súhlase.\n"
+    "  Toto potvrdenie je IBA tá otázka a nič viac: nepredraďte jej úvodnú\n"
+    "  frázu a neoznamujte, čo budete robiť potom. Nikdy nehovorte veci ako\n"
+    "  'teraz si rozpočet potvrdíme a potom sa pozriem, čo by vyhovovalo':\n"
+    "  volajúci počuje len vetu navyše, kým vám môže odpovedať.\n"
     "- Ak vás volajúci opraví, vychádzajte z opraveného čísla a zopakujte mu\n"
     "  ho: nikdy nepoužite to predchádzajúce.\n"
     "\n"
@@ -378,6 +382,18 @@ _SK_DATETIME_SECTION = (
 
 # Instructions for the farewell turn — these REPLACE the system prompt above
 # for that single response; see _FAREWELL_INSTRUCTION in call/router.py for why.
+# Spoken when the caller has gone quiet — see call/router.py
+# _should_check_caller_is_there. One short question only: the caller may just be
+# thinking, and filling a five-second pause with a paragraph is what makes
+# people hang up.
+_SK_SILENCE_CHECK_INSTRUCTION = (
+    "Volajúci už chvíľu nič nepovedal. Spýtajte sa ho JEDNOU krátkou vetou, "
+    "či vás ešte počuje, v jazyku, ktorý doteraz používal — napríklad "
+    "'Haló, ste tam?'. Nič iné nehovorte: neopakujte predchádzajúcu otázku, "
+    "nezhŕňajte, nepridávajte vysvetlenia a nelúčte sa."
+)
+
+
 _SK_FAREWELL_INSTRUCTION = (
     "Povedzte iba slová rozlúčky volajúcemu, v jazyku, ktorý volajúci "
     "používal počas rozhovoru, a nič iné. Príklad po slovensky: 'Ďakujem za "
@@ -739,6 +755,7 @@ SK = {
         "môžete pomôcť."
     ),
     "farewell_instruction": _SK_FAREWELL_INSTRUCTION,
+    "silence_check_instruction": _SK_SILENCE_CHECK_INSTRUCTION,
     "tools": _SK_TOOLS,
     "model_listing_fields": _SK_MODEL_LISTING_FIELDS,
     "timezone": "Europe/Bratislava",

@@ -83,6 +83,25 @@ def test_type_b_points_at_the_section_instead_of_restating_it(locale):
 
 
 @pytest.mark.parametrize("locale", LOCALES)
+def test_the_read_back_is_the_whole_turn(locale):
+    """Regression the read-back rule caused itself. Describing it as "confirm,
+    then search" gave her a next step to announce, and the preamble habit —
+    which the prompt teaches for slow tools — attached itself to a question:
+
+        23:49:17,678  Dobre, teraz si rozpočet krátko potvrdíme a potom sa
+                      pozriem, čo by mohlo vyhovovať.
+        23:49:17,680  Tisíc eur mesačne, správne?
+
+    Two output items in one response, 2ms apart. The caller waits through a
+    sentence of narration to answer a four-word question."""
+    marker = {
+        "it": "questa conferma è solo la domanda",
+        "sk": "toto potvrdenie je iba tá otázka",
+    }[locale]
+    assert marker in _prompt(locale)
+
+
+@pytest.mark.parametrize("locale", LOCALES)
 def test_the_zero_result_step_stays_a_single_open_question(locale):
     """Deliberately NOT expanded. Making her recite the criteria and offer to
     change them turned a dead end into an interrogation — location, budget,
