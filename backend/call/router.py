@@ -970,32 +970,26 @@ _SESSION_UPDATE: dict[str, Any] = {
                 # That disagreement was itself the finding — the audio is
                 # decodable, and her wrong numbers were guesses, not mishearings.
                 #
-                # Server-side suppression of what isn't speech, applied before
-                # VAD sees the audio. The only lever that stops the opening
-                # being cut in the first place, rather than handling it after:
-                # something at pickup — line noise, the connect tone, her own
-                # voice echoing back — scores above the threshold, and VAD
-                # DETECTING speech truncates her playout a layer below anything
-                # the session flags reach.
+                # NO noise_reduction, and this one is settled by evidence:
+                # audio.input.noise_reduction with type far_field was run on
+                # real calls on 2026-09-09 and made her unable to hear place
+                # names. "Pezinok" and "Pezinská" stopped being understood and
+                # the searches built from them failed. That is the cost of
+                # suppressing everything that does not look like speech on a
+                # line that is already band-limited to ~3.4kHz: what goes first
+                # is the fricative energy (/z/, /s/, /ts/) that distinguishes
+                # one proper noun from another, and proper nouns are most of
+                # what a caller tells this agent. Do not re-enable it. If it is
+                # ever tried again, near_field is the gentler of the two, and
+                # the eval has to include Slovak town names, not just whether
+                # the call connects.
                 #
-                # far_field is the aggressive setting, chosen because the target
-                # is line noise rather than a room. It was briefly suspected of
-                # gating out callers' speech too — a call went silent right
-                # after it shipped — and cleared: the next calls showed normal
-                # detection and correct comprehension, and the silence turned
-                # out to be a missing feature (see _should_check_caller_is_there)
-                # rather than this. Keep the failure mode in mind anyway, since
-                # it is not a noisy call but a dead one: if callers start going
-                # unheard, near_field is the gentler setting and removing the
-                # field entirely is the known-good state.
-                #
-                # Note you cannot confirm from the API that it applied — OpenAI
-                # echoes the field back as null.
-                #
-                # What it does NOT fix is a greeting cut by the caller genuinely
-                # talking. That is handled in the prompt: she no longer restarts
-                # the opening when something talks over it, which is what made
-                # the truncation audible as a stutter. Three attempts to fix it
+                # It was added to stop the opening being cut at pickup, since
+                # detection happens before any of the session flags can act.
+                # That is not worth breaking comprehension for, and the
+                # truncation is handled in the prompt instead: she no longer
+                # restarts the opening when something talks over it, which is
+                # what made it audible to callers as a stutter. Three attempts
                 # via session flags all failed first, the audio being cut
                 # identically each time: defaults (response cancelled, greeting
                 # restarted); interrupt_response=False (not cancelled, but
@@ -1010,10 +1004,6 @@ _SESSION_UPDATE: dict[str, Any] = {
                 # there. The transcript event reports the text the model
                 # GENERATED, so one truncated mid-word still logs in full. Every
                 # round of this was diagnosed by ear, never from the log.
-                #
-                # Currently OFF, to hear what the line sounds like without it.
-                # Put it back by uncommenting.
-                # "noise_reduction": {"type": "far_field"},
                 "turn_detection": _TURN_DETECTION,
             },
             "output": {
@@ -1081,20 +1071,58 @@ def _sip_header(headers: list[dict[str, Any]], name: str) -> str:
     return ""
 
 
+# A SIP user part that is a phone number: optional +, then digits and the
+# separators carriers sometimes insert. Anything with a letter in it is not a
+# number — most importantly the OpenAI project id, which is what sits in the To
+# header of every call that reaches the SIP connector (the DID is conveyed
+# separately, in Diversion). Scraping digits out of "proj_34LHXs57Zcn.." used to
+# yield "345719", a number that does not exist but is nine digits long — long
+# enough for _same_number to match a tenant on.
+_PHONE_USER_RE = re.compile(r"^\+?[\d\-.()\s]+$")
+
+# Shortest and longest a number may be, in digits, to be treated as E.164 when
+# the carrier sends it without a leading +. E.164 caps at 15; the floor is set
+# below the shortest national number we expect so short codes still survive.
+_MIN_E164_DIGITS = 8
+_MAX_E164_DIGITS = 15
+
+
 def _extract_sip_number(header_value: str) -> str:
-    """Pull a phone number out of a SIP From/To header value, which looks like
-    '"Mario" <sip:+3902123@host;user=phone>;tag=..' or '<tel:+3902123>'. Returns
-    E.164-ish (keeps a leading + when present) or '' for anonymous/withheld."""
+    """Pull a phone number out of a SIP From/To/Diversion header value, which
+    looks like '"Mario" <sip:+3902123@host;user=phone>;tag=..' or
+    '<tel:+3902123>'. Returns E.164 with a leading + when the number is one, or
+    '' for anonymous/withheld and for user parts that are not phone numbers.
+
+    Carriers differ on the +: Twilio sends '<sip:+39...@..>', DIDWW sends
+    '<sip:421948155064@..>' with the plus only in the display name. Both end up
+    +-prefixed here, because this value is what reaches the agency in the lead
+    email and a number without its country code is not one they can dial back.
+    A single leading 0 is national-format, whose country we cannot know, so it
+    is left exactly as it arrived rather than guessed at.
+    """
     if not header_value:
         return ""
     m = re.search(r"(?:sip|tel):([^@;>\s]+)", header_value, re.IGNORECASE)
-    user = m.group(1) if m else header_value
+    user = (m.group(1) if m else header_value).strip()
     if "anonymous" in user.lower():
+        return ""
+    if not _PHONE_USER_RE.match(user):
         return ""
     digits = "".join(ch for ch in user if ch.isdigit())
     if not digits:
         return ""
-    return ("+" if user.strip().startswith("+") else "") + digits
+    if user.startswith("+"):
+        return "+" + digits
+    # 00 is the international access prefix — the same number as +, spelled the
+    # way a PSTN caller dials it.
+    if digits.startswith("00"):
+        trimmed = digits[2:]
+        return "+" + trimmed if trimmed else ""
+    if digits.startswith("0"):
+        return digits
+    if _MIN_E164_DIGITS <= len(digits) <= _MAX_E164_DIGITS:
+        return "+" + digits
+    return digits
 
 
 def _find_tenant_by_dialed(dialed: str) -> dict | None:
@@ -1484,7 +1512,8 @@ async def incoming_call(request: Request) -> Response:
     diversion = _extract_sip_number(_sip_header(sip_headers, "Diversion"))
     logger.info(
         "Inbound SIP call — call_id=%s caller=%s dialed=%s diversion=%s headers=%s",
-        call_id, caller, dialed, diversion or "(none)", json.dumps(sip_headers),
+        call_id, caller, dialed or "(none)", diversion or "(none)",
+        json.dumps(sip_headers),
     )
 
     tenant = _find_tenant_by_dialed(dialed) or _find_tenant_by_dialed(diversion)
@@ -2495,21 +2524,22 @@ async def _run_call(
                         session["awaiting_reply_since"] = None
                         await gate.request()
 
-                    # She asked something and the line went quiet. Nothing was
-                    # owed to the caller, so the nudge above cannot cover this —
-                    # without it she waits in silence until the 100s hang-up,
-                    # which is what a caller reads as the call having died.
-                    if _should_check_caller_is_there(session, gate.active, now):
-                        session["silence_prompts"] = (
-                            session.get("silence_prompts", 0) + 1
-                        )
-                        logger.info(
-                            "Caller silent %.0fs — checking they are still "
-                            "there on call %s",
-                            _CALLER_SILENCE_SECONDS,
-                            call_id,
-                        )
-                        await gate.request(_silence_check_response_event(content))
+                    # DISABLED 2026-09-09. The silence check ("Haló, ste tam?")
+                    # fired immediately after she finished her own line instead
+                    # of after 12s of quiet, so callers were asked whether they
+                    # were still there before they had a chance to answer the
+                    # question. Turned off at the call site rather than deleted:
+                    # _should_check_caller_is_there and its tests are intact and
+                    # correct in isolation, so the bug is in what feeds them —
+                    # most likely last_speech_at, which the greeting sets at
+                    # trigger time and which the farewell/tool turns also move,
+                    # meaning "she last spoke" is not always what it claims.
+                    # Re-enable by restoring this block, once that is understood.
+                    #
+                    # What it was for: she asks something, the line goes quiet,
+                    # and nothing is owed to the caller — so the nudge above
+                    # cannot cover it and she waits out the 100s hang-up in
+                    # silence. That gap is back until this is fixed.
 
                     if now - session["last_speech_at"] > 100:
                         logger.info("100s silence — hanging up call %s", call_id)

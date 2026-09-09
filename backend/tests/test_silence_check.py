@@ -12,6 +12,14 @@ which is only set when a caller turn COMPLETES — so it handles "the caller spo
 and got nothing back" and is structurally unable to handle the mirror case,
 "she spoke and got nothing back". Nothing was owed, so nothing fired, and the
 line just ran toward the 100s hang-up.
+
+DISABLED 2026-09-09 at the call site in call/router.py: in production it fired
+the instant she finished speaking rather than after 12s of quiet, asking callers
+whether they were still there before they could answer. These tests still pass
+because the predicate below is correct in isolation — which is the point, and
+where the next investigation starts: the bug is in what feeds it, most likely
+`last_speech_at`, which the greeting sets at trigger time and which tool turns
+and the farewell also move. Nothing here covers the wiring, only the decision.
 """
 
 import pytest
