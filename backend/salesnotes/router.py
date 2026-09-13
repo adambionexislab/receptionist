@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 
 from config import settings
 from leadgen.router import require_staff
-from salesnotes import content, db, extraction, schema
+from salesnotes import chat, content, db, extraction, schema
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +218,39 @@ async def list_notes(limit: int = 100):
     """Every note worth showing, newest first."""
     notes = await asyncio.to_thread(db.list_notes, limit)
     return {"notes": notes, "languages": content.LANGUAGES, "outcomes": list(schema.OUTCOMES)}
+
+
+class ChatTurn(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    """One question, plus the conversation so far so follow-ups ("e prima?")
+    make sense. The browser owns the history — nothing about a question is
+    worth persisting."""
+
+    question: str
+    history: list[ChatTurn] = Field(default_factory=list)
+    # Which language to answer in: the dashboard's locale, not the meeting's.
+    language: str = content.DEFAULT_LANGUAGE
+
+
+@router.post("/chat")
+async def chat_over_notes(data: ChatRequest):
+    """Answer a question over every note — "come siamo messi con X?" — grounded
+    only in what was recorded (see salesnotes/chat.py)."""
+    history = [
+        {"role": t.role, "content": t.content}
+        for t in data.history
+        if t.role in ("user", "assistant") and t.content.strip()
+    ]
+    language = data.language if data.language in content.LANGUAGES else content.DEFAULT_LANGUAGE
+    try:
+        return await chat.ask(data.question, history, language)
+    except chat.ChatError as exc:
+        logger.error("Notes chat failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Chat failed, please retry")
 
 
 # Declared before /{note_id}: routes match in declaration order, so the literal

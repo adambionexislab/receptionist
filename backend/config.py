@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     SUMMARY_MODEL: str = _TEXT_MODEL_DEFAULT
     # Transcript → structured listing fields/notes.
     EXTRACTION_MODEL: str = _TEXT_MODEL_DEFAULT
+    # Q&A over the sales rep's meeting notes (see salesnotes/chat.py). Reads a
+    # few hundred notes per question, so this is the one most likely to want a
+    # different model than the rest.
+    NOTES_CHAT_MODEL: str = _TEXT_MODEL_DEFAULT
 
     # Acquisizione (seller-meeting capture) — ships dark until this is set.
     ACQUISIZIONE_ENABLED: bool = False

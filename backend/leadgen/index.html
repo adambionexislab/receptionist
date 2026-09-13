@@ -204,6 +204,7 @@
 
   .filters { display: flex; gap: 8px; align-items: center; }
   .filters select { min-width: 150px; padding: 6px 10px; }
+  .filters input[type=search] { min-width: 190px; padding: 6px 10px; }
 
   .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; box-shadow: 0 0 0 rgba(62,207,142,.6); animation: pulse 1.6s infinite; }
   @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(62,207,142,.5);} 70%{box-shadow:0 0 0 8px rgba(62,207,142,0);} 100%{box-shadow:0 0 0 0 rgba(62,207,142,0);} }
@@ -263,6 +264,21 @@
     padding: 12px 14px; margin: 10px 0 16px; color: var(--text-dim);
     font-size: .88rem; white-space: pre-wrap; overflow-wrap: anywhere;
   }
+  .nt-chat-intro { margin: 0 0 14px; max-width: 720px; }
+  .nt-chat-thread {
+    display: flex; flex-direction: column; gap: 12px;
+    max-height: 420px; overflow-y: auto; margin-bottom: 14px;
+  }
+  .nt-chat-msg {
+    border-radius: 10px; padding: 10px 14px; max-width: 86%;
+    white-space: pre-wrap; overflow-wrap: anywhere; font-size: .92rem;
+  }
+  .nt-chat-msg.me { align-self: flex-end; background: var(--accent-2); color: #fff; }
+  .nt-chat-msg.bot { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--border); }
+  .nt-chat-msg.pending { color: var(--text-dim); font-style: italic; }
+  .nt-chat-src { display: block; margin-top: 6px; font-size: .78rem; color: var(--text-dim); font-style: normal; }
+  .nt-chat-bar { display: flex; gap: 10px; align-items: center; }
+  .nt-chat-bar input { flex: 1; min-width: 0; }
   .nt-raw { margin-top: 8px; }
   .nt-raw summary { cursor: pointer; color: var(--text-dim); font-size: .85rem; }
   .nt-raw .nt-excerpt { max-height: 240px; overflow-y: auto; }
@@ -602,9 +618,46 @@
       </div>
     </div>
 
+    <!-- Q&A across every note. The answer is grounded only in what she
+         actually recorded — see salesnotes/chat.py. -->
+    <div class="card" id="nt-chat" style="margin-bottom:24px;">
+      <div class="nt-pad">
+        <div class="section-title">
+          <h3 data-i18n="nt_chat_title">Chiedi alle note</h3>
+          <button class="btn ghost sm hidden" id="nt-chat-clear" data-i18n="nt_chat_clear">Nuova domanda</button>
+        </div>
+        <p class="muted nt-chat-intro" data-i18n="nt_chat_intro">
+          Fai una domanda su tutte le riunioni registrate — per esempio
+          "a che punto siamo con Halo Reality?" o "quali obiezioni tornano più spesso?".
+          Risponde solo con quello che c'è nelle note.
+        </p>
+        <div class="nt-chat-thread hidden" id="nt-chat-thread"></div>
+        <div class="nt-chat-bar">
+          <input type="text" id="nt-chat-input" data-i18n-ph="nt_chat_ph"
+                 placeholder="A che punto siamo con…?" autocomplete="off" />
+          <button class="btn" id="nt-chat-send" data-i18n="nt_chat_send">Chiedi</button>
+        </div>
+        <div class="nt-err" id="nt-chat-err" style="margin:10px 0 0;"></div>
+      </div>
+    </div>
+
     <div class="section-title">
       <h3 data-i18n="nt_saved_title">Note salvate</h3>
-      <span class="muted" id="nt-list-hint"></span>
+      <!-- Filtering is client-side: loadNotes() already holds every note the
+           list can show, so narrowing it costs no round trip. -->
+      <div class="filters">
+        <span class="muted" id="nt-list-hint"></span>
+        <input type="search" id="nt-search" data-i18n-ph="nt_search_ph"
+               placeholder="Cerca titolo, cliente, testo…" />
+        <select id="nt-outcome-filter">
+          <option value="" data-i18n="filt_all">Tutti</option>
+          <option value="positive" data-i18n="outcome_positive">Positivo</option>
+          <option value="neutral" data-i18n="outcome_neutral">Neutro</option>
+          <option value="negative" data-i18n="outcome_negative">Negativo</option>
+          <option value="none" data-i18n="nt_filt_no_outcome">Esito: assente</option>
+          <option value="draft" data-i18n="nt_filt_draft">Solo bozze</option>
+        </select>
+      </div>
     </div>
     <div class="card">
       <table>
@@ -834,6 +887,19 @@ const STRINGS = {
     nt_delete: "Elimina",
     nt_saved_title: "Note salvate",
 
+    nt_chat_title: "Chiedi alle note",
+    nt_chat_intro: "Fai una domanda su tutte le riunioni registrate — per esempio "
+      + "\"a che punto siamo con Halo Reality?\" o \"quali obiezioni tornano più "
+      + "spesso?\". Risponde solo con quello che c'è nelle note.",
+    nt_chat_ph: "A che punto siamo con…?",
+    nt_chat_send: "Chiedi",
+    nt_chat_clear: "Nuova domanda",
+    nt_chat_thinking: "Sto leggendo le note…",
+    nt_chat_grounded: "su {n} note",
+    nt_chat_truncated: "(solo le più recenti)",
+    nt_chat_no_notes: "Non c'è ancora nessuna nota da leggere.",
+    nt_chat_failed: "Non sono riuscita a rispondere: {msg}",
+
     outcome_positive: "Positivo",
     outcome_neutral: "Neutro",
     outcome_negative: "Negativo",
@@ -846,6 +912,11 @@ const STRINGS = {
     nt_status_quiet: "Connessa, ma non sento nulla — controlla il microfono",
 
     nt_none: "Nessuna nota ancora.",
+    nt_none_filtered: "Nessuna nota con questo filtro.",
+    nt_search_ph: "Cerca titolo, cliente, testo…",
+    nt_filt_no_outcome: "Esito: assente",
+    nt_filt_draft: "Solo bozze",
+    nt_count_filtered: "{n} di {total}",
     nt_count: "{n} note",
     nt_count_one: "1 nota",
     nt_count_few: "{n} note",
@@ -1024,6 +1095,19 @@ const STRINGS = {
     nt_delete: "Vymazať",
     nt_saved_title: "Uložené poznámky",
 
+    nt_chat_title: "Opýtajte sa poznámok",
+    nt_chat_intro: "Položte otázku o všetkých zaznamenaných stretnutiach — napríklad "
+      + "\"ako sme na tom s Halo Reality?\" alebo \"ktoré námietky sa opakujú "
+      + "najčastejšie?\". Odpovedá len tým, čo je v poznámkach.",
+    nt_chat_ph: "Ako sme na tom s…?",
+    nt_chat_send: "Opýtať sa",
+    nt_chat_clear: "Nová otázka",
+    nt_chat_thinking: "Čítam poznámky…",
+    nt_chat_grounded: "z {n} poznámok",
+    nt_chat_truncated: "(len tie najnovšie)",
+    nt_chat_no_notes: "Zatiaľ nie sú žiadne poznámky na čítanie.",
+    nt_chat_failed: "Nepodarilo sa odpovedať: {msg}",
+
     outcome_positive: "Pozitívny",
     outcome_neutral: "Neutrálny",
     outcome_negative: "Negatívny",
@@ -1036,6 +1120,11 @@ const STRINGS = {
     nt_status_quiet: "Pripojené, ale nič nepočuť — skontrolujte mikrofón",
 
     nt_none: "Zatiaľ žiadne poznámky.",
+    nt_none_filtered: "Žiadne poznámky pre tento filter.",
+    nt_search_ph: "Hľadať názov, klienta, text…",
+    nt_filt_no_outcome: "Výsledok: chýba",
+    nt_filt_draft: "Len koncepty",
+    nt_count_filtered: "{n} z {total}",
     nt_count: "{n} poznámok",
     nt_count_one: "1 poznámka",
     nt_count_few: "{n} poznámky",
@@ -1641,6 +1730,13 @@ async function saveExclusions() {
   const deleteBtn = $("nt-delete-btn");
   const listBody = $("nt-list-body");
   const listHint = $("nt-list-hint");
+  const searchBox = $("nt-search");
+  const outcomeFilter = $("nt-outcome-filter");
+  const chatThread = $("nt-chat-thread");
+  const chatInput = $("nt-chat-input");
+  const chatSend = $("nt-chat-send");
+  const chatClear = $("nt-chat-clear");
+  const chatErr = $("nt-chat-err");
 
   const LIST_FIELDS = ["went_well", "went_wrong", "objections", "next_steps"];
 
@@ -2267,37 +2363,157 @@ async function saveExclusions() {
   });
 
   // ── saved notes ────────────────────────────────────────
+  // Every note the list can show is held here, so the filters below are pure
+  // client-side narrowing — no round trip, and no flicker while typing.
+  let allNotes = [];
+
   async function loadNotes() {
     const s = T();
     try {
       const data = await api("/notes?limit=200");
-      const notes = data.notes || [];
-      if (!notes.length) {
-        listBody.innerHTML = `<tr><td class="empty" colspan="6">${esc(s.nt_none)}</td></tr>`;
-        listHint.textContent = "";
-        return;
-      }
-      listHint.textContent = pluralize("nt_count", notes.length);
-      listBody.innerHTML = notes.map((n) => {
-        const outcome = n.outcome
-          ? `<span class="badge b-${n.outcome}">${esc(s.outcomes[n.outcome] || n.outcome)}</span>`
-          : '<span class="muted">—</span>';
-        const draft = n.status !== "saved"
-          ? ` <span class="badge b-pending">${esc(s.nt_draft)}</span>` : "";
-        return `
-        <tr class="clickable" data-note="${esc(n.id)}">
-          <td class="muted">${fmtDate(n.created_at)}</td>
-          <td><strong>${esc(n.title) || esc(s.nt_untitled)}</strong>${draft}</td>
-          <td>${esc(n.customer) || '<span class="muted">—</span>'}</td>
-          <td>${outcome}</td>
-          <td>${n.objections.length || '<span class="muted">—</span>'}</td>
-          <td><button class="btn ghost sm" data-note="${esc(n.id)}">${esc(s.nt_open)}</button></td>
-        </tr>`;
-      }).join("");
+      allNotes = data.notes || [];
+      renderNotes();
     } catch (e) {
+      allNotes = [];
+      listHint.textContent = "";
       listBody.innerHTML = `<tr><td class="empty" colspan="6">${esc(fmt(s.error_prefix, { msg: e.message }))}</td></tr>`;
     }
   }
+
+  // A note matches the search box if the words appear anywhere it carries
+  // text: its own fields, the four lists, and the raw transcript — the phrase
+  // she remembers from a meeting is as often something the customer said as
+  // it is the title she gave it.
+  function haystack(n) {
+    return [
+      n.title, n.customer, n.summary, n.transcript,
+      ...LIST_FIELDS.map((f) => (n[f] || []).join(" ")),
+    ].filter(Boolean).join(" ").toLowerCase();
+  }
+
+  function filteredNotes() {
+    const terms = searchBox.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const outcome = outcomeFilter.value;
+    return allNotes.filter((n) => {
+      if (outcome === "draft") { if (n.status === "saved") return false; }
+      else if (outcome === "none") { if (n.outcome) return false; }
+      else if (outcome && n.outcome !== outcome) return false;
+      if (!terms.length) return true;
+      const text = haystack(n);
+      return terms.every((t) => text.includes(t));
+    });
+  }
+
+  function renderNotes() {
+    const s = T();
+    const filtering = !!(searchBox.value.trim() || outcomeFilter.value);
+    if (!allNotes.length) {
+      listBody.innerHTML = `<tr><td class="empty" colspan="6">${esc(s.nt_none)}</td></tr>`;
+      listHint.textContent = "";
+      return;
+    }
+    const notes = filteredNotes();
+    if (!notes.length) {
+      listBody.innerHTML = `<tr><td class="empty" colspan="6">${esc(s.nt_none_filtered)}</td></tr>`;
+      listHint.textContent = pluralize("nt_count", 0);
+      return;
+    }
+    listHint.textContent = filtering
+      ? fmt(s.nt_count_filtered, { n: notes.length, total: allNotes.length })
+      : pluralize("nt_count", notes.length);
+    listBody.innerHTML = notes.map((n) => {
+      const outcome = n.outcome
+        ? `<span class="badge b-${n.outcome}">${esc(s.outcomes[n.outcome] || n.outcome)}</span>`
+        : '<span class="muted">—</span>';
+      const draft = n.status !== "saved"
+        ? ` <span class="badge b-pending">${esc(s.nt_draft)}</span>` : "";
+      return `
+      <tr class="clickable" data-note="${esc(n.id)}">
+        <td class="muted">${fmtDate(n.created_at)}</td>
+        <td><strong>${esc(n.title) || esc(s.nt_untitled)}</strong>${draft}</td>
+        <td>${esc(n.customer) || '<span class="muted">—</span>'}</td>
+        <td>${outcome}</td>
+        <td>${n.objections.length || '<span class="muted">—</span>'}</td>
+        <td><button class="btn ghost sm" data-note="${esc(n.id)}">${esc(s.nt_open)}</button></td>
+      </tr>`;
+    }).join("");
+  }
+
+  searchBox.addEventListener("input", renderNotes);
+  outcomeFilter.addEventListener("change", renderNotes);
+
+  // ── asking the notes ───────────────────────────────────
+  // The thread lives in the page only: a question is a lookup, not a record,
+  // and the server keeps nothing about it. It is sent back each turn so
+  // follow-ups ("e prima?") have something to refer to.
+  let chatHistory = [];
+  let chatBusy = false;
+
+  function chatBubble(role, text, extra) {
+    const div = document.createElement("div");
+    div.className = "nt-chat-msg " + (role === "user" ? "me" : "bot") + (extra || "");
+    div.textContent = text;
+    chatThread.appendChild(div);
+    chatThread.classList.remove("hidden");
+    chatClear.classList.remove("hidden");
+    chatThread.scrollTop = chatThread.scrollHeight;
+    return div;
+  }
+
+  async function askNotes() {
+    const question = chatInput.value.trim();
+    if (!question || chatBusy) return;
+    const s = T();
+    chatErr.textContent = "";
+    chatBubble("user", question);
+    chatInput.value = "";
+    const pending = chatBubble("assistant", s.nt_chat_thinking, " pending");
+    chatBusy = true;
+    chatSend.disabled = true;
+    try {
+      const data = await api("/notes/chat", {
+        method: "POST",
+        body: JSON.stringify({ question, history: chatHistory, language: LOCALE }),
+      });
+      pending.classList.remove("pending");
+      if (data.empty) {
+        pending.textContent = s.nt_chat_no_notes;
+        return;                       // nothing was read, so nothing to remember
+      }
+      pending.textContent = data.answer;
+      const src = document.createElement("span");
+      src.className = "nt-chat-src";
+      src.textContent = fmt(s.nt_chat_grounded, { n: data.notes_used })
+        + (data.truncated ? " " + s.nt_chat_truncated : "");
+      pending.appendChild(src);
+      chatHistory.push({ role: "user", content: question });
+      chatHistory.push({ role: "assistant", content: data.answer });
+    } catch (e) {
+      // The failed exchange is dropped rather than kept: a thread that
+      // remembers a question it never answered only confuses the next turn.
+      pending.remove();
+      chatErr.textContent = fmt(s.nt_chat_failed, { msg: e.message });
+    } finally {
+      chatBusy = false;
+      chatSend.disabled = false;
+      chatThread.scrollTop = chatThread.scrollHeight;
+      chatInput.focus();
+    }
+  }
+
+  chatSend.addEventListener("click", askNotes);
+  chatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); askNotes(); }
+  });
+  chatClear.addEventListener("click", () => {
+    if (chatBusy) return;
+    chatHistory = [];
+    chatThread.innerHTML = "";
+    chatThread.classList.add("hidden");
+    chatClear.classList.add("hidden");
+    chatErr.textContent = "";
+    chatInput.focus();
+  });
 
   listBody.addEventListener("click", async (e) => {
     const row = e.target.closest("[data-note]");
