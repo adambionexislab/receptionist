@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -319,6 +319,25 @@ async def admin_tenants():
     for tenant in tenants:
         tenant["listing_count"] = counts.get(tenant["id"], 0)
     return tenants
+
+
+@app.get("/admin/live-recording/{session_id}", dependencies=[Depends(_require_admin)])
+async def admin_live_recording(session_id: str):
+    """Download a GPT-Live call's stored audio (see LIVE_STORE_SESSIONS):
+    stereo WAV, caller left, Apollonia right. session_id is the live_… id from
+    the call's log lines."""
+    from call import live
+
+    if not session_id.startswith("live_"):
+        raise HTTPException(status_code=400, detail="Expected a live_… session id")
+    resp = await live.download_recording(session_id)
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text[:500])
+    return Response(
+        content=resp.content,
+        media_type="audio/wav",
+        headers={"Content-Disposition": f'attachment; filename="{session_id}.wav"'},
+    )
 
 
 @app.get("/success")

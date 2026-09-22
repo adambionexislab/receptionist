@@ -748,3 +748,25 @@ def test_no_retry_once_she_has_greeted_or_the_caller_spoke():
 
     run(go2())
     assert call.watchdog_action(clock.t + 4) is None
+
+
+# ── Clipped speech diagnostics ───────────────────────────────────────────────
+
+
+def test_calls_are_stored_only_when_switched_on(monkeypatch):
+    assert "store" not in live.build_session_config(_ctx())
+    monkeypatch.setattr(live.settings, "LIVE_STORE_SESSIONS", True)
+    assert live.build_session_config(_ctx())["store"] is True
+
+
+def test_transcript_line_shows_its_span_when_known(caplog):
+    call, _, _, _ = _live_call()
+    caplog.set_level("INFO", logger="call.live")
+
+    async def go():
+        await call.handle({"type": "session.output_transcript.delta", "delta": "Byt ", "start_ms": 2800, "end_ms": 3100})
+        await call.handle({"type": "session.output_transcript.delta", "delta": "je voľný.", "start_ms": 3100, "end_ms": 4600})
+        call.transcript.flush()
+
+    run(go())
+    assert "Apollonia [t=2.8s–4.6s]: Byt je voľný." in [r.getMessage() for r in caplog.records]

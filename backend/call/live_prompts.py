@@ -32,6 +32,7 @@ What was deliberately NOT carried over from the Realtime prompt:
 """
 
 from call.locales import (
+    SK_DEMO_EMAIL_STEPS,
     _SK_DATETIME_SECTION,
     _SK_OPENING_SECTION,
 )
@@ -363,6 +364,17 @@ _SK_BACKEND_NUMBER_UNKNOWN = (
     "ho do poľa 'phone' pri record_caller_info alebo leave_message.\n"
 )
 
+# Demo tenants only, the backend's half of the e-mail trial (the voice half is
+# SK_DEMO_EMAIL_STEPS, shared with the Realtime prompt).
+_SK_BACKEND_DEMO_EMAIL = (
+    "\n\n# E-mailová adresa volajúceho\n"
+    "Asistentka sa volajúceho pýta na e-mail: najprv časť pred zavináčom, potom\n"
+    "časť za ním, a celú adresu mu zopakuje na potvrdenie. Adresu, ktorú\n"
+    "volajúci potvrdil, vyplňte do poľa 'email' pri record_caller_info alebo\n"
+    "leave_message. Skladajte ju z asistentkinho zopakovania, nie z prepisu\n"
+    "volajúceho. Ak volajúci adresu nepotvrdil, pole vynechajte.\n"
+)
+
 SK_LIVE = {
     "voice_first_line": _SK_VOICE_FIRST_LINE,
     "voice_body": _SK_VOICE_BODY,
@@ -374,6 +386,8 @@ SK_LIVE = {
     "greeting_retry_instruction": _SK_GREETING_RETRY_INSTRUCTION,
     "backend_prompt": _SK_BACKEND_PROMPT,
     "backend_number_unknown": _SK_BACKEND_NUMBER_UNKNOWN,
+    "voice_demo_email": SK_DEMO_EMAIL_STEPS,
+    "backend_demo_email": _SK_BACKEND_DEMO_EMAIL,
     # The date section serves both models: the voice resolves "zajtra" when it
     # talks, the backend when it writes the date into a tool field.
     "datetime_section": _SK_DATETIME_SECTION,

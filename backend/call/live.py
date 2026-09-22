@@ -128,6 +128,8 @@ def build_voice_instructions(
     )
     if not ctx.caller_number_known:
         text += live["voice_ask_for_number"]
+    if call_router._collects_email(ctx.tenant):
+        text += live["voice_demo_email"]
     return text
 
 
@@ -142,6 +144,8 @@ def build_backend_instructions(
     ].format(now=call_router._now_line(ctx.content, now))
     if not ctx.caller_number_known:
         text += live["backend_number_unknown"]
+    if call_router._collects_email(ctx.tenant):
+        text += live["backend_demo_email"]
     return text
 
 
@@ -171,6 +175,8 @@ def build_session_config(
     never sees them, so it cannot read them out."""
     tools = copy.deepcopy(ctx.content.get("tools") or call_router._IT_TOOLS)
     call_router._inject_branch_enum(tools, ctx.branch_names)
+    if call_router._collects_email(ctx.tenant):
+        call_router._inject_email_field(tools, ctx.content)
     responses: dict[str, Any] = {
         "model": settings.LIVE_BACKEND_MODEL,
         "instructions": build_backend_instructions(ctx, now),
@@ -183,13 +189,32 @@ def build_session_config(
     }
     if settings.LIVE_BACKEND_SERVICE_TIER:
         responses["service_tier"] = settings.LIVE_BACKEND_SERVICE_TIER
-    return {
+    config: dict[str, Any] = {
         "type": "live",
         "model": settings.LIVE_MODEL,
         "instructions": build_voice_instructions(ctx, now),
         "audio": {"output": {"voice": settings.LIVE_VOICE}},
         "delegation": {"type": "responses", "responses": responses},
     }
+    if settings.LIVE_STORE_SESSIONS:
+        config["store"] = True
+    return config
+
+
+async def download_recording(session_id: str) -> httpx.Response:
+    """The stored recording of a finished call: stereo WAV, the caller on the
+    left channel and Apollonia on the right. Only exists for calls accepted
+    with LIVE_STORE_SESSIONS on, and only once the session has finalized.
+
+    This is the one view of a call that is not a transcript. The transcript is
+    the text the model GENERATED; the right channel is the audio it actually
+    produced. If her sentence is whole here but the caller heard it clipped,
+    the audio was lost between OpenAI and the phone, not by the model."""
+    async with httpx.AsyncClient(timeout=60) as client:
+        return await client.get(
+            f"{_LIVE_BASE}/{session_id}/content",
+            headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+        )
 
 
 # ── Webhook ──────────────────────────────────────────────────────────────────
@@ -312,15 +337,22 @@ class _TranscriptLog:
         self._parts: list[str] = []
         self._last = 0.0
         self._start_ms: Optional[int] = None
+        self._end_ms: Optional[int] = None
 
     def add(
-        self, speaker: str, delta: str, now: float, start_ms: Optional[int] = None
+        self,
+        speaker: str,
+        delta: str,
+        now: float,
+        start_ms: Optional[int] = None,
+        end_ms: Optional[int] = None,
     ) -> None:
         if speaker != self._speaker:
             self.flush()
             self._speaker = speaker
         if not self._parts:
             self._start_ms = start_ms
+        self._end_ms = end_ms
         self._parts.append(delta)
         self._last = now
 
@@ -334,13 +366,17 @@ class _TranscriptLog:
             # The line is logged when the turn ENDS, so the log timestamp says
             # nothing about when it started. start_ms is the session timeline
             # (ms since the call was set up) — the only way to see dead air,
-            # e.g. how long the caller waited for the greeting.
-            logger.info(
-                "%s [%s]: %s", self._LABELS[self._speaker], _fmt_ms(self._start_ms), text
-            )
+            # e.g. how long the caller waited for the greeting. The end is there
+            # to line a sentence up against a stored recording (see
+            # download_recording) when what the caller heard was shorter.
+            span = _fmt_ms(self._start_ms)
+            if isinstance(self._end_ms, (int, float)):
+                span += f"–{self._end_ms / 1000:.1f}s"
+            logger.info("%s [%s]: %s", self._LABELS[self._speaker], span, text)
         self._parts = []
         self._speaker = None
         self._start_ms = None
+        self._end_ms = None
 
 
 def _fmt_ms(ms: Any) -> str:
@@ -427,12 +463,16 @@ class LiveCall:
         if etype == "session.input_transcript.delta":
             self.last_activity = now
             self.caller_spoke = True
-            self.transcript.add("caller", msg.get("delta") or "", now, msg.get("start_ms"))
+            self.transcript.add(
+                "caller", msg.get("delta") or "", now, msg.get("start_ms"), msg.get("end_ms")
+            )
 
         elif etype == "session.output_transcript.delta":
             self.last_activity = now
             self.last_output_at = now
-            self.transcript.add("agent", msg.get("delta") or "", now, msg.get("start_ms"))
+            self.transcript.add(
+                "agent", msg.get("delta") or "", now, msg.get("start_ms"), msg.get("end_ms")
+            )
 
         elif etype == "session.delegation.created":
             d = msg.get("delegation") or {}

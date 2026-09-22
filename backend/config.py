@@ -131,6 +131,13 @@ class Settings(BaseSettings):
     # auto | default | flex | priority. Empty = omit (the project default).
     # "priority" is the lever for tool-call latency if the project has it.
     LIVE_BACKEND_SERVICE_TIER: str = ""
+    # Have OpenAI store each GPT-Live call's audio (session `store: true`), so a
+    # call can be downloaded as stereo WAV — caller left, Apollonia right — from
+    # GET /admin/live-recording/{session_id}. A DIAGNOSTIC for the demo: it is
+    # how to tell audio the model cut short from audio the phone line lost.
+    # Off by default — these are real callers' voices, kept 30 days by OpenAI,
+    # and it needs storage enabled on the OpenAI project.
+    LIVE_STORE_SESSIONS: bool = False
 
     # ── Branch routing (which office a seller call belongs to) ───────────────
     # How far an office can be from a property and still be treated as covering

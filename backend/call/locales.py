@@ -424,6 +424,45 @@ _SK_ASK_FOR_NUMBER = (
     "prirodzene; ak ho volajúci nechce nechať, pokračujte aj tak bez naliehania.\n"
 )
 
+# Demo tenants only (see router._collects_email): a trial of whether she can
+# take down an e-mail address by voice. Kept out of the body so production
+# tenants never ask for one. The steps alone are also the GPT-Live voice
+# model's version (call/live_prompts.py), which has no tools to fill in.
+SK_DEMO_EMAIL_STEPS = (
+    "\n\n# E-mailová adresa volajúceho — DÔLEŽITÉ\n"
+    "Hneď po tom, ako vám volajúci povie svoje meno, sa ho ako ĎALŠIU otázku\n"
+    "spýtajte na e-mailovú adresu — skôr ako na čokoľvek iné. Platí to pri\n"
+    "každom type hovoru, v ktorom sa pýtate na meno.\n"
+    "1. Najprv sa spýtajte IBA na časť pred zavináčom a poproste volajúceho,\n"
+    "   nech ju povie po písmenách. Počkajte na odpoveď.\n"
+    "2. Potom sa spýtajte na časť za zavináčom (napríklad gmail.com alebo\n"
+    "   azet.sk). Počkajte na odpoveď.\n"
+    "3. Celú adresu volajúcemu zopakujte a spýtajte sa, či je správna. Časť\n"
+    "   pred zavináčom pri tom hláskujte po písmenách, znaky vyslovte slovom\n"
+    "   (bodka, pomlčka, podčiarkovník, zavináč) a časť za zavináčom povedzte\n"
+    "   normálne.\n"
+    "4. Ak volajúci potvrdí, že je správna, pokračujte ďalšou otázkou. Ak nie,\n"
+    "   spýtajte sa, ktorá časť je zle, opýtajte sa znova iba na ňu a potom\n"
+    "   zopakujte celú adresu ešte raz.\n"
+    "5. Nikdy si žiadne písmeno nedomýšľajte: ak ste niečomu nerozumeli,\n"
+    "   poproste volajúceho, nech zopakuje iba to miesto.\n"
+    "6. Ak volajúci e-mail nemá alebo ho nechce povedať, nenaliehajte a\n"
+    "   pokračujte.\n"
+)
+
+_SK_DEMO_EMAIL_SECTION = SK_DEMO_EMAIL_STEPS + (
+    "Potvrdenú adresu odovzdajte v poli 'email' pri record_caller_info alebo\n"
+    "leave_message.\n"
+)
+
+_SK_EMAIL_FIELD_DESCRIPTION = (
+    "E-mailová adresa volajúceho, ktorú ste mu zopakovali a on ju potvrdil. "
+    "Zapíšte ju malými písmenami, bez medzier a bez diakritiky, so znakmi "
+    "namiesto slov ('bodka' → '.', 'zavináč' → '@', 'pomlčka' → '-', "
+    "'podčiarkovník' → '_'), napríklad 'jan.novak@azet.sk'. Ak ju volajúci "
+    "nepovedal, pole vynechajte."
+)
+
 
 # Section headers of the lead email. Named constants because the summary
 # instruction quotes them back to the model: if a header drifts from the text
@@ -777,8 +816,11 @@ SK = {
     "now_template": "Dnes je {weekday} {date}, aktuálny čas je {time}.",
     "datetime_section": _SK_DATETIME_SECTION,
     # ── lead-email content ────────────────────────────────────────────────────
+    "demo_email_section": _SK_DEMO_EMAIL_SECTION,
+    "email_field_description": _SK_EMAIL_FIELD_DESCRIPTION,
     "caller_info_labels": {
         "name": "Meno",
+        "email": "E-mail",
         "employment_status": "Pracovná situácia",
         "monthly_income": "Čistý mesačný príjem",
         "household_size": "Počet osôb v domácnosti",

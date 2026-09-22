@@ -84,6 +84,7 @@ def _same_number(a: str | None, b: str | None) -> bool:
 
 _CALLER_INFO_LABELS: dict[str, str] = {
     "name": "Nome",
+    "email": "Email",
     "employment_status": "Situazione lavorativa",
     "monthly_income": "Reddito mensile netto",
     "household_size": "Persone nel nucleo familiare",
@@ -530,6 +531,41 @@ _ASK_FOR_NUMBER_INSTRUCTION = (
     "vuole lasciarlo, prosegui comunque senza insistere.\n"
 )
 
+# Demo tenants only (see _collects_email): a trial of whether she can take
+# down an e-mail address by voice. Kept out of the body so production tenants
+# never ask for one.
+_DEMO_EMAIL_SECTION = (
+    "\n\n# Indirizzo email del chiamante — IMPORTANTE\n"
+    "Subito dopo che il chiamante ti ha detto il suo nome, chiedigli come\n"
+    "domanda SUCCESSIVA il suo indirizzo email, prima di qualsiasi altra\n"
+    "cosa. Vale per ogni tipo di chiamata in cui chiedi il nome.\n"
+    "1. Chiedi prima SOLO la parte prima della chiocciola e invita il\n"
+    "   chiamante a dirla lettera per lettera. Aspetta la risposta.\n"
+    "2. Poi chiedi la parte dopo la chiocciola (per esempio gmail.com o\n"
+    "   libero.it). Aspetta la risposta.\n"
+    "3. Ripeti al chiamante l'indirizzo completo e chiedigli se è corretto.\n"
+    "   La parte prima della chiocciola compitala lettera per lettera, i\n"
+    "   simboli dilli a parole (punto, trattino, trattino basso, chiocciola)\n"
+    "   e la parte dopo la chiocciola dilla normalmente.\n"
+    "4. Se il chiamante conferma che è corretto, passa alla domanda\n"
+    "   successiva. Se no, chiedigli quale parte è sbagliata, richiedi solo\n"
+    "   quella e poi ripeti di nuovo l'indirizzo completo.\n"
+    "5. Non indovinare mai una lettera: se qualcosa non ti è chiaro, chiedi al\n"
+    "   chiamante di ripetere solo quel punto.\n"
+    "6. Se il chiamante non ha un'email o non vuole darla, non insistere e\n"
+    "   prosegui.\n"
+    "Passa l'indirizzo confermato nel campo 'email' di record_caller_info o\n"
+    "di leave_message.\n"
+)
+
+_EMAIL_FIELD_DESCRIPTION = (
+    "Indirizzo email del chiamante, ripetuto al chiamante e da lui "
+    "confermato. Scrivilo in minuscolo, senza spazi, con i simboli al posto "
+    "delle parole ('punto' → '.', 'chiocciola' → '@', 'trattino' → '-', "
+    "'trattino basso' → '_'), per esempio 'mario.rossi@gmail.com'. Se il "
+    "chiamante non l'ha dato, ometti il campo."
+)
+
 
 # Italian baseline content (the original single-tenant strings, unchanged) keyed
 # alongside the Slovak content from call/locales.py. Both dicts share the same
@@ -559,6 +595,8 @@ _IT_CONTENT: dict[str, Any] = {
     ),
     "now_template": "Oggi è {weekday} {date} e sono le {time}.",
     "datetime_section": _DATETIME_SECTION,
+    "demo_email_section": _DEMO_EMAIL_SECTION,
+    "email_field_description": _EMAIL_FIELD_DESCRIPTION,
     "caller_info_labels": _CALLER_INFO_LABELS,
     "summary_instruction": (
         "Sei l'assistente di un'agenzia immobiliare. "
@@ -1173,8 +1211,40 @@ def _inject_branch_enum(tools: list[dict[str, Any]], branch_names: list[str]) ->
         }
 
 
+def _collects_email(tenant: Optional[dict[str, Any]]) -> bool:
+    """Whether she asks this call's caller for an e-mail address.
+
+    Demo tenants only, for now: it is a trial of how well she takes an address
+    down by voice before any client relies on it. The demos are recognised by
+    the numbers they are created on at startup (main.py); a missing tenant row
+    is the env-var demo fallback."""
+    if tenant is None:
+        return True
+    demo_numbers = (
+        settings.TWILIO_PHONE_NUMBER,
+        settings.TWILIO_PHONE_NUMBER_SK,
+        settings.LIVE_DEMO_NUMBER_SK,
+    )
+    return any(_same_number(tenant.get("twilio_number"), n) for n in demo_numbers)
+
+
+def _inject_email_field(tools: list[dict[str, Any]], content: dict[str, Any]) -> None:
+    """Give the two lead-recording tools an 'email' field, in place. Added per
+    call rather than written into the schemas, so a tenant that does not collect
+    e-mail never sees the field and cannot start asking for it."""
+    for tool in tools:
+        if tool.get("name") in ("record_caller_info", "leave_message"):
+            tool["parameters"]["properties"]["email"] = {
+                "type": "string",
+                "description": content["email_field_description"],
+            }
+
+
 def _build_accept_config(
-    instructions: str, content: dict[str, Any], branch_names: Optional[list[str]] = None
+    instructions: str,
+    content: dict[str, Any],
+    branch_names: Optional[list[str]] = None,
+    collect_email: bool = False,
 ) -> dict[str, Any]:
     """Session config for POST /calls/{id}/accept. Reuses the phone agent's
     tuned VAD, voice and reasoning, but drops the PCM format fields: over SIP,
@@ -1192,6 +1262,8 @@ def _build_accept_config(
     # That copy is per call, which is what lets one tenant's office list be
     # injected without ever mutating the module-level tool definitions.
     _inject_branch_enum(cfg["tools"], branch_names or [])
+    if collect_email:
+        _inject_email_field(cfg["tools"], content)
     cfg["audio"]["input"].pop("format", None)
     cfg["audio"]["output"].pop("format", None)
     return cfg
@@ -1722,6 +1794,9 @@ async def _handle_realtime_incoming(data: dict[str, Any]) -> Response:
         instructions = _build_system_prompt(content, None, None)
     if not ctx.caller_number_known:
         instructions = instructions + content["ask_for_number"]
+    collect_email = _collects_email(ctx.tenant)
+    if collect_email:
+        instructions = instructions + content["demo_email_section"]
 
     session = _new_call_session(call_id, ctx)
 
@@ -1730,7 +1805,9 @@ async def _handle_realtime_incoming(data: dict[str, Any]) -> Response:
     task = asyncio.create_task(
         _run_call(
             call_id,
-            _build_accept_config(instructions, content, ctx.branch_names),
+            _build_accept_config(
+                instructions, content, ctx.branch_names, collect_email
+            ),
             session,
             content,
             ctx.tenant_store,
@@ -2228,6 +2305,8 @@ def _format_lead_body(
             urgency_disp = content["urgency_display"].get(urgency_tok, urgency_tok)
             lines += ["", content["email_section_message"]]
             lines.append(f"{content['email_name_label']}: {msg_data.get('caller_name', content['unknown_caller'])}")
+            if msg_data.get("email"):
+                lines.append(f"{content['caller_info_labels']['email']}: {msg_data['email']}")
             lines.append(f"{content['email_urgency_label']}: {urgency_disp}")
             lines.append(f"{content['email_message_label']}: {msg_data.get('message', '')}")
 
