@@ -59,6 +59,10 @@ _ADDED_COLUMNS = {
     # until the team records the real Stripe billing date; the period falls
     # back to created_at, which is when provisioning happened.
     "billing_anchor": "TEXT",
+    # Which voice model answers this tenant's calls: 'realtime' (the
+    # gpt-realtime session every tenant has always had) or 'live' (GPT-Live,
+    # opt-in, see call/live.py). Read per call, so switching needs no deploy.
+    "voice_engine": "TEXT NOT NULL DEFAULT 'realtime'",
 }
 
 _COLUMNS = {
@@ -76,6 +80,7 @@ _COLUMNS = {
     "locale",
     "access_code",
     "billing_anchor",
+    "voice_engine",
     "active",
 }
 
@@ -203,6 +208,25 @@ def create(**fields: Any) -> dict:
         conn.commit()
     logger.info("Tenant created: %s (%s)", tenant["agency_name"], tenant["id"])
     return tenant
+
+
+def update_fields(tenant_id: str, **fields: Any) -> None:
+    """Set some columns on one tenant. Unknown fields are rejected, and the id
+    is not a field that can be changed."""
+    unknown = set(fields) - (_COLUMNS - {"id"})
+    if unknown:
+        raise ValueError(f"Unknown tenant fields: {unknown}")
+    if not fields:
+        return
+    assignments = ", ".join(f"{col} = ?" for col in fields)
+    conn = _get_conn()
+    with _lock:
+        conn.execute(
+            f"UPDATE tenants SET {assignments} WHERE id = ?",
+            (*fields.values(), tenant_id),
+        )
+        conn.commit()
+    logger.info("Tenant %s updated: %s", tenant_id, fields)
 
 
 def update_twilio_number(tenant_id: str, number: str) -> None:

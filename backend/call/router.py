@@ -8,6 +8,7 @@ import logging
 import re
 import time
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from html import escape
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
@@ -1467,48 +1468,59 @@ async def _hangup_call(call_id: str) -> bool:
     return False
 
 
-@router.post("/incoming")
-async def incoming_call(request: Request) -> Response:
-    """OpenAI's `realtime.call.incoming` webhook: fires when a SIP call reaches
-    our project's connector. We verify the signature, route to the tenant by the
-    dialed number, accept the call with its configured session, and hand off to
-    a detached control task. Returns 200 so OpenAI connects the accepted call."""
-    raw = await request.body()
+# Webhook deliveries are retried, and once GPT-Live SIP is enabled on the
+# project every call fires TWO webhooks — realtime.call.incoming and
+# live.transport.incoming — for the same pending call. OpenAI lets only the
+# first accept/reject through, but a losing duplicate would still have started
+# a second control task for the call. On the live path that task answers tool
+# calls, so it would run every tool twice. Claims expire so the dict stays small.
+_CLAIM_TTL_SECONDS = 600.0
+_claimed_calls: dict[str, float] = {}
 
-    secret = settings.OPENAI_WEBHOOK_SECRET
-    if secret:
-        if not _verify_openai_webhook(secret, request.headers, raw):
-            logger.warning("Incoming call webhook: signature verification failed")
-            raise HTTPException(status_code=401, detail="Invalid signature")
-    else:
-        logger.warning(
-            "OPENAI_WEBHOOK_SECRET not set — accepting call webhook UNVERIFIED"
-        )
 
-    try:
-        payload = json.loads(raw)
-    except Exception:
-        logger.warning("Incoming call webhook: body was not JSON")
-        return Response(status_code=400)
+def _claim_call(call_id: str) -> bool:
+    """True the first time a call id is seen, False on a redelivery."""
+    now = time.monotonic()
+    for cid, seen in list(_claimed_calls.items()):
+        if now - seen > _CLAIM_TTL_SECONDS:
+            del _claimed_calls[cid]
+    if call_id in _claimed_calls:
+        return False
+    _claimed_calls[call_id] = now
+    return True
 
-    if payload.get("type") != "realtime.call.incoming":
-        logger.info("Ignoring webhook type=%s", payload.get("type"))
-        return Response(status_code=200)
 
-    data = payload.get("data") or {}
-    call_id = data.get("call_id")
-    sip_headers = data.get("sip_headers") or []
-    if not call_id:
-        logger.warning("Incoming call webhook: no call_id")
-        return Response(status_code=400)
+@dataclass
+class _CallContext:
+    """Everything about an inbound call that does not depend on which voice
+    engine answers it: who the tenant is, which locale and listings, where the
+    lead goes, and whether we have a number to call the caller back on."""
 
+    tenant: Optional[dict]
+    locale: str
+    content: dict[str, Any]
+    tenant_store: Any
+    lead_email: Optional[str]
+    branch_names: list[str]
+    caller: str
+    caller_number_known: bool
+
+
+def _resolve_call(call_id: str, sip_headers: list[dict[str, Any]]) -> Optional[_CallContext]:
+    """Route an inbound call to its tenant from the SIP headers.
+
+    Returns None when the dialed number belongs to no tenant and is not the
+    env-var demo number. The caller of this decides what that means: the
+    Realtime webhook rejects the call, the live one leaves it alone so the
+    call is never declined twice."""
     caller = _extract_sip_number(_sip_header(sip_headers, "From")) or "sconosciuto"
     dialed = _extract_sip_number(_sip_header(sip_headers, "To"))
-    # When a carrier/Twilio forwards a line to the Apollonia number, the call's
-    # To header carries the originally-dialed number, and the Apollonia (Twilio)
-    # number that identifies the tenant lands in the Diversion header instead —
-    # which is also the SIP analogue of Twilio's ForwardedFrom. So route on
-    # either. Full headers are logged to diagnose per-carrier quirks.
+    # When a carrier forwards a line to the Apollonia number, the call's To
+    # header carries the originally-dialed number, and the Apollonia number that
+    # identifies the tenant lands in the Diversion header instead — which is
+    # also the SIP analogue of Twilio's ForwardedFrom. On DIDWW every call is
+    # like this: To holds the OpenAI project id. So route on either. Full
+    # headers are logged to diagnose per-carrier quirks.
     diversion = _extract_sip_number(_sip_header(sip_headers, "Diversion"))
     logger.info(
         "Inbound SIP call — call_id=%s caller=%s dialed=%s diversion=%s headers=%s",
@@ -1521,23 +1533,15 @@ async def incoming_call(request: Request) -> Response:
         diversion, settings.TWILIO_PHONE_NUMBER
     )
     if tenant is None and not is_demo:
-        # Unknown number and not the env-var demo number: decline the call.
-        logger.warning(
-            "No tenant for dialed=%s / diversion=%s — rejecting", dialed, diversion
-        )
-        await _reject_call(call_id, 404)
-        return Response(status_code=200)
+        logger.warning("No tenant for dialed=%s / diversion=%s", dialed, diversion)
+        return None
 
     locale = (tenant.get("locale") if tenant else None) or "it"
-    content = _content(locale)
     # The agency's offices, read once per call. Only their names reach the
     # model (as a tool enum — see _inject_branch_enum); which office a seller's
     # property belongs to is worked out server-side afterwards.
     branch_names: list[str] = []
     if tenant is not None:
-        instructions = _build_system_prompt(
-            content, tenant["agency_name"], tenant["agent_name"]
-        )
         tenant_store = tenant_stores.get_or_create(tenant["id"])
         lead_email = tenant.get("lead_email") or settings.LEAD_EMAIL
         try:
@@ -1551,37 +1555,49 @@ async def incoming_call(request: Request) -> Response:
             logger.exception("Could not read branches for tenant %s", tenant["id"])
     else:
         # Env-var fallback: demo behaviour, global store, owner's lead email.
-        instructions = _build_system_prompt(content, None, None)
         tenant_store = store
         lead_email = settings.LEAD_EMAIL
 
     # Decide whether we have a usable caller number. When a tenant's carrier
     # clobbers the caller ID on forwarding, From arrives as the tenant's OWN
     # number (real_number) — useless as a callback. Same for a withheld number.
-    # In that case tell Apollonia to ask the caller for one; if she still
-    # doesn't get it, _send_lead_email suppresses the (useless) lead.
+    # In that case she is told to ask the caller for one; if she still doesn't
+    # get it, _send_lead_email suppresses the (useless) lead.
     tenant_real = tenant.get("real_number") if tenant else None
     caller_number_known = (
         caller not in ("", "sconosciuto")
         and not _same_number(caller, tenant_real)
     )
     if not caller_number_known:
-        instructions = instructions + content["ask_for_number"]
         logger.info(
             "Caller number not usable (caller=%s real_number=%s) — "
             "Apollonia will ask the caller for one",
             caller, tenant_real,
         )
 
-    session: dict[str, Any] = {
+    return _CallContext(
+        tenant=tenant,
+        locale=locale,
+        content=_content(locale),
+        tenant_store=tenant_store,
+        lead_email=lead_email,
+        branch_names=branch_names,
+        caller=caller,
+        caller_number_known=caller_number_known,
+    )
+
+
+def _new_call_session(call_id: str, ctx: _CallContext) -> dict[str, Any]:
+    """The per-call state both engines fill in and teardown reads from."""
+    return {
         "call_id": call_id,
         # tenant_id scopes the persisted call/contact rows. None on the pure
         # env-var demo fallback (no tenant row): that path is not persisted.
-        "tenant_id": tenant["id"] if tenant else None,
-        "caller_number": caller,
-        "caller_number_known": caller_number_known,
-        "lead_email": lead_email,
-        "locale": locale,
+        "tenant_id": ctx.tenant["id"] if ctx.tenant else None,
+        "caller_number": ctx.caller,
+        "caller_number_known": ctx.caller_number_known,
+        "lead_email": ctx.lead_email,
+        "locale": ctx.locale,
         "listings_shown": [],
         "interested_listings": [],
         "caller_info": {},
@@ -1605,15 +1621,119 @@ async def incoming_call(request: Request) -> Response:
         "started_at": None,
     }
 
+
+def _uses_live_engine(ctx: _CallContext) -> bool:
+    """Whether GPT-Live answers this call instead of the Realtime model.
+
+    Opt-in per tenant (tenants.voice_engine = 'live'), and only for a locale
+    that has GPT-Live prompts — the Realtime prompt cannot simply be reused,
+    because GPT-Live splits it between a voice model and a tool-calling
+    backend (see call/live.py). A live tenant in a locale without them is
+    answered on Realtime rather than not at all."""
+    tenant = ctx.tenant
+    if not tenant or (tenant.get("voice_engine") or "realtime") != "live":
+        return False
+    from call import live  # live imports this module, so import it at use
+
+    if live.has_content(ctx.locale):
+        return True
+    logger.warning(
+        "Tenant %s is set to GPT-Live but locale %r has no GPT-Live prompts — "
+        "answering on Realtime",
+        tenant["id"], ctx.locale,
+    )
+    return False
+
+
+@router.post("/incoming")
+async def incoming_call(request: Request) -> Response:
+    """OpenAI's call webhooks: fire when a SIP call reaches our project's
+    connector. We verify the signature and hand the call to the engine its
+    tenant uses — `realtime.call.incoming` for the Realtime model,
+    `live.transport.incoming` for GPT-Live. Both fire for every call once
+    GPT-Live SIP is enabled on the project; each handler acts only on its own
+    tenants' calls and leaves the rest alone, so exactly one decides."""
+    raw = await request.body()
+
+    secret = settings.OPENAI_WEBHOOK_SECRET
+    if secret:
+        if not _verify_openai_webhook(secret, request.headers, raw):
+            logger.warning("Incoming call webhook: signature verification failed")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+    else:
+        logger.warning(
+            "OPENAI_WEBHOOK_SECRET not set — accepting call webhook UNVERIFIED"
+        )
+
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        logger.warning("Incoming call webhook: body was not JSON")
+        return Response(status_code=400)
+
+    etype = payload.get("type")
+    data = payload.get("data") or {}
+    if etype == "realtime.call.incoming":
+        return await _handle_realtime_incoming(data)
+    # live.call.incoming is the deprecated name of the same event; a project
+    # subscribed before the rename can still receive it.
+    if etype in ("live.transport.incoming", "live.call.incoming"):
+        from call import live
+
+        return await live.handle_incoming(data)
+    logger.info("Ignoring webhook type=%s", etype)
+    return Response(status_code=200)
+
+
+async def _handle_realtime_incoming(data: dict[str, Any]) -> Response:
+    """Route a `realtime.call.incoming` call, accept it with its configured
+    session, and hand off to a detached control task. Returns 200 so OpenAI
+    connects the accepted call."""
+    call_id = data.get("call_id")
+    if not call_id:
+        logger.warning("Incoming call webhook: no call_id")
+        return Response(status_code=400)
+
+    ctx = _resolve_call(call_id, data.get("sip_headers") or [])
+    if ctx is None:
+        # Unknown number and not the env-var demo number: decline the call.
+        # Only this handler rejects — the live one ignores unknown numbers —
+        # so the call is never declined twice.
+        await _reject_call(call_id, 404)
+        return Response(status_code=200)
+
+    if _uses_live_engine(ctx):
+        # Its live.transport.incoming twin accepts it. Doing nothing here is
+        # the whole contract: an accept or reject from this side would win the
+        # call away from GPT-Live.
+        logger.info("Call %s belongs to a GPT-Live tenant — leaving it to GPT-Live", call_id)
+        return Response(status_code=200)
+
+    if not _claim_call(call_id):
+        logger.info("Duplicate delivery for call %s — already handled", call_id)
+        return Response(status_code=200)
+
+    content = ctx.content
+    if ctx.tenant is not None:
+        instructions = _build_system_prompt(
+            content, ctx.tenant["agency_name"], ctx.tenant["agent_name"]
+        )
+    else:
+        instructions = _build_system_prompt(content, None, None)
+    if not ctx.caller_number_known:
+        instructions = instructions + content["ask_for_number"]
+
+    session = _new_call_session(call_id, ctx)
+
     # Accept + run the call on a detached task so this webhook returns 200
     # promptly; OpenAI keeps the call pending until the task accepts it.
     task = asyncio.create_task(
         _run_call(
             call_id,
-            _build_accept_config(instructions, content, branch_names),
+            _build_accept_config(instructions, content, ctx.branch_names),
             session,
             content,
-            tenant_store,
+            ctx.tenant_store,
         )
     )
     _active_calls.add(task)
@@ -1764,6 +1884,73 @@ async def _resolve_call_branch(session: dict[str, Any], args: dict[str, Any]) ->
         logger.info(
             "Call routed to branch %r from area %r", branch["name"], args.get("area"),
         )
+
+
+async def _execute_tool(
+    name: str,
+    raw_arguments: str | None,
+    session: dict[str, Any],
+    tenant_store: Any,
+    listing_fields: dict[str, str],
+) -> Optional[str]:
+    """Run one of the agent's data tools and return its function_call_output.
+
+    Shared by both voice engines: the Realtime loop (the voice model calls the
+    tool itself) and GPT-Live (a delegated backend model calls it — see
+    call/live.py). Only the event plumbing around a tool call differs between
+    them; what a tool does to the call's session must not, or the lead email
+    would depend on which engine answered.
+
+    end_call is not here: ending a call is engine-specific. Returns None for a
+    name that is not a data tool, so the caller sends nothing back.
+    """
+    try:
+        args = json.loads(raw_arguments or "{}")
+    except json.JSONDecodeError:
+        args = {}
+    if not isinstance(args, dict):
+        args = {}
+
+    if name == "search_listings":
+        results = tenant_store.search(**args)
+        session["listings_shown"].extend(results)
+        logger.info("search_listings(%s) → %d results", args, len(results))
+        return json.dumps(_for_model(results, listing_fields), ensure_ascii=False)
+
+    if name == "get_listing_by_address":
+        results = tenant_store.get_by_address(args.get("address_query", ""))
+        session["listings_shown"].extend(results)
+        logger.info("get_listing_by_address(%s) → %d results", args, len(results))
+        return json.dumps(_for_model(results, listing_fields), ensure_ascii=False)
+
+    if name == "mark_listing_interest":
+        address = args.get("address", "")
+        match = next(
+            (l for l in session["listings_shown"] if l["address"] == address),
+            None,
+        )
+        if match and match not in session["interested_listings"]:
+            session["interested_listings"].append(match)
+        logger.info("Caller interested in: %s (found=%s)", address, bool(match))
+        return json.dumps({"recorded": bool(match)})
+
+    if name == "record_caller_info":
+        session["caller_info"].update({k: v for k, v in args.items() if v})
+        logger.info("Recorded caller info: %s", args)
+        return json.dumps({"recorded": True})
+
+    if name == "leave_message":
+        session["left_message"] = args
+        logger.info("leave_message: %s", args)
+        # Work out which office this belongs to before answering, so the result
+        # is already on the session by the time the lead email is composed at
+        # teardown. Bounded and non-raising by contract (branches/routing.py):
+        # the worst case is no office and the lead goes to the agency inbox.
+        await _resolve_call_branch(session, args)
+        return json.dumps({"status": "saved"}, ensure_ascii=False)
+
+    logger.warning("Unknown tool %r called — ignored", name)
+    return None
 
 
 def _call_branch_id(session: dict[str, Any]) -> Optional[str]:
@@ -2318,127 +2505,24 @@ async def _run_call(
                             return
 
                     elif etype == "response.function_call_arguments.done":
-                        if msg.get("name") == "search_listings":
-                            fc_id = msg.get("call_id")
-                            try:
-                                args = json.loads(msg.get("arguments", "{}"))
-                            except json.JSONDecodeError:
-                                args = {}
-                            results = tenant_store.search(**args)
-                            session["listings_shown"].extend(results)
-                            logger.info(
-                                "search_listings(%s) → %d results", args, len(results)
+                        if msg.get("name") not in (None, "end_call"):
+                            output = await _execute_tool(
+                                msg.get("name"),
+                                msg.get("arguments"),
+                                session,
+                                tenant_store,
+                                listing_fields,
                             )
-                            await ws.send(
-                                json.dumps(
-                                    {
-                                        "type": "conversation.item.create",
-                                        "item": {
-                                            "type": "function_call_output",
-                                            "call_id": fc_id,
-                                            "output": json.dumps(
-                                                _for_model(results, listing_fields),
-                                                ensure_ascii=False,
-                                            ),
-                                        },
-                                    }
-                                )
-                            )
-                            await gate.request()
-
-                        elif msg.get("name") == "get_listing_by_address":
-                            fc_id = msg.get("call_id")
-                            try:
-                                args = json.loads(msg.get("arguments", "{}"))
-                            except json.JSONDecodeError:
-                                args = {}
-                            results = tenant_store.get_by_address(args.get("address_query", ""))
-                            session["listings_shown"].extend(results)
-                            logger.info(
-                                "get_listing_by_address(%s) → %d results", args, len(results)
-                            )
-                            await ws.send(json.dumps({
-                                "type": "conversation.item.create",
-                                "item": {
-                                    "type": "function_call_output",
-                                    "call_id": fc_id,
-                                    "output": json.dumps(
-                                        _for_model(results, listing_fields),
-                                        ensure_ascii=False,
-                                    ),
-                                },
-                            }))
-                            await gate.request()
-
-                        elif msg.get("name") == "mark_listing_interest":
-                            fc_id = msg.get("call_id")
-                            try:
-                                args = json.loads(msg.get("arguments", "{}"))
-                            except json.JSONDecodeError:
-                                args = {}
-                            address = args.get("address", "")
-                            match = next(
-                                (l for l in session["listings_shown"] if l["address"] == address),
-                                None,
-                            )
-                            if match and match not in session["interested_listings"]:
-                                session["interested_listings"].append(match)
-                            logger.info("Caller interested in: %s (found=%s)", address, bool(match))
-                            await ws.send(json.dumps({
-                                "type": "conversation.item.create",
-                                "item": {
-                                    "type": "function_call_output",
-                                    "call_id": fc_id,
-                                    "output": json.dumps({"recorded": bool(match)}),
-                                },
-                            }))
-                            await gate.request()
-
-                        elif msg.get("name") == "record_caller_info":
-                            fc_id = msg.get("call_id")
-                            try:
-                                args = json.loads(msg.get("arguments", "{}"))
-                            except json.JSONDecodeError:
-                                args = {}
-                            session["caller_info"].update(
-                                {k: v for k, v in args.items() if v}
-                            )
-                            logger.info("Recorded caller info: %s", args)
-                            await ws.send(json.dumps({
-                                "type": "conversation.item.create",
-                                "item": {
-                                    "type": "function_call_output",
-                                    "call_id": fc_id,
-                                    "output": json.dumps({"recorded": True}),
-                                },
-                            }))
-                            await gate.request()
-
-                        elif msg.get("name") == "leave_message":
-                            fc_id = msg.get("call_id")
-                            try:
-                                args = json.loads(msg.get("arguments", "{}"))
-                            except json.JSONDecodeError:
-                                args = {}
-                            session["left_message"] = args
-                            logger.info("leave_message: %s", args)
-                            # Work out which office this belongs to before
-                            # answering, so the result is already on the
-                            # session by the time the lead email is composed at
-                            # teardown. Bounded and non-raising by contract
-                            # (branches/routing.py): the worst case is no
-                            # office and the lead goes to the agency inbox.
-                            await _resolve_call_branch(session, args)
-                            await ws.send(json.dumps({
-                                "type": "conversation.item.create",
-                                "item": {
-                                    "type": "function_call_output",
-                                    "call_id": fc_id,
-                                    "output": json.dumps({"status": "saved"}, ensure_ascii=False),
-                                },
-                            }))
-                            await gate.request()
-
+                            if output is not None:
+                                await ws.send(json.dumps({
+                                    "type": "conversation.item.create",
+                                    "item": {
+                                        "type": "function_call_output",
+                                        "call_id": msg.get("call_id"),
+                                        "output": output,
+                                    },
+                                }))
+                                await gate.request()
                         elif msg.get("name") == "end_call":
                             fc_id = msg.get("call_id")
                             logger.info("Apollonia ending call %s", call_id)

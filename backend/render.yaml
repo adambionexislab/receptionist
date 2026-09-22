@@ -49,6 +49,10 @@ services:
         sync: false
       - key: TWILIO_PHONE_NUMBER_SK
         sync: false
+      # DID of the Slovak GPT-Live demo tenant (see call/live.py). Unset = no
+      # GPT-Live demo; every other tenant stays on the Realtime model.
+      - key: LIVE_DEMO_NUMBER_SK
+        sync: false
       - key: PUBLIC_BASE_URL
         sync: false
       - key: LEAD_EMAIL
@@ -85,7 +89,7 @@ services:
       - key: NOTES_CHAT_MODEL
         value: gpt-5.6-terra
       - key: IMAGE_EDIT_MODEL
-        value: gpt-image-2
+        value: gpt-image-2.5-flare
       - key: GOOGLE_PLACES_API_KEY
         sync: false
       # Shared staff password for /leadgen. Without it nobody can log in.
