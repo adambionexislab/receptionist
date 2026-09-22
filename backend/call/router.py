@@ -539,8 +539,10 @@ _DEMO_EMAIL_SECTION = (
     "Subito dopo che il chiamante ti ha detto il suo nome, chiedigli come\n"
     "domanda SUCCESSIVA il suo indirizzo email, prima di qualsiasi altra\n"
     "cosa. Vale per ogni tipo di chiamata in cui chiedi il nome.\n"
-    "1. Chiedi al chiamante di compitarti l'intero indirizzo email lettera\n"
-    "   per lettera. Non chiederne le parti separatamente e non citare alcun\n"
+    "1. Con una sola domanda chiedi al chiamante l'intero indirizzo email e\n"
+    "   digli di compitare lettera per lettera solo la parte prima della\n"
+    "   chiocciola, e di dire la parte dopo la chiocciola normalmente, senza\n"
+    "   compitarla. Non chiedere le parti separatamente e non citare alcun\n"
     "   esempio. Aspetta che abbia finito.\n"
     "2. Ripeti al chiamante l'indirizzo completo e chiedigli se è corretto.\n"
     "   La parte prima della chiocciola compitala lettera per lettera, i\n"
@@ -2263,6 +2265,12 @@ def _format_lead_body(
         lines: list[str] = [
             f"{content['email_caller_label']}: {caller}",
         ]
+        # The caller's e-mail sits under the phone number, where the agent looks
+        # for how to reach them — whichever tool it came in through.
+        caller_info = session.get("caller_info") or {}
+        email = caller_info.get("email") or (session.get("left_message") or {}).get("email")
+        if email:
+            lines.append(f"{content['caller_info_labels']['email']}: {email}")
         # Only say something about agent routing when a property was actually in
         # play; on a message or a seller call there is nothing to assign.
         if session.get("interested_listings"):
@@ -2270,11 +2278,14 @@ def _format_lead_body(
         lines.append("")
 
         lines += [content["email_section_collected"]]
-        caller_info = session.get("caller_info") or {}
-        if caller_info:
-            for key, label in content["caller_info_labels"].items():
-                if caller_info.get(key):
-                    lines.append(f"{label}: {caller_info[key]}")
+        # The e-mail is left out here: it is already at the top.
+        collected = [
+            f"{label}: {caller_info[key]}"
+            for key, label in content["caller_info_labels"].items()
+            if key != "email" and caller_info.get(key)
+        ]
+        if collected:
+            lines += collected
         else:
             lines.append(content["email_no_data"])
         lines.append("")
@@ -2310,8 +2321,6 @@ def _format_lead_body(
             urgency_disp = content["urgency_display"].get(urgency_tok, urgency_tok)
             lines += ["", content["email_section_message"]]
             lines.append(f"{content['email_name_label']}: {msg_data.get('caller_name', content['unknown_caller'])}")
-            if msg_data.get("email"):
-                lines.append(f"{content['caller_info_labels']['email']}: {msg_data['email']}")
             lines.append(f"{content['email_urgency_label']}: {urgency_disp}")
             lines.append(f"{content['email_message_label']}: {msg_data.get('message', '')}")
 

@@ -71,8 +71,14 @@ def test_accept_config_email_field_only_when_collecting(locale):
 def test_email_section_orders_name_spelling_and_readback(locale):
     section = router._content(locale)["demo_email_section"]
     markers = {
-        "it": ("nome", "l'intero indirizzo", "Ripeti"),
-        "sk": ("meno", "celú e-mailovú adresu", "zopakujte"),
+        "it": (
+            "nome", "l'intero indirizzo", "solo la parte prima della",
+            "dopo la chiocciola normalmente", "Ripeti",
+        ),
+        "sk": (
+            "meno", "celú e-mailovú adresu", "pred zavináčom",
+            "za\n   zavináčom povie normálne", "zopakujte",
+        ),
     }[locale]
     positions = [section.index(m) for m in markers]
     assert positions == sorted(positions)
@@ -127,7 +133,9 @@ def test_lead_body_shows_email_from_caller_info(locale, label):
     content = router._content(locale)
     session = _session(caller_info={"name": "Ján", "email": "jan.novak@azet.sk"})
     body = router._format_lead_body(content, session, "+421900000000", [], False)
-    assert f"{label}: jan.novak@azet.sk" in body
+    lines = body.splitlines()
+    assert lines[1] == f"{label}: jan.novak@azet.sk"
+    assert body.count("jan.novak@azet.sk") == 1
 
 
 @pytest.mark.parametrize("locale,label", [("it", "Email"), ("sk", "E-mail")])
@@ -141,4 +149,13 @@ def test_lead_body_shows_email_from_left_message(locale, label):
         }
     )
     body = router._format_lead_body(content, session, "+421900000000", [], False)
-    assert f"{label}: jan@gmail.com" in body
+    lines = body.splitlines()
+    assert lines[1] == f"{label}: jan@gmail.com"
+    assert body.count("jan@gmail.com") == 1
+
+
+def test_lead_body_email_alone_still_reports_no_collected_data():
+    content = router._content("sk")
+    session = _session(caller_info={"email": "jan@gmail.com"})
+    body = router._format_lead_body(content, session, "+421900000000", [], False)
+    assert content["email_no_data"] in body
