@@ -372,7 +372,9 @@ _SK_BACKEND_DEMO_EMAIL = (
     "časť za ním, a celú adresu mu zopakuje na potvrdenie. Adresu, ktorú\n"
     "volajúci potvrdil, vyplňte do poľa 'email' pri record_caller_info alebo\n"
     "leave_message. Skladajte ju z asistentkinho zopakovania, nie z prepisu\n"
-    "volajúceho. Ak volajúci adresu nepotvrdil, pole vynechajte.\n"
+    "volajúceho. Ak volajúci na zopakovanie povedal 'nie' alebo adresu\n"
+    "opravoval, platí až posledná verzia, ktorú potvrdil. Ak volajúci adresu\n"
+    "nepotvrdil, pole vynechajte.\n"
 )
 
 SK_LIVE = {
