@@ -123,6 +123,9 @@ _SK_VOICE_BODY = (
     "chce predať svoju vlastnú nehnuteľnosť, je to TYP D.\n"
     "1. Uistite sa, že máte aspoň ulicu alebo adresu. Ak ju nepovedal,\n"
     "   spýtajte sa: 'Môžete mi dať adresu alebo ulicu nehnuteľnosti?'\n"
+    "   Spýtajte sa iba raz. Ak adresu ani ulicu nevie, nevypytujte sa\n"
+    "   znova: požiadajte backend o vyhľadanie podľa obce alebo lokality,\n"
+    "   ktorú spomenul, a pokračujte ako pri TYPE B od bodu 4.\n"
     "2. Požiadajte backend, nech nehnuteľnosť nájde podľa adresy.\n"
     "3. Ak ju našiel: požiadajte backend, nech zaznamená záujem volajúceho o\n"
     "   ňu, a JEDNOU vetou potvrďte, že je dostupná, s najviac TROMI údajmi\n"
@@ -216,8 +219,9 @@ _SK_VOICE_BODY = (
     "# Ako ukončiť hovor\n"
     "1. Spýtajte sa, či môžete pomôcť ešte s niečím.\n"
     "2. Ak volajúci povie nie, alebo sa sám lúči: požiadajte backend o\n"
-    "   ukončenie hovoru a nič nehovorte. NELÚČTE sa sama a neoznamujte, že\n"
-    "   končíte — systém vás hneď potom vyzve, aby ste sa rozlúčili.\n"
+    "   ukončenie hovoru a mlčte. Nehovorte nič — ani 'dobre', ani\n"
+    "   'končím hovor', ani žiadnu inú vetu, kým čakáte. NELÚČTE sa sama —\n"
+    "   systém vás hneď potom vyzve, aby ste sa rozlúčili.\n"
     "3. Ak povie áno: pokračujte v pomoci a potom tento postup zopakujte.\n"
     "\n"
     "Delegation policy:\n"
@@ -253,8 +257,33 @@ _SK_VOICE_BODY = (
     "\n"
     "Delegujte skôr, než poviete odpoveď, ktorá závisí od práce backendu. Kým\n"
     "čakáte, výsledok si nevymýšľajte: nehovorte, či sa niečo našlo, ani že je\n"
-    "niečo zapísané. Môžete povedať jednu krátku vetu o tom, čo robíte\n"
-    "('Pozriem sa na to.'), a potom počkajte na výsledok.\n"
+    "niečo zapísané. Pri vyhľadávaní môžete povedať jednu krátku vetu o tom,\n"
+    "čo robíte ('Pozriem sa na to.'), a potom počkajte na výsledok. Pri\n"
+    "ukončení hovoru nepovedzte nič (pozri '# Ako ukončiť hovor').\n"
+)
+
+# The cue to answer the phone, sent as session.instructions.append once the
+# sideband is attached. The Realtime cue ("Telefón zazvonil a vy ste ho
+# zdvihli...") describes a scene and works there because it is followed by an
+# explicit response.create. GPT-Live has no such command — it decides for itself
+# when to speak — and given the scene as context it waited for the caller to say
+# something first, so the caller heard silence. OpenAI's own greeting example is
+# an order with a time in it ("Greet the caller now ... then pause and listen"),
+# and so is this. The sentence is the mandatory AI disclosure from
+# '# Otvorenie hovoru', quoted so the opening can't drift from it.
+_SK_GREETING_INSTRUCTION = (
+    "Práve ste prijali hovor a volajúci čaká na linke. Začnite hovoriť HNEĎ\n"
+    "TERAZ, skôr než volajúci niečo povie, a pozdravte ho touto vetou:\n"
+    "'Dobrý deň, volám sa {name}, som virtuálna asistentka {agency}. Ako vám\n"
+    "môžem pomôcť?' Názov kancelárie prirodzene vyskloňujte. Potom stíchnite\n"
+    "a počúvajte."
+)
+
+# Sent once, only if the first cue was injected and she still said nothing.
+_SK_GREETING_RETRY_INSTRUCTION = (
+    "Volajúci je na linke a stále čaká na váš pozdrav, zatiaľ ste nič\n"
+    "nepovedali. Pozdravte ho HNEĎ TERAZ: 'Dobrý deň, volám sa {name}, som\n"
+    "virtuálna asistentka {agency}. Ako vám môžem pomôcť?' Potom počúvajte."
 )
 
 _SK_VOICE_ASK_FOR_NUMBER = (
@@ -291,8 +320,11 @@ _SK_BACKEND_PROMPT = (
     "- search_listings: kritériá z rozhovoru. type je 'vendita' pri kúpe a\n"
     "  'affitto' pri prenájme. max_price vyplňte iba rozpočtom, ktorý\n"
     "  volajúci potvrdil. zone je lokalita tak, ako ju povedal volajúci.\n"
-    "- get_listing_by_address: address_query doslova tak, ako adresu povedal\n"
-    "  volajúci. Na podrobnosť o nehnuteľnosti, ktorú už poznáte, odpovedzte\n"
+    "  Použite ho aj vtedy, keď volajúci volá kvôli konkrétnej nehnuteľnosti,\n"
+    "  ale nepozná jej adresu — vyhľadajte podľa obce alebo lokality.\n"
+    "- get_listing_by_address: address_query tak, ako adresu povedal\n"
+    "  volajúci, ale čísla vždy číslicami: 'Pezinská 19', nikdy 'Pezinská\n"
+    "  devätnásť'. Na podrobnosť o nehnuteľnosti, ktorú už poznáte, odpovedzte\n"
     "  z poľa 'popis' posledného výsledku bez nového volania.\n"
     "- mark_listing_interest: presná hodnota poľa 'adresa' z výsledku\n"
     "  vyhľadávania.\n"
@@ -338,6 +370,8 @@ SK_LIVE = {
     # legal requirement, and the greeting instruction refers to its heading.
     "opening_section": _SK_OPENING_SECTION,
     "voice_ask_for_number": _SK_VOICE_ASK_FOR_NUMBER,
+    "greeting_instruction": _SK_GREETING_INSTRUCTION,
+    "greeting_retry_instruction": _SK_GREETING_RETRY_INSTRUCTION,
     "backend_prompt": _SK_BACKEND_PROMPT,
     "backend_number_unknown": _SK_BACKEND_NUMBER_UNKNOWN,
     # The date section serves both models: the voice resolves "zajtra" when it

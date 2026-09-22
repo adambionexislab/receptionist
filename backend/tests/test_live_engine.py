@@ -612,3 +612,139 @@ def test_failed_accept_sends_no_lead(monkeypatch):
     ctx = _ctx()
     run(live.run_live_call("s", {}, router._new_call_session("s", ctx), ctx.content, None))
     assert torn_down == []
+
+
+# ── Regressions from the first live calls (2026-09-22) ───────────────────────
+
+
+def test_goodbye_without_an_acknowledgment_still_hangs_up():
+    """First live call: she spoke after end_call, the farewell acknowledgment
+    never preceded it, and the line stayed open until the caller hung up."""
+    call, _, clock, _ = _live_call()
+
+    async def go():
+        await call.handle(_function_call("end_call", {}))
+        clock.t += 1.6
+        await call.handle({"type": "session.output_transcript.delta", "delta": "Ďakujem, dovidenia."})
+
+    run(go())
+    spoke_at = clock.t
+    assert call.watchdog_action(spoke_at + 3.5) is None  # too soon after end_call
+    assert call.watchdog_action(1000.0 + 6.0) == "hangup"
+
+
+def test_no_announcement_while_waiting_for_the_end_of_the_call():
+    """She said 'Dobre, končím hovor.' — the waiting-sentence allowance must
+    not extend to ending the call."""
+    text = live.build_voice_instructions(_ctx())
+    assert "ukončení hovoru nepovedzte nič" in " ".join(text.split())
+    assert "'končím hovor'" in text
+
+
+def test_backend_writes_house_numbers_as_digits():
+    """'Pezinská devätnásť' matched nothing; the store matches digits."""
+    assert "'Pezinská 19'" in live.build_backend_instructions(_ctx())
+
+
+def test_she_does_not_insist_on_a_street_the_caller_does_not_know():
+    text = " ".join(live.build_voice_instructions(_ctx()).split())
+    assert "Spýtajte sa iba raz. Ak adresu ani ulicu nevie" in text
+
+
+def test_transcript_lines_carry_the_session_timeline(caplog):
+    call, _, clock, _ = _live_call()
+    caplog.set_level("INFO", logger="call.live")
+
+    async def go():
+        await call.handle({"type": "session.output_transcript.delta", "delta": "Dobrý ", "start_ms": 5200})
+        await call.handle({"type": "session.output_transcript.delta", "delta": "deň.", "start_ms": 5400})
+        await call.handle({"type": "session.input_transcript.delta", "delta": "Haló", "start_ms": 9000})
+        call.transcript.flush()
+
+    run(go())
+    lines = [r.getMessage() for r in caplog.records]
+    assert "Apollonia [t=5.2s]: Dobrý deň." in lines
+    assert "Caller [t=9.0s]: Haló" in lines
+
+
+# ── Greeting (she stayed silent until the caller said "Haló") ────────────────
+
+
+def test_greeting_cue_is_an_order_to_speak_now_with_the_disclosure():
+    greeting, retry = live.build_greetings(_ctx())
+    for text in (greeting, retry):
+        flat = " ".join(text.split())
+        assert "HNEĎ TERAZ" in flat
+        assert "volám sa Apollonia, som virtuálna asistentka Štúdio Demo Live" in flat
+    # A scene description ("the phone rang") is what she waited through.
+    assert "zazvonil" not in greeting
+
+
+def test_greeting_cues_are_slovak_only():
+    for text in live.build_greetings(_ctx()):
+        assert not [w for w in _FOREIGN if w in text.lower()]
+
+
+def _greeting_call():
+    sent = []
+
+    async def send(event):
+        sent.append(event)
+
+    clock = Clock()
+    ctx = _ctx()
+    call = live.LiveCall(
+        "s", router._new_call_session("s", ctx), ctx.content, FakeStore([]), send, clock,
+        greetings=live.build_greetings(ctx),
+    )
+    return call, sent, clock
+
+
+def test_the_built_greeting_is_what_gets_sent():
+    call, sent, _ = _greeting_call()
+    run(call.start())
+    assert sent[0]["content"] == call.greeting
+
+
+def test_greeting_is_retried_once_if_she_stays_silent_after_it_lands():
+    call, sent, clock = _greeting_call()
+
+    async def go():
+        await call.start()
+        await call.handle({"type": "session.instructions.appended", "client_event_id": "greeting"})
+        clock.t += 3.5
+        assert call.watchdog_action(clock.t) == "greet"
+        await call.retry_greeting()
+
+    run(go())
+    assert sent[-1]["event_id"] == "greeting_retry"
+    assert sent[-1]["content"] == call.greeting_retry
+    assert call.watchdog_action(clock.t + 10) is None  # only once
+
+
+def test_no_retry_before_the_cue_has_even_landed():
+    """Before the media is up the timeline has not started; retrying then would
+    queue a second greeting behind the first."""
+    call, _, clock = _greeting_call()
+    run(call.start())
+    assert call.watchdog_action(clock.t + 20) is None
+
+
+def test_no_retry_once_she_has_greeted_or_the_caller_spoke():
+    call, _, clock = _greeting_call()
+
+    async def go():
+        await call.handle({"type": "session.instructions.appended", "client_event_id": "greeting"})
+        await call.handle({"type": "session.output_transcript.delta", "delta": "Dobrý deň"})
+
+    run(go())
+    assert call.watchdog_action(clock.t + 4) is None
+
+    call, _, clock = _greeting_call()
+
+    async def go2():
+        await call.handle({"type": "session.instructions.appended", "client_event_id": "greeting"})
+        await call.handle({"type": "session.input_transcript.delta", "delta": "Haló"})
+
+    run(go2())
+    assert call.watchdog_action(clock.t + 4) is None

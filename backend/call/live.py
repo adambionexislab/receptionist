@@ -64,6 +64,12 @@ _LIVE_CONTENT: dict[str, dict[str, Any]] = {"sk": SK_LIVE}
 # transcript runs slightly ahead of what the caller hears, so "said" means her
 # output has been quiet for this long after she started speaking again.
 _FAREWELL_QUIET_SECONDS = 3.0
+# The farewell instruction's acknowledgment is only an ESTIMATE of when it was
+# injected, and on the first live calls it could land after she had already
+# spoken — or not at all before the caller gave up — so waiting for it alone
+# left the line open. Once this long has passed since end_call, any speech
+# after end_call followed by the same quiet period counts as the goodbye.
+_FAREWELL_UNACKED_AFTER_SECONDS = 6.0
 # If the goodbye never comes, hang up anyway rather than leave the caller on an
 # open, silent line. Same budget as the Realtime path.
 _FAREWELL_TIMEOUT_SECONDS = call_router._FAREWELL_TIMEOUT_SECONDS
@@ -87,6 +93,13 @@ _TERMINAL_RESPONSE_EVENTS = {
 }
 
 _GREETING_EVENT_ID = "greeting"
+_GREETING_RETRY_EVENT_ID = "greeting_retry"
+# She should start speaking right after the greeting cue is injected. If she is
+# still silent this long after its acknowledgment — and the caller has not
+# spoken either — the cue is repeated once, more insistently. Keyed to the
+# acknowledgment rather than the attach, because before the media is up the
+# session timeline has not started and the cue cannot have reached her yet.
+_GREETING_RETRY_SECONDS = 3.0
 _FAREWELL_EVENT_ID = "farewell"
 
 
@@ -130,6 +143,16 @@ def build_backend_instructions(
     if not ctx.caller_number_known:
         text += live["backend_number_unknown"]
     return text
+
+
+def build_greetings(ctx: "call_router._CallContext") -> tuple[str, str]:
+    """The cue to answer the phone, and the one retry if she stays silent."""
+    live = _LIVE_CONTENT[ctx.locale]
+    name, agency = _names(ctx)
+    return (
+        live["greeting_instruction"].format(name=name, agency=agency),
+        live["greeting_retry_instruction"].format(name=name, agency=agency),
+    )
 
 
 def build_session_config(
@@ -202,6 +225,7 @@ async def handle_incoming(data: dict[str, Any]) -> Response:
             session,
             ctx.content,
             ctx.tenant_store,
+            greetings=build_greetings(ctx),
         )
     )
     call_router._active_calls.add(task)
@@ -287,11 +311,16 @@ class _TranscriptLog:
         self._speaker: Optional[str] = None
         self._parts: list[str] = []
         self._last = 0.0
+        self._start_ms: Optional[int] = None
 
-    def add(self, speaker: str, delta: str, now: float) -> None:
+    def add(
+        self, speaker: str, delta: str, now: float, start_ms: Optional[int] = None
+    ) -> None:
         if speaker != self._speaker:
             self.flush()
             self._speaker = speaker
+        if not self._parts:
+            self._start_ms = start_ms
         self._parts.append(delta)
         self._last = now
 
@@ -302,9 +331,20 @@ class _TranscriptLog:
     def flush(self) -> None:
         text = "".join(self._parts).strip()
         if text and self._speaker:
-            logger.info("%s: %s", self._LABELS[self._speaker], text)
+            # The line is logged when the turn ENDS, so the log timestamp says
+            # nothing about when it started. start_ms is the session timeline
+            # (ms since the call was set up) — the only way to see dead air,
+            # e.g. how long the caller waited for the greeting.
+            logger.info(
+                "%s [%s]: %s", self._LABELS[self._speaker], _fmt_ms(self._start_ms), text
+            )
         self._parts = []
         self._speaker = None
+        self._start_ms = None
+
+
+def _fmt_ms(ms: Any) -> str:
+    return f"t={ms / 1000:.1f}s" if isinstance(ms, (int, float)) else "t=?"
 
 
 class LiveCall:
@@ -322,8 +362,19 @@ class LiveCall:
         tenant_store: Any,
         send: Callable[[dict[str, Any]], Awaitable[None]],
         clock: Callable[[], float],
+        greetings: Optional[tuple[str, str]] = None,
     ) -> None:
         self.session_id = session_id
+        self.greeting, self.greeting_retry = greetings or (
+            content["greeting_prompt"],
+            content["greeting_prompt"],
+        )
+        # When the greeting cue was acknowledged as injected, and whether the
+        # one retry has gone out. caller_spoke ends the need for either: once
+        # the caller talks, she answers them.
+        self.greeting_acked_at: Optional[float] = None
+        self.greeting_retried = False
+        self.caller_spoke = False
         self.session = session
         self.content = content
         self.tenant_store = tenant_store
@@ -353,7 +404,20 @@ class LiveCall:
             "type": "session.instructions.append",
             "event_id": _GREETING_EVENT_ID,
             "delegation_id": None,
-            "content": self.content["greeting_prompt"],
+            "content": self.greeting,
+        })
+
+    async def retry_greeting(self) -> None:
+        self.greeting_retried = True
+        logger.warning(
+            "No greeting %.0fs after the cue was injected — repeating it (%s)",
+            _GREETING_RETRY_SECONDS, self.session_id,
+        )
+        await self._send({
+            "type": "session.instructions.append",
+            "event_id": _GREETING_RETRY_EVENT_ID,
+            "delegation_id": None,
+            "content": self.greeting_retry,
         })
 
     async def handle(self, msg: dict[str, Any]) -> None:
@@ -362,12 +426,13 @@ class LiveCall:
 
         if etype == "session.input_transcript.delta":
             self.last_activity = now
-            self.transcript.add("caller", msg.get("delta") or "", now)
+            self.caller_spoke = True
+            self.transcript.add("caller", msg.get("delta") or "", now, msg.get("start_ms"))
 
         elif etype == "session.output_transcript.delta":
             self.last_activity = now
             self.last_output_at = now
-            self.transcript.add("agent", msg.get("delta") or "", now)
+            self.transcript.add("agent", msg.get("delta") or "", now, msg.get("start_ms"))
 
         elif etype == "session.delegation.created":
             d = msg.get("delegation") or {}
@@ -380,8 +445,18 @@ class LiveCall:
             await self._on_backend_event(msg.get("delegation_id"), msg.get("event") or {})
 
         elif etype == "session.instructions.appended":
-            if msg.get("client_event_id") == _FAREWELL_EVENT_ID:
+            cid = msg.get("client_event_id")
+            logger.info(
+                "Instruction %r injected [%s–%s]",
+                cid, _fmt_ms(msg.get("start_ms")), _fmt_ms(msg.get("end_ms")),
+            )
+            if cid == _FAREWELL_EVENT_ID:
                 self.farewell_acked_at = now
+            elif cid == _GREETING_EVENT_ID:
+                self.greeting_acked_at = now
+
+        elif etype == "session.started":
+            logger.info("GPT-Live session started: %s", (msg.get("session") or {}).get("id"))
 
         elif etype == "session.closed":
             self.transcript.flush()
@@ -480,14 +555,26 @@ class LiveCall:
     def watchdog_action(self, now: float) -> Optional[str]:
         """What the watchdog should do now, if anything. Pure, for testing:
         'hangup' (goodbye said), 'hangup_timeout' (goodbye never came),
-        'hangup_silence', 'continue' (backend stalled after a tool result)."""
+        'hangup_silence', 'continue' (backend stalled after a tool result),
+        'greet' (the greeting cue landed but she has not spoken)."""
+        if (
+            self.greeting_acked_at is not None
+            and not self.greeting_retried
+            and not self.caller_spoke
+            and self.last_output_at == 0.0
+            and now - self.greeting_acked_at >= _GREETING_RETRY_SECONDS
+        ):
+            return "greet"
         ending_at = self.session.get("ending_at")
         if ending_at is not None:
             acked = self.farewell_acked_at
+            quiet = now - self.last_output_at >= _FAREWELL_QUIET_SECONDS
+            if acked is not None and self.last_output_at > acked and quiet:
+                return "hangup"
             if (
-                acked is not None
-                and self.last_output_at > acked
-                and now - self.last_output_at >= _FAREWELL_QUIET_SECONDS
+                self.last_output_at > ending_at
+                and quiet
+                and now - ending_at >= _FAREWELL_UNACKED_AFTER_SECONDS
             ):
                 return "hangup"
             if now - ending_at > _FAREWELL_TIMEOUT_SECONDS:
@@ -509,7 +596,9 @@ class LiveCall:
             now = self._clock()
             self.transcript.flush_if_idle(now)
             action = self.watchdog_action(now)
-            if action == "continue":
+            if action == "greet":
+                await self.retry_greeting()
+            elif action == "continue":
                 logger.warning(
                     "No end of backend response %.0fs after a tool result — "
                     "continuing it anyway (%s)",
@@ -538,6 +627,7 @@ async def run_live_call(
     session: dict[str, Any],
     content: dict[str, Any],
     tenant_store: Any,
+    greetings: Optional[tuple[str, str]] = None,
 ) -> None:
     """Accept a pending GPT-Live SIP call, drive it over the sideband until it
     ends, then send the lead email and persist the call — the same teardown as
@@ -559,7 +649,10 @@ async def run_live_call(
             async def send(event: dict[str, Any]) -> None:
                 await ws.send(json.dumps(event, ensure_ascii=False))
 
-            live = LiveCall(session_id, session, content, tenant_store, send, loop.time)
+            live = LiveCall(
+                session_id, session, content, tenant_store, send, loop.time,
+                greetings=greetings,
+            )
             await live.start()
 
             async def events() -> None:
