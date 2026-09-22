@@ -368,8 +368,8 @@ _SK_BACKEND_NUMBER_UNKNOWN = (
 # SK_DEMO_EMAIL_STEPS, shared with the Realtime prompt).
 _SK_BACKEND_DEMO_EMAIL = (
     "\n\n# E-mailová adresa volajúceho\n"
-    "Asistentka sa volajúceho pýta na e-mail: najprv časť pred zavináčom, potom\n"
-    "časť za ním, a celú adresu mu zopakuje na potvrdenie. Adresu, ktorú\n"
+    "Asistentka poprosí volajúceho, nech celý e-mail nahláskuje, a celú adresu\n"
+    "mu zopakuje na potvrdenie. Adresu, ktorú\n"
     "volajúci potvrdil, vyplňte do poľa 'email' pri record_caller_info alebo\n"
     "leave_message. Skladajte ju z asistentkinho zopakovania, nie z prepisu\n"
     "volajúceho. Ak volajúci na zopakovanie povedal 'nie' alebo adresu\n"

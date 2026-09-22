@@ -68,11 +68,11 @@ def test_accept_config_email_field_only_when_collecting(locale):
 
 
 @pytest.mark.parametrize("locale", ["it", "sk"])
-def test_email_section_orders_local_part_domain_and_readback(locale):
+def test_email_section_orders_name_spelling_and_readback(locale):
     section = router._content(locale)["demo_email_section"]
     markers = {
-        "it": ("nome", "prima della chiocciola", "dopo la chiocciola", "Ripeti"),
-        "sk": ("meno", "pred zavináčom", "za zavináčom", "zopakujte"),
+        "it": ("nome", "l'intero indirizzo", "Ripeti"),
+        "sk": ("meno", "celú e-mailovú adresu", "zopakujte"),
     }[locale]
     positions = [section.index(m) for m in markers]
     assert positions == sorted(positions)
@@ -93,7 +93,7 @@ def _live_ctx(number):
 
 def test_live_demo_gets_email_on_voice_backend_and_tools():
     cfg = live.build_session_config(_live_ctx(_DEMO_LIVE))
-    assert "pred zavináčom" in cfg["instructions"]
+    assert "celú e-mailovú adresu" in cfg["instructions"]
     responses = cfg["delegation"]["responses"]
     assert "'email'" in responses["instructions"]
     props = _tool(responses["tools"], "record_caller_info")["parameters"]["properties"]
