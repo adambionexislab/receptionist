@@ -40,9 +40,16 @@ def _tool(tools, name):
     return next(t for t in tools if t["name"] == name)
 
 
-@pytest.mark.parametrize("number", [_DEMO_IT, _DEMO_SK, _DEMO_LIVE])
+@pytest.mark.parametrize("number", [_DEMO_IT, _DEMO_LIVE])
 def test_demo_numbers_collect_email(number):
     assert router._collects_email(_tenant(number))
+
+
+def test_slovak_realtime_demo_is_opted_out():
+    """Deliberately excluded (see _collects_email): one Slovak demo has to be
+    able to run without the e-mail question. Re-enabling it is a one-line
+    change there, which is why this test names the reason."""
+    assert not router._collects_email(_tenant(_DEMO_SK))
 
 
 def test_env_var_demo_fallback_collects_email():

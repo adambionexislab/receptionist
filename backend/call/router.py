@@ -1224,12 +1224,17 @@ def _collects_email(tenant: Optional[dict[str, Any]]) -> bool:
     Demo tenants only, for now: it is a trial of how well she takes an address
     down by voice before any client relies on it. The demos are recognised by
     the numbers they are created on at startup (main.py); a missing tenant row
-    is the env-var demo fallback."""
+    is the env-var demo fallback.
+
+    The Slovak Realtime demo (TWILIO_PHONE_NUMBER_SK) is deliberately LEFT OUT
+    so there is a Slovak demo that never mentions e-mail. To put the question
+    back on it, add `settings.TWILIO_PHONE_NUMBER_SK` to demo_numbers below —
+    the prompt section and the tool field are still in place, they are simply
+    not handed to that tenant."""
     if tenant is None:
         return True
     demo_numbers = (
         settings.TWILIO_PHONE_NUMBER,
-        settings.TWILIO_PHONE_NUMBER_SK,
         settings.LIVE_DEMO_NUMBER_SK,
     )
     return any(_same_number(tenant.get("twilio_number"), n) for n in demo_numbers)
