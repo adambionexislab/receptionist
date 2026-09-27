@@ -58,6 +58,12 @@ def test_env_var_demo_fallback_collects_email():
 
 def test_production_tenant_does_not_collect_email():
     assert not router._collects_email(_tenant("+43720000099"))
+
+
+def test_production_tenant_that_opted_in_collects_email():
+    tenant = {**_tenant("+43720000099"), "collect_email": 1}
+    assert router._collects_email(tenant)
+    assert not router._collects_email({**tenant, "collect_email": 0})
     assert not router._collects_email(_tenant(None))
 
 

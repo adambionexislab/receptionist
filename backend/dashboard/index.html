@@ -1317,6 +1317,9 @@
       agent_name: "Nome",
       agent_email: "Email",
       agent_no_email: "Email non indicata",
+      agent_whatsapp: "WhatsApp (facoltativo)",
+      agent_whatsapp_ph: "+39 333 1234567",
+      agent_whatsapp_invalid: "Numero WhatsApp non valido — usa il formato internazionale, es. +39 333 1234567.",
       agents_empty: "Nessun agente ancora.",
       agent_delete_confirm: "Rimuovere questo agente?",
       agent_listings: "{n} immobili gestiti",
@@ -1594,6 +1597,9 @@
       agent_name: "Meno",
       agent_email: "E-mail",
       agent_no_email: "E-mail neuvedený",
+      agent_whatsapp: "WhatsApp (nepovinné)",
+      agent_whatsapp_ph: "+421 903 123 456",
+      agent_whatsapp_invalid: "Neplatné číslo WhatsApp — použite medzinárodný formát, napr. +421 903 123 456.",
       agents_empty: "Zatiaľ žiadni makléri.",
       agent_delete_confirm: "Odstrániť tohto makléra?",
       // Slovak counts agree in three forms (1 / 2–4 / 5+) — see pluralize().
@@ -2644,6 +2650,7 @@
   // number is assigned server-side in the order agents are added, so it is
   // shown but never editable.
   const AGENT_EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  const AGENT_WHATSAPP_RE = /^(\+|00)[1-9][\d\s().\-\/]{6,}$/;
 
   function agentReadCard(a) {
     const s = S();
@@ -2663,6 +2670,8 @@
       email.textContent = s.agent_no_email;
     }
     info.appendChild(email);
+    // Their leads also reach this number as a WhatsApp alert.
+    if (a.whatsapp) info.appendChild(el("div", "agent-email", "WhatsApp " + a.whatsapp));
     // Which office they work out of — shown only once the agency has any,
     // since for a single-office agency it is a line that says nothing. This is
     // what puts their calls, listings and tool use under a branch.
@@ -2746,12 +2755,17 @@
     const grid = el("div", "agent-edit-grid");
     const inputs = {};
 
-    [["name", s.agent_name, "text"], ["email", s.agent_email, "email"]].forEach(
-      ([name, label, type]) => {
+    [
+      ["name", s.agent_name, "text"],
+      ["email", s.agent_email, "email"],
+      ["whatsapp", s.agent_whatsapp, "tel", s.agent_whatsapp_ph],
+    ].forEach(
+      ([name, label, type, placeholder]) => {
         const wrap = el("div");
         wrap.appendChild(el("label", null, label));
         const input = document.createElement("input");
         input.type = type;
+        if (placeholder) input.placeholder = placeholder;
         input.value = a && a[name] != null ? a[name] : "";
         wrap.appendChild(input);
         grid.appendChild(wrap);
@@ -2795,6 +2809,7 @@
       const payload = {
         name: inputs.name.value.trim(),
         email: inputs.email.value.trim(),
+        whatsapp: inputs.whatsapp.value.trim(),
       };
       // Sent as "" to mean "no office" — omitted entirely when the agency has
       // no branches, so the server keeps whatever the agent already had.
@@ -2806,6 +2821,12 @@
       if (!payload.email) { err.textContent = S().agent_email_required; return; }
       if (!AGENT_EMAIL_RE.test(payload.email)) {
         err.textContent = S().agent_email_invalid;
+        return;
+      }
+      // International form only; the server normalizes (see
+      // services/whatsapp.normalize_number) and has the final say.
+      if (payload.whatsapp && !AGENT_WHATSAPP_RE.test(payload.whatsapp)) {
+        err.textContent = S().agent_whatsapp_invalid;
         return;
       }
       saveBtn.disabled = true;

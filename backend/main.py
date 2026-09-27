@@ -30,6 +30,7 @@ from listings import db as listings_db
 from listings.store import ListingsStore, store, tenant_stores
 from routers.leads import router as leads_router
 from routers.leads import webhook_router as leads_webhook_router
+from services import whatsapp
 from salesnotes import db as salesnotes_db
 from salesnotes.router import router as salesnotes_router
 from signup.router import router as signup_router
@@ -319,6 +320,39 @@ async def admin_tenants():
     for tenant in tenants:
         tenant["listing_count"] = counts.get(tenant["id"], 0)
     return tenants
+
+
+class TenantSettings(BaseModel):
+    """Per-client switches the owner flips by hand. Only what is sent changes."""
+    collect_email: Optional[bool] = None
+    # The agency's fallback WhatsApp number, international form; "" clears it.
+    lead_whatsapp: Optional[str] = None
+
+
+@app.post("/admin/tenants/{tenant_id}/settings", dependencies=[Depends(_require_admin)])
+async def admin_tenant_settings(tenant_id: str, data: TenantSettings):
+    """Turn per-client features on or off, e.g. {"collect_email": true} to have
+    Apollonia ask this client's callers for their e-mail, or
+    {"lead_whatsapp": "+39 333 1234567"} for the number that gets WhatsApp
+    alerts no agent does. Read per call, so it takes effect on the next call
+    without a deploy."""
+    if not await asyncio.to_thread(db.get_by_id, tenant_id):
+        raise HTTPException(status_code=404, detail="Unknown tenant")
+    fields = {
+        k: int(v) if isinstance(v, bool) else v
+        for k, v in data.model_dump(exclude_none=True).items()
+    }
+    if "lead_whatsapp" in fields:
+        number = whatsapp.normalize_number(fields["lead_whatsapp"])
+        if number is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid WhatsApp number — use international format, e.g. +39 333 1234567",
+            )
+        fields["lead_whatsapp"] = number
+    if fields:
+        await asyncio.to_thread(db.update_fields, tenant_id, **fields)
+    return await asyncio.to_thread(db.get_by_id, tenant_id)
 
 
 @app.get("/admin/live-recording/{session_id}", dependencies=[Depends(_require_admin)])

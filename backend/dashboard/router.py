@@ -36,6 +36,7 @@ from dashboard import session as sess
 from geo import geocode
 from listings import db as listings_db
 from listings import store
+from services import whatsapp
 from tenants import db
 from usage import db as usage_db
 
@@ -344,6 +345,8 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 class AgentCreate(BaseModel):
     name: str
     email: str
+    # Optional: set → their leads also arrive as a WhatsApp alert.
+    whatsapp: str = ""
     # Which office they work out of. Omitted → the branch the page is scoped to
     # (adding someone from the Milano view puts them in Milano); "" → none.
     branch_id: Optional[str] = None
@@ -354,6 +357,8 @@ class AgentUpdate(BaseModel):
     by the server and is not editable."""
     name: Optional[str] = None
     email: Optional[str] = None
+    # "" clears it (WhatsApp is optional, unlike name and email).
+    whatsapp: Optional[str] = None
     # Sent as "" to move an agent out of every office, so — like a listing's
     # agent_id — this one is handled separately from the exclude_none fields.
     branch_id: Optional[str] = None
@@ -363,9 +368,18 @@ def _clean_agent_fields(fields: dict) -> dict:
     """Trim and validate the agent fields present in `fields` (422 on bad input).
 
     Both name and email are required, so a PATCH may omit a field but may not
-    blank one out.
+    blank one out. WhatsApp is optional ("" = none) and stored normalized to
+    "+<digits>", the form the alert is sent to.
     """
     cleaned = {k: (v or "").strip() for k, v in fields.items()}
+    if "whatsapp" in cleaned:
+        number = whatsapp.normalize_number(cleaned["whatsapp"])
+        if number is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid WhatsApp number — use international format, e.g. +39 333 1234567",
+            )
+        cleaned["whatsapp"] = number
     if "name" in cleaned and not cleaned["name"]:
         raise HTTPException(status_code=422, detail="Name is required")
     if "email" in cleaned:
@@ -418,14 +432,17 @@ def create_agent(
     view they just disappeared from.
     """
     sent = data.model_dump()
-    fields = _clean_agent_fields({"name": sent["name"], "email": sent["email"]})
+    fields = _clean_agent_fields(
+        {"name": sent["name"], "email": sent["email"], "whatsapp": sent["whatsapp"]}
+    )
     branch_id = (
         _resolve_branch_id(sent["branch_id"], tenant["id"])
         if sent["branch_id"] is not None
         else _branch_id(branch)
     )
     return agents_db.create(
-        tenant["id"], fields["name"], fields["email"], branch_id=branch_id
+        tenant["id"], fields["name"], fields["email"],
+        branch_id=branch_id, whatsapp=fields["whatsapp"],
     )
 
 

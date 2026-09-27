@@ -79,6 +79,16 @@ class Settings(BaseSettings):
     # POST /leads/inbound-email verifies the Svix signature and rejects forgeries.
     RESEND_WEBHOOK_SECRET: Optional[str] = None
 
+    # WhatsApp lead alerts (Meta WhatsApp Cloud API), sent from ONE shared
+    # ApollonIA sender number to every agent who has a WhatsApp number on their
+    # card, on top of the lead email. Business-initiated messages must use a
+    # Meta-approved template; it is approved once per locale language ("it",
+    # "sk") under the same name. Unset token/phone id → WhatsApp is skipped.
+    WHATSAPP_TOKEN: Optional[str] = None
+    WHATSAPP_PHONE_NUMBER_ID: Optional[str] = None
+    WHATSAPP_TEMPLATE: str = "lead_alert"
+    WHATSAPP_API_VERSION: str = "v21.0"
+
     # Lead-generation / cold outreach (ApollonIA agency prospecting)
     # Shared staff password for the internal lead-gen dashboard at /leadgen
     # (campaigns, leads, meeting notes). Unset means nobody can log in — the

@@ -45,11 +45,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_agency_agents_number
 # agent who belongs to none of them, are both normal (see branches/db.py).
 _ADDED_COLUMNS = {
     "branch_id": "TEXT",
+    # Optional WhatsApp number in international form ("+393331234567"). When
+    # set, this agent's leads also arrive as a WhatsApp alert (see
+    # services/whatsapp.py) — on top of the email, never instead of it.
+    "whatsapp": "TEXT NOT NULL DEFAULT ''",
 }
 
 # Fields the dashboard may write. `number` is assigned here and is deliberately
 # not editable — it identifies the agent.
-_EDITABLE = ("name", "email", "branch_id")
+_EDITABLE = ("name", "email", "whatsapp", "branch_id")
 
 _initialized = False
 
@@ -146,7 +150,11 @@ def get_many(agent_ids: list[str], tenant_id: str) -> dict[str, dict[str, Any]]:
 
 
 def create(
-    tenant_id: str, name: str, email: str, branch_id: Optional[str] = None
+    tenant_id: str,
+    name: str,
+    email: str,
+    branch_id: Optional[str] = None,
+    whatsapp: str = "",
 ) -> dict[str, Any]:
     """Add an agent and hand them the lowest number this tenant isn't using.
 
@@ -174,18 +182,20 @@ def create(
             "number": number,
             "name": name,
             "email": email,
+            "whatsapp": whatsapp or "",
             "branch_id": branch_id or None,
             "created_at": now,
             "updated_at": now,
         }
         conn.execute(
             "INSERT INTO agency_agents "
-            "(id, tenant_id, number, name, email, branch_id, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "(id, tenant_id, number, name, email, whatsapp, branch_id, "
+            "created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 agent["id"], agent["tenant_id"], agent["number"], agent["name"],
-                agent["email"], agent["branch_id"], agent["created_at"],
-                agent["updated_at"],
+                agent["email"], agent["whatsapp"], agent["branch_id"],
+                agent["created_at"], agent["updated_at"],
             ),
         )
         conn.commit()
@@ -194,7 +204,7 @@ def create(
 
 
 def update(agent_id: str, tenant_id: str, fields: dict) -> Optional[dict[str, Any]]:
-    """Edit an agent's name/email/branch. Unknown fields are ignored; `number`
+    """Edit an agent's name/email/WhatsApp/branch. Unknown fields are ignored; `number`
     can't be changed. Returns the updated row, or None if it isn't this
     tenant's.
 

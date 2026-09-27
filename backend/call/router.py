@@ -25,6 +25,7 @@ from branches import routing as branch_routing
 from calls import db as calls_db
 from config import settings
 from listings.store import store, tenant_stores
+from services import whatsapp
 from tenants import db
 
 logger = logging.getLogger(__name__)
@@ -1221,10 +1222,10 @@ def _inject_branch_enum(tools: list[dict[str, Any]], branch_names: list[str]) ->
 def _collects_email(tenant: Optional[dict[str, Any]]) -> bool:
     """Whether she asks this call's caller for an e-mail address.
 
-    Demo tenants only, for now: it is a trial of how well she takes an address
-    down by voice before any client relies on it. The demos are recognised by
-    the numbers they are created on at startup (main.py); a missing tenant row
-    is the env-var demo fallback.
+    On for a client that opted in (tenants.collect_email, set through
+    POST /admin/tenants/{id}/settings), and always on for the demos. The demos
+    are recognised by the numbers they are created on at startup (main.py); a
+    missing tenant row is the env-var demo fallback.
 
     The Slovak Realtime demo (TWILIO_PHONE_NUMBER_SK) is deliberately LEFT OUT
     so there is a Slovak demo that never mentions e-mail. To put the question
@@ -1232,6 +1233,8 @@ def _collects_email(tenant: Optional[dict[str, Any]]) -> bool:
     the prompt section and the tool field are still in place, they are simply
     not handed to that tenant."""
     if tenant is None:
+        return True
+    if tenant.get("collect_email"):
         return True
     demo_numbers = (
         settings.TWILIO_PHONE_NUMBER,
@@ -1588,6 +1591,8 @@ class _CallContext:
     branch_names: list[str]
     caller: str
     caller_number_known: bool
+    # The agency's fallback WhatsApp number (see _whatsapp_recipients).
+    lead_whatsapp: str = ""
 
 
 def _resolve_call(call_id: str, sip_headers: list[dict[str, Any]]) -> Optional[_CallContext]:
@@ -1665,6 +1670,7 @@ def _resolve_call(call_id: str, sip_headers: list[dict[str, Any]]) -> Optional[_
         content=_content(locale),
         tenant_store=tenant_store,
         lead_email=lead_email,
+        lead_whatsapp=(tenant.get("lead_whatsapp") or "") if tenant else "",
         branch_names=branch_names,
         caller=caller,
         caller_number_known=caller_number_known,
@@ -1681,6 +1687,7 @@ def _new_call_session(call_id: str, ctx: _CallContext) -> dict[str, Any]:
         "caller_number": ctx.caller,
         "caller_number_known": ctx.caller_number_known,
         "lead_email": ctx.lead_email,
+        "lead_whatsapp": ctx.lead_whatsapp,
         "locale": ctx.locale,
         "listings_shown": [],
         "interested_listings": [],
@@ -2224,6 +2231,27 @@ def _resolve_lead_recipients(
     return to, cc, True
 
 
+def _whatsapp_recipients(
+    session: dict[str, Any], agents: list[dict[str, Any]]
+) -> list[str]:
+    """Who gets this call's WhatsApp alert.
+
+    The agents the lead is about who have a WhatsApp number, deduplicated, in
+    interest order. The agency's own number (tenants.lead_whatsapp) is only
+    the fallback — unlike the agency inbox it is NOT copied on agent leads —
+    for a call that touched no agent (a message, an unassigned listing) or
+    whose agents have no WhatsApp number, so no lead goes without a ping."""
+    numbers: list[str] = []
+    for agent in agents:
+        number = (agent.get("whatsapp") or "").strip()
+        if number and number not in numbers:
+            numbers.append(number)
+    if numbers:
+        return numbers
+    agency = (session.get("lead_whatsapp") or "").strip()
+    return [agency] if agency else []
+
+
 def _format_agent_line(
     content: dict[str, Any], agents: list[dict[str, Any]], routed: bool
 ) -> str:
@@ -2252,6 +2280,16 @@ def _agent_display(agent: dict[str, Any]) -> str:
     return f"#{agent.get('number', '?')} {agent.get('name', '')}".strip()
 
 
+def _caller_email(session: dict[str, Any]) -> str:
+    """The e-mail the caller gave, whichever tool recorded it ("" if none)."""
+    caller_info = session.get("caller_info") or {}
+    return (
+        caller_info.get("email")
+        or (session.get("left_message") or {}).get("email")
+        or ""
+    ).strip()
+
+
 def _format_lead_body(
     content: dict[str, Any],
     session: dict[str, Any],
@@ -2273,7 +2311,7 @@ def _format_lead_body(
         # The caller's e-mail sits under the phone number, where the agent looks
         # for how to reach them — whichever tool it came in through.
         caller_info = session.get("caller_info") or {}
-        email = caller_info.get("email") or (session.get("left_message") or {}).get("email")
+        email = _caller_email(session)
         if email:
             lines.append(f"{content['caller_info_labels']['email']}: {email}")
         # Only say something about agent routing when a property was actually in
@@ -2416,7 +2454,11 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
     # question about whose property the caller asked after, not about whether
     # that agent happened to have a working email address (see _call_branch_id).
     session["interest_agents"] = agents
-    if not settings.RESEND_API_KEY or not recipients:
+    # The WhatsApp alert that goes out alongside the email, addressed by the
+    # same rule (see _whatsapp_recipients).
+    wa_numbers = _whatsapp_recipients(session, agents) if whatsapp.enabled() else []
+    email_ready = bool(settings.RESEND_API_KEY and recipients)
+    if not email_ready and not wa_numbers:
         logger.warning("RESEND_API_KEY/lead email not configured — lead email skipped")
         return
 
@@ -2441,6 +2483,23 @@ async def _send_lead_email(session: dict[str, Any]) -> None:
     # Stash the summary so the persistence step can reuse it instead of paying
     # for a second summarisation LLM call.
     session["summary"] = summary
+
+    if wa_numbers:
+        # The caller's e-mail rides along with the number, so an agent working
+        # from WhatsApp alone still has both ways to reach them.
+        email = _caller_email(session)
+        contact = f"{caller} · {email}" if email else caller
+        sent = await whatsapp.send_lead_alert(
+            wa_numbers, contact, summary, session.get("locale")
+        )
+        logger.info(
+            "WhatsApp lead alert for caller %s → %d/%d agent(s)",
+            caller, sent, len(wa_numbers),
+        )
+    if not email_ready:
+        logger.warning("RESEND_API_KEY/lead email not configured — lead email skipped")
+        return
+
     body = f"{summary}\n\n{detail_body}"
 
     payload: dict[str, Any] = {

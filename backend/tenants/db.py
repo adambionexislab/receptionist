@@ -63,6 +63,14 @@ _ADDED_COLUMNS = {
     # gpt-realtime session every tenant has always had) or 'live' (GPT-Live,
     # opt-in, see call/live.py). Read per call, so switching needs no deploy.
     "voice_engine": "TEXT NOT NULL DEFAULT 'realtime'",
+    # 1 → Apollonia also asks this tenant's callers for an e-mail address (see
+    # call/router._collects_email). Off by default; set per client via
+    # POST /admin/tenants/{id}/settings.
+    "collect_email": "INTEGER NOT NULL DEFAULT 0",
+    # The agency's own WhatsApp number ("+<digits>", "" = none): gets the lead
+    # alert when the call touched no agent with a WhatsApp number (see
+    # call/router._whatsapp_recipients). Set via POST /admin/tenants/{id}/settings.
+    "lead_whatsapp": "TEXT NOT NULL DEFAULT ''",
 }
 
 _COLUMNS = {
@@ -81,6 +89,8 @@ _COLUMNS = {
     "access_code",
     "billing_anchor",
     "voice_engine",
+    "collect_email",
+    "lead_whatsapp",
     "active",
 }
 
