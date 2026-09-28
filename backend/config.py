@@ -88,6 +88,12 @@ class Settings(BaseSettings):
     WHATSAPP_PHONE_NUMBER_ID: Optional[str] = None
     WHATSAPP_TEMPLATE: str = "lead_alert"
     WHATSAPP_API_VERSION: str = "v21.0"
+    # Delivery-status webhook (GET/POST /whatsapp/webhook). VERIFY_TOKEN is any
+    # string you choose and paste into the Meta app's webhook setup; APP_SECRET
+    # (App settings → Basic) verifies each POST's X-Hub-Signature-256. Without
+    # the secret, status events are refused rather than trusted.
+    WHATSAPP_VERIFY_TOKEN: Optional[str] = None
+    WHATSAPP_APP_SECRET: Optional[str] = None
 
     # Lead-generation / cold outreach (ApollonIA agency prospecting)
     # Shared staff password for the internal lead-gen dashboard at /leadgen

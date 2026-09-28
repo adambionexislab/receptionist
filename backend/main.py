@@ -30,6 +30,7 @@ from listings import db as listings_db
 from listings.store import ListingsStore, store, tenant_stores
 from routers.leads import router as leads_router
 from routers.leads import webhook_router as leads_webhook_router
+from routers.whatsapp import router as whatsapp_webhook_router
 from services import whatsapp
 from salesnotes import db as salesnotes_db
 from salesnotes.router import router as salesnotes_router
@@ -255,6 +256,7 @@ app.include_router(demo_router)
 app.include_router(leadgen_router)
 app.include_router(leads_router)
 app.include_router(leads_webhook_router)
+app.include_router(whatsapp_webhook_router)
 app.include_router(salesnotes_router)
 app.include_router(dashboard_router)
 if settings.ACQUISIZIONE_ENABLED:

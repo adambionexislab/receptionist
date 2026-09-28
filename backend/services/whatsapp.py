@@ -123,6 +123,20 @@ async def send_lead_alert(
                 )
                 response.raise_for_status()
                 sent += 1
+                # A 200 only means Meta ACCEPTED the message; whether it was
+                # delivered arrives later on the webhook (routers/whatsapp.py),
+                # keyed by this wamid. wa_id is the WhatsApp account Meta
+                # resolved the number to — compare it when a message never
+                # shows up.
+                data = response.json() if response.content else {}
+                message = (data.get("messages") or [{}])[0]
+                contact = (data.get("contacts") or [{}])[0]
+                logger.info(
+                    "WhatsApp lead alert accepted by Meta: to=%s wa_id=%s "
+                    "wamid=%s status=%s",
+                    number, contact.get("wa_id"), message.get("id"),
+                    message.get("message_status", "accepted"),
+                )
             except httpx.HTTPStatusError as exc:
                 # Meta's error body names the actual problem (template not
                 # approved in this language, number not on WhatsApp, …).
