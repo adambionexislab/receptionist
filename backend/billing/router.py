@@ -94,7 +94,7 @@ async def create_checkout_session(data: CheckoutRequest):
         # Which terms were accepted and when. The timestamp is taken here rather
         # than in the browser so it cannot be spoofed by the client.
         "terms_accepted": (
-            f"ApollonIA-VOP-SK.pdf @ {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')}"
+            f"ApollonIA_VOP_SK_2.pdf @ {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')}"
             if data.terms_accepted
             else ""
         ),
