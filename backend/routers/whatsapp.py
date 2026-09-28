@@ -77,9 +77,23 @@ def log_statuses(payload: dict) -> None:
 async def receive(request: Request):
     body = await request.body()
     if not _signature_ok(body, request.headers.get("x-hub-signature-256", "")):
+        # Logged, because "Meta never called" and "Meta called with a secret
+        # we don't match" otherwise look identical: no status line at all.
+        logger.warning(
+            "WhatsApp webhook rejected: bad signature (%s) — check "
+            "WHATSAPP_APP_SECRET is the App secret of the app the webhook is on",
+            "secret unset" if not settings.WHATSAPP_APP_SECRET else "mismatch",
+        )
         raise HTTPException(status_code=401, detail="Bad signature")
     try:
-        log_statuses(json.loads(body))
+        payload = json.loads(body)
+        fields = [
+            change.get("field")
+            for entry in payload.get("entry") or []
+            for change in entry.get("changes") or []
+        ]
+        logger.info("WhatsApp webhook received: fields=%s", fields)
+        log_statuses(payload)
     except Exception:
         # Always 200 on a signed payload: a non-2xx makes Meta retry the same
         # event for days, and a logging slip is not worth that.
