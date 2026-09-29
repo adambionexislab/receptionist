@@ -393,14 +393,19 @@ def _expand_session(session: dict) -> dict:
     by ID, so the purchased items and the renewal date need an explicit
     retrieve. A failure here must not cost us the notification: fall back to
     the event's own copy, which still has the billing details and the totals.
+
+    Always returns a plain dict: StripeObject stopped subclassing dict in newer
+    stripe-python, and everything downstream reads it with .get().
     """
+    if not isinstance(session, dict):
+        session = session.to_dict()
     if not settings.STRIPE_SECRET_KEY:
         return session
     try:
         stripe.api_key = settings.STRIPE_SECRET_KEY
         return stripe.checkout.Session.retrieve(
             session["id"], expand=["line_items", "subscription"]
-        )
+        ).to_dict()
     except Exception as exc:
         logger.warning("Could not expand checkout session %s: %s", session.get("id"), exc)
         return session
