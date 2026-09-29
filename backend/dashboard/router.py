@@ -102,9 +102,10 @@ def login(data: LoginRequest):
     if not tenant:
         # Same response for unknown/blank codes — don't reveal which codes exist.
         raise HTTPException(status_code=401, detail="Invalid code")
-    resp = JSONResponse(
-        {"agency_name": tenant["agency_name"], "locale": tenant.get("locale") or "it"}
-    )
+    # The same payload as /me: the browser renders the app straight from this
+    # response, so anything missing here (the feature flags hid the AI tools
+    # tab) would stay missing until a refresh re-read /me.
+    resp = JSONResponse(_me_payload(tenant))
     resp.set_cookie(value=sess.issue(tenant["id"]), **sess.cookie_kwargs())
     logger.info("Dashboard login for tenant %s (%s)", tenant["id"], tenant["agency_name"])
     return resp
@@ -119,6 +120,10 @@ def logout():
 
 @router.get("/dashboard/api/me")
 def me(tenant: dict = Depends(current_tenant)):
+    return _me_payload(tenant)
+
+
+def _me_payload(tenant: dict) -> dict:
     return {
         "agency_name": tenant["agency_name"],
         "agent_name": tenant.get("agent_name") or "Apollonia",
