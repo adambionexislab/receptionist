@@ -25,6 +25,7 @@ from branches import routing as branch_routing
 from calls import db as calls_db
 from config import settings
 from listings.store import store, tenant_stores
+from noanswer import db as noanswer_db
 from services import whatsapp
 from tenants import db
 
@@ -1593,6 +1594,9 @@ class _CallContext:
     caller_number_known: bool
     # The agency's fallback WhatsApp number (see _whatsapp_recipients).
     lead_whatsapp: str = ""
+    # The caller is on the agency's personal-numbers list (noanswer/db.py):
+    # the call is declined before she picks up.
+    no_answer: bool = False
 
 
 def _resolve_call(call_id: str, sip_headers: list[dict[str, Any]]) -> Optional[_CallContext]:
@@ -1664,6 +1668,23 @@ def _resolve_call(call_id: str, sip_headers: list[dict[str, Any]]) -> Optional[_
             caller, tenant_real,
         )
 
+    # Family and friends the owner listed: their calls reach this number only
+    # because the owner's phone forwards every unanswered call, and the owner
+    # doesn't want her picking those up. Only a usable caller number can match
+    # — a clobbered caller ID is the owner's own number.
+    listed = None
+    if tenant is not None and caller_number_known:
+        try:
+            listed = noanswer_db.find(tenant["id"], caller)
+        except Exception:
+            # Never fail a call over the list: she answers as the receptionist.
+            logger.exception("Could not read the no-answer list for tenant %s", tenant["id"])
+    if listed:
+        logger.info(
+            "Caller %s is on the no-answer list (%s)",
+            caller, listed.get("name") or "no name",
+        )
+
     return _CallContext(
         tenant=tenant,
         locale=locale,
@@ -1674,6 +1695,7 @@ def _resolve_call(call_id: str, sip_headers: list[dict[str, Any]]) -> Optional[_
         branch_names=branch_names,
         caller=caller,
         caller_number_known=caller_number_known,
+        no_answer=listed is not None,
     )
 
 
@@ -1723,6 +1745,10 @@ def _uses_live_engine(ctx: _CallContext) -> bool:
     answered on Realtime rather than not at all."""
     tenant = ctx.tenant
     if not tenant or (tenant.get("voice_engine") or "realtime") != "live":
+        return False
+    # A listed caller is declined by the Realtime handler; GPT-Live must leave
+    # it alone so the call gets exactly one decision.
+    if ctx.no_answer:
         return False
     from call import live  # live imports this module, so import it at use
 
@@ -1791,6 +1817,17 @@ async def _handle_realtime_incoming(data: dict[str, Any]) -> Response:
         # Only this handler rejects — the live one ignores unknown numbers —
         # so the call is never declined twice.
         await _reject_call(call_id, 404)
+        return Response(status_code=200)
+
+    if ctx.no_answer:
+        # On the owner's personal-numbers list: she doesn't pick up at all.
+        # 486 Busy Here is what an engaged line returns, so the caller hears
+        # the ordinary busy tone rather than a "call rejected" announcement.
+        # Declined before accepting, so no session is opened and nothing is
+        # billed or logged as a call.
+        if _claim_call(call_id):
+            logger.info("Declining call %s — caller is on the no-answer list", call_id)
+            await _reject_call(call_id, 486)
         return Response(status_code=200)
 
     if _uses_live_engine(ctx):

@@ -36,6 +36,8 @@ from dashboard import session as sess
 from geo import geocode
 from listings import db as listings_db
 from listings import store
+from noanswer import contacts_file
+from noanswer import db as noanswer_db
 from services import whatsapp
 from tenants import db
 from usage import db as usage_db
@@ -632,6 +634,96 @@ def delete_branch(branch_id: str, tenant: dict = Depends(current_tenant)):
     Past calls and tool uses keep pointing at it and stay in the agency's
     totals; they just stop being reachable through the switcher."""
     if not branches_db.delete(branch_id, tenant["id"]):
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"ok": True}
+
+
+# ── personal numbers (the no-answer list) ───────────────────────────────────
+# People the owner knows personally, whose calls reach Apollonia only because
+# the owner's phone forwards every unanswered call. She doesn't treat them as
+# leads: she says the owner can't answer and offers to take a message (see
+# noanswer/db.py). One list per agency — it is the owner's phone book, so the
+# selected branch doesn't scope it.
+
+# An exported phone book of a few thousand contacts is well under 1 MB; this
+# only keeps a wrong file (a photo, a backup) from being parsed in memory.
+_CONTACTS_FILE_MAX_CHARS = 5_000_000
+# What one save may add at once — a whole phone book, but not unbounded.
+_NO_ANSWER_BULK_MAX = 5000
+
+
+class NoAnswerEntry(BaseModel):
+    number: str
+    name: str = ""
+
+
+class NoAnswerBulk(BaseModel):
+    entries: list[NoAnswerEntry]
+
+
+class ContactsFile(BaseModel):
+    text: str
+
+
+def _no_answer_number(raw: str) -> str:
+    number = noanswer_db.normalize(raw)
+    if number is None:
+        raise HTTPException(status_code=422, detail="Invalid phone number")
+    return number
+
+
+@router.get("/dashboard/api/no-answer")
+def no_answer_list(tenant: dict = Depends(current_tenant)):
+    return {"numbers": noanswer_db.list_for_tenant(tenant["id"])}
+
+
+@router.post("/dashboard/api/no-answer", status_code=201)
+def no_answer_add(data: NoAnswerEntry, tenant: dict = Depends(current_tenant)):
+    """List one number typed by hand. 409 when that line is already listed,
+    under this or any other spelling."""
+    row = noanswer_db.add(
+        tenant["id"], _no_answer_number(data.number), data.name[:120]
+    )
+    if row is None:
+        raise HTTPException(status_code=409, detail="Already listed")
+    return row
+
+
+@router.post("/dashboard/api/no-answer/bulk")
+def no_answer_bulk(data: NoAnswerBulk, tenant: dict = Depends(current_tenant)):
+    """List the entries ticked in a contacts-file preview. Entries that aren't
+    numbers, or are listed already, are skipped and counted rather than failing
+    the rest — the owner picked them from their own phone book and shouldn't
+    have to work out which one was refused."""
+    if len(data.entries) > _NO_ANSWER_BULK_MAX:
+        raise HTTPException(status_code=413, detail="Too many entries")
+    added = skipped = 0
+    for entry in data.entries:
+        number = noanswer_db.normalize(entry.number)
+        if number and noanswer_db.add(tenant["id"], number, entry.name[:120]):
+            added += 1
+        else:
+            skipped += 1
+    return {"added": added, "skipped": skipped}
+
+
+@router.post("/dashboard/api/no-answer/parse")
+def no_answer_parse(data: ContactsFile, tenant: dict = Depends(current_tenant)):
+    """Read an exported phone book (vCard or CSV) and return what is in it,
+    without storing anything. Each contact says whether it is listed already,
+    so the preview can show those as done."""
+    if len(data.text) > _CONTACTS_FILE_MAX_CHARS:
+        raise HTTPException(status_code=413, detail="File too large")
+    listed = noanswer_db.listed_keys(tenant["id"])
+    contacts = contacts_file.parse(data.text)
+    for c in contacts:
+        c["listed"] = noanswer_db.match_key(c["number"]) in listed
+    return {"contacts": contacts}
+
+
+@router.delete("/dashboard/api/no-answer/{entry_id}")
+def no_answer_delete(entry_id: str, tenant: dict = Depends(current_tenant)):
+    if not noanswer_db.delete(entry_id, tenant["id"]):
         raise HTTPException(status_code=404, detail="Not found")
     return {"ok": True}
 

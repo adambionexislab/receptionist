@@ -293,6 +293,52 @@
   .branch-areas { min-height: 82px; font-size: .85rem; }
   .branch-suggest { margin-top: 8px; font-size: .78rem; padding: 6px 10px; }
 
+  /* ── settings: personal numbers ─────────────────────────────────────── */
+  .settings-block { max-width: 760px; }
+  .settings-block h3 { font-size: 1.05rem; margin: 0 0 6px; }
+  .na-hint { color: var(--text-dim); font-size: .88rem; margin: 0 0 18px; }
+  .na-add { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+  .na-add input { padding: 9px 11px; font-size: .9rem; }
+  .na-add .btn.ghost { height: 40px; }
+  .na-add + .err { margin-top: 6px; }
+  .na-import { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+  .na-import-formats { font-size: .8rem; color: var(--text-dim); }
+  .na-howto { font-size: .82rem; color: var(--text-dim); margin-top: 10px; }
+  .na-howto summary { cursor: pointer; color: var(--accent); width: fit-content; }
+  .na-howto ul { margin: 8px 0 0; padding-left: 18px; line-height: 1.6; }
+  .na-preview { margin-bottom: 14px; }
+  .na-preview-head { padding: 14px 16px; border-bottom: 1px solid var(--border); display: grid; gap: 8px; }
+  .na-found { font-weight: 600; }
+  .na-pick-hint { font-size: .82rem; color: var(--amber); }
+  .na-preview-head input[type="search"] { padding: 8px 10px; font-size: .88rem; }
+  .na-preview-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+  .na-pick-list { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow-y: auto; }
+  .na-pick-list li { border-bottom: 1px solid var(--border); }
+  .na-pick-list label {
+    display: flex; align-items: center; gap: 10px; margin: 0; padding: 9px 16px; cursor: pointer;
+    text-transform: none; letter-spacing: 0; font-size: .9rem; color: var(--text);
+  }
+  .na-pick-list input[type="checkbox"] { width: 16px; height: 16px; flex: none; accent-color: var(--accent); }
+  .na-pick-list .na-listed { opacity: .55; cursor: default; }
+  .na-entry-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .na-entry-name.na-unnamed { color: var(--text-dim); font-style: italic; }
+  .na-entry-num { font-variant-numeric: tabular-nums; color: var(--text-dim); white-space: nowrap; }
+  .na-tag { font-size: .74rem; color: var(--text-dim); white-space: nowrap; }
+  .na-preview-actions { display: flex; gap: 8px; padding: 12px 16px; flex-wrap: wrap; }
+  .na-status { font-size: .85rem; color: var(--green); min-height: 1.2em; margin: 4px 0 10px; }
+  .na-list { list-style: none; margin: 0; padding: 0; }
+  .na-list li {
+    display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+    border-bottom: 1px solid var(--border); font-size: .92rem;
+  }
+  .na-list li:last-child { border-bottom: none; }
+  .na-list .btn.ghost { padding: 5px 10px; font-size: .8rem; }
+  @media (max-width: 720px) {
+    .na-add { grid-template-columns: 1fr; }
+    .na-list li { flex-wrap: wrap; row-gap: 2px; }
+    .na-list .na-entry-name { flex-basis: 100%; }
+  }
+
   /* ── branch scope bar ───────────────────────────────────────────────── */
   /* Which office everything below is showing. Deliberately the largest text on
      the page after the numbers themselves: every figure on the overview means
@@ -708,6 +754,7 @@
       <button class="tab" id="tab-agents" data-view="agents">Agenti</button>
       <button class="tab" id="tab-branches" data-view="branches">Sedi</button>
       <button class="tab hidden" id="tab-acquisizione" data-view="acquisizione">Strumenti AI</button>
+      <button class="tab" id="tab-settings" data-view="settings">Impostazioni</button>
     </nav>
     <div class="spacer"></div>
     <span class="theme-switch" id="theme-switch-header" role="group" aria-label="Tema">
@@ -848,6 +895,68 @@
       <div id="branches-grid" class="agents-grid"></div>
       <div class="card">
         <div class="empty hidden" id="branches-empty">Nessuna sede ancora.</div>
+      </div>
+    </section>
+
+    <section id="view-settings" class="view">
+      <h2 id="settings-title">Impostazioni</h2>
+      <div class="settings-block">
+        <h3 id="na-title">Numeri personali</h3>
+        <p class="na-hint" id="na-hint"></p>
+
+        <form class="na-add" id="na-add-form" novalidate>
+          <div>
+            <label for="na-number" id="na-number-lbl">Numero di telefono</label>
+            <input type="tel" id="na-number" inputmode="tel" autocomplete="off" placeholder="+39 333 123 4567">
+          </div>
+          <div>
+            <label for="na-name" id="na-name-lbl">Nome (facoltativo)</label>
+            <input type="text" id="na-name" autocomplete="off" maxlength="120">
+          </div>
+          <button type="submit" class="btn ghost" id="na-add-btn">Aggiungi</button>
+        </form>
+        <div class="err" id="na-add-err"></div>
+
+        <div class="na-import">
+          <button type="button" class="btn ghost" id="na-import-btn">Importa dalla rubrica</button>
+          <span class="na-import-formats" id="na-import-formats"></span>
+          <input type="file" id="na-file" accept=".vcf,.vcard,.csv,text/vcard,text/x-vcard,text/csv" hidden>
+        </div>
+        <details class="na-howto">
+          <summary id="na-howto">Come esporto la rubrica?</summary>
+          <ul>
+            <li id="na-howto-iphone"></li>
+            <li id="na-howto-android"></li>
+            <li id="na-howto-google"></li>
+          </ul>
+        </details>
+        <div class="err" id="na-import-err"></div>
+
+        <!-- What the file held. Nothing is saved until the owner ticks people:
+             a phone book is mostly clients, and they must keep reaching
+             Apollonia, so nothing starts ticked. -->
+        <div class="card na-preview hidden" id="na-preview">
+          <div class="na-preview-head">
+            <div class="na-found" id="na-found"></div>
+            <div class="na-pick-hint" id="na-pick-hint"></div>
+            <input type="search" id="na-search" autocomplete="off">
+            <div class="na-preview-tools">
+              <button type="button" class="btn ghost" id="na-select-all">Seleziona i visibili</button>
+              <button type="button" class="btn ghost" id="na-select-none">Deseleziona tutti</button>
+            </div>
+          </div>
+          <ul class="na-pick-list" id="na-pick-list"></ul>
+          <div class="na-preview-actions">
+            <button type="button" class="btn ghost" id="na-add-selected" disabled></button>
+            <button type="button" class="btn ghost" id="na-preview-cancel">Annulla</button>
+          </div>
+        </div>
+        <div class="na-status" id="na-status" role="status"></div>
+
+        <div class="card">
+          <ul class="na-list" id="na-list"></ul>
+          <div class="empty hidden" id="na-empty">Nessun numero personale ancora.</div>
+        </div>
       </div>
     </section>
 
@@ -1366,6 +1475,38 @@
       branch_delete_frees: "{n} agenti resteranno senza sede.",
       branch_delete_frees_few: "{n} agenti resteranno senza sede.",
       branch_delete_frees_one: "1 agente resterà senza sede.",
+      // Impostazioni → numeri personali (familiari e amici: Apollonia non risponde).
+      settings_tab: "Impostazioni",
+      na_title: "Numeri personali",
+      na_hint: "Apollonia non risponde alle chiamate da questi numeri (familiari, amici): se non rispondi tu, chi chiama sente il segnale di occupato.",
+      na_number: "Numero di telefono",
+      na_name: "Nome (facoltativo)",
+      na_add: "Aggiungi",
+      na_invalid: "Numero non valido.",
+      na_dup: "Questo numero è già in elenco.",
+      na_import: "Importa dalla rubrica",
+      na_import_formats: "File .vcf o .csv esportato dal telefono.",
+      na_howto: "Come esporto la rubrica?",
+      na_howto_iphone: "iPhone: su icloud.com apri Contatti, selezionali tutti e scegli Esporta vCard.",
+      na_howto_android: "Android: app Contatti → Impostazioni (o Gestisci contatti) → Esporta → file .vcf.",
+      na_howto_google: "Google Contatti (contacts.google.com): Esporta → vCard oppure Google CSV.",
+      na_found: "{n} numeri trovati nel file.",
+      na_found_few: "{n} numeri trovati nel file.",
+      na_found_one: "1 numero trovato nel file.",
+      na_pick_hint: "Seleziona solo familiari e amici: i clienti salvati in rubrica devono continuare a parlare con Apollonia.",
+      na_search: "Cerca per nome o numero",
+      na_select_all: "Seleziona i visibili",
+      na_select_none: "Deseleziona tutti",
+      na_listed: "già in elenco",
+      na_add_selected: "Aggiungi selezionati ({n})",
+      na_none_found: "Nessun numero di telefono trovato nel file.",
+      na_file_err: "Impossibile leggere il file.",
+      na_added: "{n} numeri aggiunti.",
+      na_added_few: "{n} numeri aggiunti.",
+      na_added_one: "1 numero aggiunto.",
+      na_empty: "Nessun numero personale ancora.",
+      na_delete: "Rimuovi",
+      na_no_name: "Senza nome",
       // Lo switch in alto: quale sede si sta guardando.
       scope_label: "Vista",
       scope_all: "Tutta l'agenzia",
@@ -1646,6 +1787,37 @@
       branch_delete_frees: "{n} maklérov ostane bez pobočky.",
       branch_delete_frees_few: "{n} makléri ostanú bez pobočky.",
       branch_delete_frees_one: "1 maklér ostane bez pobočky.",
+      settings_tab: "Nastavenia",
+      na_title: "Osobné čísla",
+      na_hint: "Apollonia neprijíma hovory z týchto čísel (rodina, priatelia): ak hovor neprijmete vy, volajúci počuje obsadzovací tón.",
+      na_number: "Telefónne číslo",
+      na_name: "Meno (nepovinné)",
+      na_add: "Pridať",
+      na_invalid: "Neplatné číslo.",
+      na_dup: "Toto číslo už je v zozname.",
+      na_import: "Importovať z kontaktov",
+      na_import_formats: "Súbor .vcf alebo .csv exportovaný z telefónu.",
+      na_howto: "Ako exportujem kontakty?",
+      na_howto_iphone: "iPhone: na icloud.com otvorte Kontakty, označte všetky a zvoľte Exportovať vCard.",
+      na_howto_android: "Android: aplikácia Kontakty → Nastavenia (alebo Spravovať kontakty) → Exportovať → súbor .vcf.",
+      na_howto_google: "Kontakty Google (contacts.google.com): Exportovať → vCard alebo Google CSV.",
+      na_found: "V súbore sa našlo {n} čísel.",
+      na_found_few: "V súbore sa našli {n} čísla.",
+      na_found_one: "V súbore sa našlo 1 číslo.",
+      na_pick_hint: "Označte iba rodinu a priateľov: klienti uložení v kontaktoch majú naďalej hovoriť s Apolloniou.",
+      na_search: "Hľadať podľa mena alebo čísla",
+      na_select_all: "Označiť zobrazené",
+      na_select_none: "Zrušiť výber",
+      na_listed: "už v zozname",
+      na_add_selected: "Pridať označené ({n})",
+      na_none_found: "V súbore sa nenašlo žiadne telefónne číslo.",
+      na_file_err: "Súbor sa nepodarilo načítať.",
+      na_added: "Pridaných {n} čísel.",
+      na_added_few: "Pridané {n} čísla.",
+      na_added_one: "Pridané 1 číslo.",
+      na_empty: "Zatiaľ žiadne osobné čísla.",
+      na_delete: "Odstrániť",
+      na_no_name: "Bez mena",
       scope_label: "Zobrazenie",
       scope_all: "Celá agentúra",
       scope_all_hint: "Všetky údaje a kredit",
@@ -1846,6 +2018,15 @@
     "branches-hint": "branches_hint", "branch-add-btn": "branch_add",
     "branches-empty": "branches_empty", "scope-eyebrow": "scope_label",
     "tab-acquisizione": "acq_tab", "acq-title": "acq_title",
+    "tab-settings": "settings_tab", "settings-title": "settings_tab",
+    "na-title": "na_title", "na-hint": "na_hint",
+    "na-number-lbl": "na_number", "na-name-lbl": "na_name", "na-add-btn": "na_add",
+    "na-import-btn": "na_import", "na-import-formats": "na_import_formats",
+    "na-howto": "na_howto", "na-howto-iphone": "na_howto_iphone",
+    "na-howto-android": "na_howto_android", "na-howto-google": "na_howto_google",
+    "na-pick-hint": "na_pick_hint", "na-select-all": "na_select_all",
+    "na-select-none": "na_select_none", "na-preview-cancel": "listing_cancel",
+    "na-empty": "na_empty",
     "acq-consent-text": "acq_consent_text", "acq-consent-label": "acq_consent_label",
     "acq-start-btn": "acq_start_btn", "acq-finish-btn": "acq_finish_btn",
     "acq-new-btn": "acq_new_btn", "acq-processing-text": "acq_processing_text",
@@ -1894,6 +2075,7 @@
       const n = $(id);
       if (n && s[key] != null) n.textContent = s[key];
     }
+    $("na-search").placeholder = s.na_search;
     const transcriptEl = $("acq-transcript");
     if (transcriptEl) transcriptEl.setAttribute("data-placeholder", s.acq_transcript_placeholder);
     if (window.AcqRefreshLiveLabels) window.AcqRefreshLiveLabels();
@@ -2087,6 +2269,7 @@
     // Headcounts are what the branch cards show, and hiring happens on the
     // Agenti tab — re-read them rather than showing a stale number.
     if (name === "branches") loadBranches();
+    if (name === "settings") loadNoAnswer();
   }
 
   async function loadSummary() {
@@ -3126,6 +3309,202 @@
     for (const b of rows) grid.appendChild(branchReadCard(b));
     refreshBranchesEmpty();
   }
+
+  // ── Settings: personal numbers ──────────────────────────────────────────
+  // Family and friends whose calls reach Apollonia only because the owner's
+  // phone forwards every unanswered call. She tells them the owner can't
+  // answer and offers to take a message, instead of qualifying them as leads.
+  // One list for the whole agency — the branch switcher doesn't scope it.
+  let NA_PICK = [];  // contacts read from the last uploaded file
+
+  function naEntryName(name) {
+    const span = el("span", "na-entry-name" + (name ? "" : " na-unnamed"), name || S().na_no_name);
+    if (name) span.title = name;
+    return span;
+  }
+
+  function renderNoAnswer(rows) {
+    const list = $("na-list");
+    list.innerHTML = "";
+    for (const r of rows) {
+      const li = el("li");
+      li.appendChild(naEntryName(r.name));
+      li.appendChild(el("span", "na-entry-num", r.number));
+      const del = el("button", "btn ghost listing-danger", S().na_delete);
+      del.type = "button";
+      del.addEventListener("click", async () => {
+        del.disabled = true;
+        try {
+          const resp = await api("/dashboard/api/no-answer/" + r.id, { method: "DELETE" });
+          if (!resp.ok && resp.status !== 404) throw new Error("delete " + resp.status);
+          await loadNoAnswer();
+        } catch (_) {
+          del.disabled = false;
+          $("na-status").textContent = "";
+          $("na-add-err").textContent = S().listing_save_err;
+        }
+      });
+      li.appendChild(del);
+      list.appendChild(li);
+    }
+    $("na-empty").classList.toggle("hidden", rows.length > 0);
+  }
+
+  async function loadNoAnswer() {
+    try {
+      const resp = await api("/dashboard/api/no-answer");
+      if (!resp.ok) return;
+      renderNoAnswer((await resp.json()).numbers || []);
+    } catch (_) { /* keep what is on screen on a transient error */ }
+  }
+
+  $("na-add-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = $("na-add-err");
+    const btn = $("na-add-btn");
+    err.textContent = "";
+    $("na-status").textContent = "";
+    const number = $("na-number").value.trim();
+    if ((number.match(/\d/g) || []).length < 6) { err.textContent = S().na_invalid; return; }
+    btn.disabled = true;
+    try {
+      const resp = await api("/dashboard/api/no-answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ number: number, name: $("na-name").value.trim() }),
+      });
+      if (resp.status === 409) { err.textContent = S().na_dup; return; }
+      if (resp.status === 422) { err.textContent = S().na_invalid; return; }
+      if (!resp.ok) throw new Error("add " + resp.status);
+      $("na-number").value = "";
+      $("na-name").value = "";
+      await loadNoAnswer();
+      $("na-number").focus();
+    } catch (_) {
+      err.textContent = S().listing_save_err;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ── contacts-file import: upload → preview → tick → save ──
+  function naCloseImport() {
+    NA_PICK = [];
+    $("na-preview").classList.add("hidden");
+    $("na-pick-list").innerHTML = "";
+    $("na-search").value = "";
+  }
+
+  function naSelectedCount() {
+    return NA_PICK.filter((c) => c.checked).length;
+  }
+
+  function naRefreshSelected() {
+    const n = naSelectedCount();
+    const btn = $("na-add-selected");
+    btn.textContent = S().na_add_selected.replace("{n}", n);
+    btn.disabled = n === 0;
+  }
+
+  function naMatches(c, q) {
+    if (!q) return true;
+    const digits = q.replace(/\D/g, "");
+    return (c.name || "").toLowerCase().includes(q) ||
+      (digits.length >= 2 && c.number.replace(/\D/g, "").includes(digits));
+  }
+
+  function renderNaPick() {
+    const q = $("na-search").value.trim().toLowerCase();
+    const list = $("na-pick-list");
+    list.innerHTML = "";
+    for (const c of NA_PICK) {
+      if (!naMatches(c, q)) continue;
+      const li = el("li");
+      const label = el("label", c.listed ? "na-listed" : null);
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = c.listed || c.checked;
+      box.disabled = c.listed;
+      box.addEventListener("change", () => { c.checked = box.checked; naRefreshSelected(); });
+      label.appendChild(box);
+      label.appendChild(naEntryName(c.name));
+      label.appendChild(el("span", "na-entry-num", c.number));
+      if (c.listed) label.appendChild(el("span", "na-tag", S().na_listed));
+      li.appendChild(label);
+      list.appendChild(li);
+    }
+    naRefreshSelected();
+  }
+
+  $("na-import-btn").addEventListener("click", () => $("na-file").click());
+
+  $("na-file").addEventListener("change", async () => {
+    const file = $("na-file").files[0];
+    $("na-file").value = "";  // picking the same file again must fire again
+    if (!file) return;
+    const err = $("na-import-err");
+    err.textContent = "";
+    $("na-status").textContent = "";
+    naCloseImport();
+    try {
+      const text = await file.text();
+      const resp = await api("/dashboard/api/no-answer/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text }),
+      });
+      if (!resp.ok) throw new Error("parse " + resp.status);
+      const contacts = (await resp.json()).contacts || [];
+      if (!contacts.length) { err.textContent = S().na_none_found; return; }
+      // Nothing starts ticked: most of a phone book is clients.
+      NA_PICK = contacts.map((c) => Object.assign({ checked: false }, c));
+      $("na-found").textContent = pluralize("na_found", contacts.length);
+      $("na-preview").classList.remove("hidden");
+      renderNaPick();
+      $("na-search").focus();
+    } catch (_) {
+      err.textContent = S().na_file_err;
+    }
+  });
+
+  $("na-search").addEventListener("input", renderNaPick);
+
+  $("na-select-all").addEventListener("click", () => {
+    const q = $("na-search").value.trim().toLowerCase();
+    for (const c of NA_PICK) if (!c.listed && naMatches(c, q)) c.checked = true;
+    renderNaPick();
+  });
+
+  $("na-select-none").addEventListener("click", () => {
+    for (const c of NA_PICK) c.checked = false;
+    renderNaPick();
+  });
+
+  $("na-preview-cancel").addEventListener("click", naCloseImport);
+
+  $("na-add-selected").addEventListener("click", async () => {
+    const btn = $("na-add-selected");
+    const entries = NA_PICK.filter((c) => c.checked && !c.listed)
+      .map((c) => ({ number: c.number, name: c.name || "" }));
+    if (!entries.length) return;
+    btn.disabled = true;
+    $("na-import-err").textContent = "";
+    try {
+      const resp = await api("/dashboard/api/no-answer/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entries: entries }),
+      });
+      if (!resp.ok) throw new Error("bulk " + resp.status);
+      const result = await resp.json();
+      naCloseImport();
+      await loadNoAnswer();
+      $("na-status").textContent = pluralize("na_added", result.added || 0);
+    } catch (_) {
+      $("na-import-err").textContent = S().listing_save_err;
+      naRefreshSelected();
+    }
+  });
 
   function showLogin() {
     $("app").classList.add("hidden");
