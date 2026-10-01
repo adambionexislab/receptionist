@@ -326,6 +326,11 @@
   .na-tag { font-size: .74rem; color: var(--text-dim); white-space: nowrap; }
   .na-preview-actions { display: flex; gap: 8px; padding: 12px 16px; flex-wrap: wrap; }
   .na-status { font-size: .85rem; color: var(--green); min-height: 1.2em; margin: 4px 0 10px; }
+  .na-list-head {
+    display: flex; align-items: baseline; gap: 10px; padding: 12px 16px;
+    border-bottom: 1px solid var(--border); font-weight: 600; font-size: .95rem;
+  }
+  .na-list-count { font-weight: 400; font-size: .82rem; color: var(--text-dim); }
   .na-list { list-style: none; margin: 0; padding: 0; }
   .na-list li {
     display: flex; align-items: center; gap: 12px; padding: 10px 16px;
@@ -954,6 +959,10 @@
         <div class="na-status" id="na-status" role="status"></div>
 
         <div class="card">
+          <div class="na-list-head">
+            <span id="na-list-title">Elenco senza risposta</span>
+            <span class="na-list-count" id="na-list-count"></span>
+          </div>
           <ul class="na-list" id="na-list"></ul>
           <div class="empty hidden" id="na-empty">Nessun numero personale ancora.</div>
         </div>
@@ -1481,6 +1490,10 @@
       na_hint: "Apollonia non risponde alle chiamate da questi numeri (familiari, amici): se non rispondi tu, chi chiama sente il segnale di occupato.",
       na_number: "Numero di telefono",
       na_number_placeholder: "+39 333 123 4567",
+      na_list_title: "Elenco senza risposta",
+      na_count: "{n} numeri",
+      na_count_few: "{n} numeri",
+      na_count_one: "1 numero",
       na_name: "Nome (facoltativo)",
       na_add: "Aggiungi",
       na_invalid: "Numero non valido.",
@@ -1793,6 +1806,10 @@
       na_hint: "Apollonia neprijíma hovory z týchto čísel (rodina, priatelia): ak hovor neprijmete vy, volajúci počuje obsadzovací tón.",
       na_number: "Telefónne číslo",
       na_number_placeholder: "+421 903 123 456",
+      na_list_title: "Zoznam bez odpovede",
+      na_count: "{n} čísel",
+      na_count_few: "{n} čísla",
+      na_count_one: "1 číslo",
       na_name: "Meno (nepovinné)",
       na_add: "Pridať",
       na_invalid: "Neplatné číslo.",
@@ -2028,7 +2045,7 @@
     "na-howto-android": "na_howto_android", "na-howto-google": "na_howto_google",
     "na-pick-hint": "na_pick_hint", "na-select-all": "na_select_all",
     "na-select-none": "na_select_none", "na-preview-cancel": "listing_cancel",
-    "na-empty": "na_empty",
+    "na-empty": "na_empty", "na-list-title": "na_list_title",
     "acq-consent-text": "acq_consent_text", "acq-consent-label": "acq_consent_label",
     "acq-start-btn": "acq_start_btn", "acq-finish-btn": "acq_finish_btn",
     "acq-new-btn": "acq_new_btn", "acq-processing-text": "acq_processing_text",
@@ -3351,6 +3368,7 @@
       list.appendChild(li);
     }
     $("na-empty").classList.toggle("hidden", rows.length > 0);
+    $("na-list-count").textContent = rows.length ? pluralize("na_count", rows.length) : "";
   }
 
   async function loadNoAnswer() {
