@@ -1480,6 +1480,7 @@
       na_title: "Numeri personali",
       na_hint: "Apollonia non risponde alle chiamate da questi numeri (familiari, amici): se non rispondi tu, chi chiama sente il segnale di occupato.",
       na_number: "Numero di telefono",
+      na_number_placeholder: "+39 333 123 4567",
       na_name: "Nome (facoltativo)",
       na_add: "Aggiungi",
       na_invalid: "Numero non valido.",
@@ -1791,6 +1792,7 @@
       na_title: "Osobné čísla",
       na_hint: "Apollonia neprijíma hovory z týchto čísel (rodina, priatelia): ak hovor neprijmete vy, volajúci počuje obsadzovací tón.",
       na_number: "Telefónne číslo",
+      na_number_placeholder: "+421 903 123 456",
       na_name: "Meno (nepovinné)",
       na_add: "Pridať",
       na_invalid: "Neplatné číslo.",
@@ -2076,6 +2078,7 @@
       if (n && s[key] != null) n.textContent = s[key];
     }
     $("na-search").placeholder = s.na_search;
+    $("na-number").placeholder = s.na_number_placeholder;
     const transcriptEl = $("acq-transcript");
     if (transcriptEl) transcriptEl.setAttribute("data-placeholder", s.acq_transcript_placeholder);
     if (window.AcqRefreshLiveLabels) window.AcqRefreshLiveLabels();
