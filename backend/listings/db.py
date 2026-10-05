@@ -13,8 +13,9 @@ like calls/db.py and acquisizione/db.py. Every row carries tenant_id.
 Sync semantics (see `replace_scraped`), which exist entirely to stop a scrape
 from fighting the agent:
 
-  source='manual'  — created in the dashboard (e.g. an Acquisizione listing).
-                     Scrapes never touch these.
+  source='manual'  — entered by hand in the dashboard.
+  source='meeting' — published by a confirmed Acquisizione (ApollonIA Meeting).
+                     Scrapes never touch either of these.
   source='scrape'  — came from Apify/the CSV cache, identified by `source_key`
                      (its normalised address) so the same portal listing maps
                      to the same row across runs.
@@ -37,7 +38,7 @@ import datetime
 import logging
 import unicodedata
 import uuid
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from tenants import db as _tenants_db
 
@@ -47,7 +48,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS listings (
   id          TEXT PRIMARY KEY,
   tenant_id   TEXT NOT NULL,
-  source      TEXT NOT NULL DEFAULT 'scrape',   -- scrape | manual
+  source      TEXT NOT NULL DEFAULT 'scrape',   -- scrape | manual | meeting
   source_key  TEXT,                             -- normalised address, scrape identity
   address     TEXT NOT NULL DEFAULT '',
   zone        TEXT NOT NULL DEFAULT '',
@@ -173,10 +174,15 @@ def get(listing_id: str, tenant_id: str) -> Optional[dict[str, Any]]:
 
 
 def create_manual(
-    tenant_id: str, fields: dict[str, Any], agent_id: Optional[str] = None
+    tenant_id: str,
+    fields: dict[str, Any],
+    agent_id: Optional[str] = None,
+    source: Literal["manual", "meeting"] = "manual",
 ) -> dict[str, Any]:
-    """Insert an agency-entered listing (e.g. from a confirmed Acquisizione).
-    Marked source='manual' so no scrape will ever overwrite or remove it.
+    """Insert an agency-entered listing: typed in by hand ('manual') or
+    published from a confirmed Acquisizione ('meeting'). Either way it is not
+    'scrape', so no scrape will ever overwrite or remove it; the distinction
+    only lets the dashboard badge which listings a meeting produced.
 
     `agent_id` optionally assigns the handling agent up front; when omitted the
     listing starts unassigned and its leads go to the agency inbox.
@@ -185,7 +191,7 @@ def create_manual(
     row = {
         "id": str(uuid.uuid4()),
         "tenant_id": tenant_id,
-        "source": "manual",
+        "source": source,
         "source_key": None,
         "address": fields.get("address") or "",
         "zone": fields.get("zone") or "",

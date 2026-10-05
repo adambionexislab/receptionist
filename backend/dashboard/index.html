@@ -350,6 +350,16 @@
     border-bottom: 1px solid var(--border); font-weight: 600; font-size: .95rem;
   }
   .na-list-count { font-weight: 400; font-size: .82rem; color: var(--text-dim); }
+  .na-list-search { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  .na-list-search.hidden { display: none; }
+  .na-list-search input { padding: 8px 10px; font-size: .88rem; }
+  .na-pager {
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    padding: 10px 16px; border-top: 1px solid var(--border);
+    font-size: .85rem; color: var(--text-dim); font-variant-numeric: tabular-nums;
+  }
+  .na-pager.hidden { display: none; }
+  .na-pager .btn.ghost { padding: 5px 12px; font-size: 1rem; line-height: 1; }
   .na-list { list-style: none; margin: 0; padding: 0; }
   .na-list li {
     display: flex; align-items: center; gap: 12px; padding: 10px 16px;
@@ -989,8 +999,17 @@
             <span id="na-list-title">Elenco senza risposta</span>
             <span class="na-list-count" id="na-list-count"></span>
           </div>
+          <div class="na-list-search hidden" id="na-list-search-wrap">
+            <input type="search" id="na-list-search" autocomplete="off">
+          </div>
           <ul class="na-list" id="na-list"></ul>
           <div class="empty hidden" id="na-empty">Nessun numero personale ancora.</div>
+          <div class="empty hidden" id="na-no-results">Nessun risultato.</div>
+          <div class="na-pager hidden" id="na-pager">
+            <button type="button" class="btn ghost" id="na-page-prev" aria-label="‹">‹</button>
+            <span id="na-page-info"></span>
+            <button type="button" class="btn ghost" id="na-page-next" aria-label="›">›</button>
+          </div>
         </div>
       </div>
     </section>
@@ -1520,6 +1539,11 @@
       na_count: "{n} numeri",
       na_count_few: "{n} numeri",
       na_count_one: "1 numero",
+      na_list_search: "Cerca nell'elenco per nome o numero",
+      na_no_results: "Nessun numero corrisponde alla ricerca.",
+      na_page_info: "{from}–{to} di {total}",
+      na_page_prev: "Pagina precedente",
+      na_page_next: "Pagina successiva",
       na_name: "Nome (facoltativo)",
       na_add: "Aggiungi",
       na_invalid: "Numero non valido.",
@@ -1838,6 +1862,11 @@
       na_count: "{n} čísel",
       na_count_few: "{n} čísla",
       na_count_one: "1 číslo",
+      na_list_search: "Hľadať v zozname podľa mena alebo čísla",
+      na_no_results: "Hľadaniu nezodpovedá žiadne číslo.",
+      na_page_info: "{from}–{to} z {total}",
+      na_page_prev: "Predchádzajúca strana",
+      na_page_next: "Nasledujúca strana",
       na_name: "Meno (nepovinné)",
       na_add: "Pridať",
       na_invalid: "Neplatné číslo.",
@@ -2076,6 +2105,7 @@
     "na-pick-hint": "na_pick_hint", "na-select-all": "na_select_all",
     "na-select-none": "na_select_none", "na-preview-cancel": "listing_cancel",
     "na-empty": "na_empty", "na-list-title": "na_list_title",
+    "na-no-results": "na_no_results",
     "acq-consent-text": "acq_consent_text", "acq-consent-label": "acq_consent_label",
     "acq-start-btn": "acq_start_btn", "acq-finish-btn": "acq_finish_btn",
     "acq-new-btn": "acq_new_btn", "acq-processing-text": "acq_processing_text",
@@ -2126,6 +2156,9 @@
     }
     $("na-search").placeholder = s.na_search;
     $("na-number").placeholder = s.na_number_placeholder;
+    $("na-list-search").placeholder = s.na_list_search;
+    $("na-page-prev").setAttribute("aria-label", s.na_page_prev);
+    $("na-page-next").setAttribute("aria-label", s.na_page_next);
     const transcriptEl = $("acq-transcript");
     if (transcriptEl) transcriptEl.setAttribute("data-placeholder", s.acq_transcript_placeholder);
     if (window.AcqRefreshLiveLabels) window.AcqRefreshLiveLabels();
@@ -2666,7 +2699,7 @@
       chip.title = s.listing_agent_none_hint;
       actions.appendChild(chip);
     }
-    if (l.source === "manual") actions.appendChild(el("span", "badge b-manual", s.listing_own));
+    if (l.source === "meeting") actions.appendChild(el("span", "badge b-manual", s.listing_own));
 
     const delBtn = el("button", "btn ghost listing-danger", s.listing_delete);
     delBtn.type = "button";
@@ -3373,10 +3406,32 @@
     return span;
   }
 
+  // The saved list can be a whole phone book, so it is searched and paged in
+  // the browser: all rows are already here, and filtering a few thousand is
+  // instant, while drawing them all at once is not.
+  const NA_PAGE_SIZE = 50;
+  let NA_ROWS = [];
+  let NA_PAGE = 1;
+
   function renderNoAnswer(rows) {
+    NA_ROWS = rows;
+    naRenderList();
+  }
+
+  function naRenderList() {
+    const s = S();
+    const q = $("na-list-search").value.trim().toLowerCase();
+    const shown = NA_ROWS.filter((r) => naMatches(r, q));
+    const pages = Math.max(1, Math.ceil(shown.length / NA_PAGE_SIZE));
+    // A delete can empty the last page, and a search can shrink the list:
+    // land on the nearest page that still exists.
+    NA_PAGE = Math.min(Math.max(NA_PAGE, 1), pages);
+    const start = (NA_PAGE - 1) * NA_PAGE_SIZE;
+    const page = shown.slice(start, start + NA_PAGE_SIZE);
+
     const list = $("na-list");
     list.innerHTML = "";
-    for (const r of rows) {
+    for (const r of page) {
       const li = el("li");
       li.appendChild(naEntryName(r.name));
       li.appendChild(el("span", "na-entry-num", r.number));
@@ -3397,9 +3452,24 @@
       li.appendChild(del);
       list.appendChild(li);
     }
-    $("na-empty").classList.toggle("hidden", rows.length > 0);
-    $("na-list-count").textContent = rows.length ? pluralize("na_count", rows.length) : "";
+    const total = NA_ROWS.length;
+    $("na-empty").classList.toggle("hidden", total > 0);
+    $("na-no-results").classList.toggle("hidden", !(total > 0 && shown.length === 0));
+    $("na-list-search-wrap").classList.toggle("hidden", total === 0);
+    $("na-list-count").textContent = total ? pluralize("na_count", total) : "";
+
+    $("na-pager").classList.toggle("hidden", shown.length <= NA_PAGE_SIZE);
+    $("na-page-info").textContent = s.na_page_info
+      .replace("{from}", shown.length ? start + 1 : 0)
+      .replace("{to}", start + page.length)
+      .replace("{total}", shown.length);
+    $("na-page-prev").disabled = NA_PAGE <= 1;
+    $("na-page-next").disabled = NA_PAGE >= pages;
   }
+
+  $("na-list-search").addEventListener("input", () => { NA_PAGE = 1; naRenderList(); });
+  $("na-page-prev").addEventListener("click", () => { NA_PAGE--; naRenderList(); });
+  $("na-page-next").addEventListener("click", () => { NA_PAGE++; naRenderList(); });
 
   async function loadNoAnswer() {
     try {

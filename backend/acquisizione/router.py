@@ -243,7 +243,7 @@ async def confirm_record(
     """Save the agent's edited fields/text/notes, mark the record final, and
     publish it as a live listing so the phone agent can find it.
 
-    The listing is created as source='manual' (see listings/db.py), which is
+    The listing is created as source='meeting' (see listings/db.py), which is
     what keeps a later Immobiliare.it scrape from wiping it — this property
     was captured in a meeting, it isn't on the portal. It is published already
     assigned to the chosen agent, so its first caller reaches the right person.
@@ -277,6 +277,7 @@ async def confirm_record(
             tenant["id"],
             schema.to_listing(data.listing_fields, data.listing_text),
             agent["id"],
+            "meeting",
         )
     except Exception:
         logger.exception("Failed to publish listing for intake record %s", record_id)

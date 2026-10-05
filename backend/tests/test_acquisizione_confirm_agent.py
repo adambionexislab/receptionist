@@ -90,6 +90,8 @@ def test_confirmed_listing_is_published_assigned_to_the_chosen_agent(client):
     (listing,) = listings_db.list_for_tenant(TENANT["id"])
     assert listing["address"] == "Via Roma 5, Lodi"
     assert listing["agent_id"] == agent["id"]
+    # 'meeting', not 'manual': the dashboard badges only meeting-made listings.
+    assert listing["source"] == "meeting"
 
 
 def test_confirming_without_an_agent_is_rejected(client):
