@@ -132,7 +132,13 @@ def _me_payload(tenant: dict) -> dict:
         "locale": tenant.get("locale") or "it",
         "features": {
             "acquisizione": settings.ACQUISIZIONE_ENABLED,
-            "video_tour": settings.VIDEO_TOUR_ENABLED,
+            # Two gates, both required: the environment flag mounts the router
+            # at all, and the per-tenant column says this client may use it.
+            # This only hides the UI — videotour/router.py enforces the same
+            # check server-side, because a hidden button is not access control.
+            "video_tour": bool(
+                settings.VIDEO_TOUR_ENABLED and tenant.get("video_tour_enabled")
+            ),
         },
     }
 
@@ -697,14 +703,13 @@ def no_answer_bulk(data: NoAnswerBulk, tenant: dict = Depends(current_tenant)):
     have to work out which one was refused."""
     if len(data.entries) > _NO_ANSWER_BULK_MAX:
         raise HTTPException(status_code=413, detail="Too many entries")
-    added = skipped = 0
+    valid = []
     for entry in data.entries:
         number = noanswer_db.normalize(entry.number)
-        if number and noanswer_db.add(tenant["id"], number, entry.name[:120]):
-            added += 1
-        else:
-            skipped += 1
-    return {"added": added, "skipped": skipped}
+        if number:
+            valid.append((number, entry.name[:120]))
+    added = noanswer_db.add_many(tenant["id"], valid) if valid else 0
+    return {"added": added, "skipped": len(data.entries) - added}
 
 
 @router.post("/dashboard/api/no-answer/parse")

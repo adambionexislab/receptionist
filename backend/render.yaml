@@ -12,6 +12,16 @@ services:
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
+    # Deploys are NOT triggered by pushes. This service has a persistent disk,
+    # and Render disables zero-downtime deploys for disk-backed services — the
+    # old instance is stopped before the new one starts, so every deploy drops
+    # whatever call Apollonia is on. Deploys are fired at night by the deploy
+    # hook instead; see .github/workflows/scheduled-deploy.yml.
+    #
+    # Turn Auto-Deploy off in the Render dashboard too. Changing it here only
+    # takes effect once the blueprint is synced, and the sync is itself a
+    # deploy — so the dashboard switch is what protects the first one.
+    autoDeploy: false
     # starter (512 MB / 0.5 CPU) is not enough once a tile capture runs here:
     # software-WebGL Chromium plus an ffmpeg encode share this instance with
     # live phone calls. A Render disk attaches to exactly one service, so the

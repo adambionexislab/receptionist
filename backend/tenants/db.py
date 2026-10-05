@@ -71,6 +71,13 @@ _ADDED_COLUMNS = {
     # alert when the call touched no agent with a WhatsApp number (see
     # call/router._whatsapp_recipients). Set via POST /admin/tenants/{id}/settings.
     "lead_whatsapp": "TEXT NOT NULL DEFAULT ''",
+    # 1 → this tenant sees the ApollonIA Video tool in the AI-tools tab and may
+    # call its API. Off by default, so turning VIDEO_TOUR_ENABLED on in the
+    # environment exposes the tool to NOBODY until a tenant is opted in by hand
+    # (POST /admin/tenants/{id}/settings). The global flag mounts the router;
+    # this column decides who is allowed to reach it. A tour costs real Runway
+    # credits, so this stays opt-in per client rather than per plan.
+    "video_tour_enabled": "INTEGER NOT NULL DEFAULT 0",
 }
 
 _COLUMNS = {
@@ -91,6 +98,7 @@ _COLUMNS = {
     "voice_engine",
     "collect_email",
     "lead_whatsapp",
+    "video_tour_enabled",
     "active",
 }
 

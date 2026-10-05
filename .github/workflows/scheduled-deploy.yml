@@ -1,0 +1,61 @@
+# Deploy the API at night instead of whenever someone pushes.
+#
+# WHY THIS EXISTS
+# This service has a persistent disk, and Render disables zero-downtime deploys
+# for disk-backed services: the old instance is stopped before the new one
+# starts, because the disk can only be attached to one instance at a time. So
+# every deploy drops whatever call Apollonia is on. With real tenants answering
+# real calls, deploys belong in the middle of the night.
+#
+# Render has no built-in "deploy at 03:00" feature, so this is the usual
+# workaround: auto-deploy is turned OFF on the service, and this workflow pokes
+# the service's deploy hook on a cron instead.
+#
+# SETUP (both steps required, or this does nothing)
+#   1. Render dashboard → service → Settings → turn Auto-Deploy OFF.
+#      Do this BEFORE pushing, or the push that adds this file deploys itself
+#      in the middle of the working day.
+#   2. Copy the service's Deploy Hook URL (same Settings page) into this
+#      repo's Settings → Secrets and variables → Actions, as
+#      RENDER_DEPLOY_HOOK_URL.
+#
+# Until that secret exists the job exits without doing anything, so merging
+# this file is safe on its own.
+
+name: Scheduled deploy
+
+on:
+  schedule:
+    # 01:00 UTC = 02:00 in Rome in winter, 03:00 in summer. Both are well clear
+    # of any plausible call, so the DST shift does not need handling.
+    - cron: "0 1 * * *"
+  # Lets you deploy on demand from the Actions tab — useful for the first
+  # Docker switch, which you probably want to watch rather than sleep through.
+  workflow_dispatch:
+
+# Never let two deploys overlap: a disk-backed service is a single instance,
+# and a second deploy arriving mid-restart is how you get a confusing outage.
+concurrency:
+  group: render-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the Render deploy hook
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "RENDER_DEPLOY_HOOK_URL is not set — nothing to do."
+            echo "See the setup notes at the top of this workflow."
+            exit 0
+          fi
+          # --fail so a rejected hook fails the job instead of passing quietly.
+          # The URL is a secret, so print only the status code.
+          code=$(curl --silent --show-error --fail \
+                      --output /dev/null --write-out '%{http_code}' \
+                      --request POST "$HOOK")
+          echo "Render accepted the deploy request (HTTP $code)."
+          echo "Watch it finish in the Render dashboard — this step only queues it."

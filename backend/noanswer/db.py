@@ -152,6 +152,34 @@ def add(tenant_id: str, number: str, name: str = "") -> Optional[dict[str, Any]]
     return {k: row[k] for k in ("id", "number", "name", "created_at")}
 
 
+def add_many(tenant_id: str, entries: list[tuple[str, str]]) -> int:
+    """List many (number, name) pairs at once — a contacts-file import. Numbers
+    must already be normalize()d. Returns how many were new; a line already
+    listed (or repeated within `entries`) is skipped like add() skips it.
+
+    One transaction for the whole batch: a phone book is thousands of rows,
+    and committing each one separately is thousands of disk syncs.
+    """
+    now = _now()
+    rows = [
+        (str(uuid.uuid4()), tenant_id, number, match_key(number), (name or "").strip(), now)
+        for number, name in entries
+    ]
+    conn = _conn()
+    with _tenants_db.write_lock:
+        before = conn.total_changes
+        conn.executemany(
+            "INSERT OR IGNORE INTO no_answer_numbers "
+            "(id, tenant_id, number, match_key, name, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+        conn.commit()
+        added = conn.total_changes - before
+    logger.info("Tenant %s: %d number(s) added to the no-answer list", tenant_id, added)
+    return added
+
+
 def delete(entry_id: str, tenant_id: str) -> bool:
     conn = _conn()
     with _tenants_db.write_lock:

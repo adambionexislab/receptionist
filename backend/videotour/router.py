@@ -3,11 +3,21 @@
 A three-step wizard in the agency dashboard: confirm the property's location on
 a map, upload an exterior photo and the rooms, watch the video assemble.
 
-Ships dark behind config.VIDEO_TOUR_ENABLED — main.py only mounts this router
-when the flag is set, exactly like the acquisizione router.
+Two independent gates, both required:
 
-Every route depends on `current_tenant` (dashboard/router.py) and every query
-is scoped by tenant_id, so one agency can never read or touch another's tour.
+  * config.VIDEO_TOUR_ENABLED — main.py only mounts this router when the flag
+    is set, exactly like the acquisizione router.
+  * tenants.video_tour_enabled — which clients may actually reach it, off by
+    default and flipped per client via POST /admin/tenants/{id}/settings.
+    Enforced by `video_tour_tenant` below.
+
+So turning the environment flag on exposes the tool to nobody: it has to be
+granted one account at a time. That is deliberate, because unlike the other two
+AI tools a single tour costs several euros of Runway credits.
+
+Every route depends on `video_tour_tenant` (which resolves `current_tenant`)
+and every query is scoped by tenant_id, so one agency can never read or touch
+another's tour.
 That includes the video itself: finished tours are streamed through an
 authenticated route rather than mounted as static files, because a StaticFiles
 mount over the media directory would make every tenant's video public to anyone
@@ -33,6 +43,26 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/video-tour")
 
+
+def video_tour_tenant(tenant: dict = Depends(current_tenant)) -> dict:
+    """The logged-in tenant, but only if they are opted in to this tool.
+
+    Every route below depends on this rather than on `current_tenant` directly.
+    VIDEO_TOUR_ENABLED decides whether the router is mounted at all; this
+    decides WHO may reach it, and it has to be enforced here and not just in
+    the dashboard's /me payload — hiding the wizard stops the button appearing,
+    it does not stop a logged-in agency from calling the endpoints and spending
+    Runway credits.
+
+    403 rather than 404: the tenant is authenticated and the route exists, they
+    simply do not have the tool.
+    """
+    if not tenant.get("video_tour_enabled"):
+        raise HTTPException(
+            status_code=403, detail="ApollonIA Video is not enabled for this account"
+        )
+    return tenant
+
 # Matches acquisizione's photo limit — the ceiling is what a phone camera
 # produces, not what Runway accepts (images are downscaled before they are sent).
 _MAX_PHOTO_BYTES = 50 * 1024 * 1024
@@ -46,7 +76,7 @@ class GeocodeRequest(BaseModel):
 
 
 @router.post("/geocode")
-async def geocode_address(data: GeocodeRequest, tenant: dict = Depends(current_tenant)):
+async def geocode_address(data: GeocodeRequest, tenant: dict = Depends(video_tour_tenant)):
     """Resolve a typed address to coordinates so the map can drop its marker.
 
     Server-side deliberately: the geocoding key never reaches the browser, which
@@ -72,7 +102,7 @@ class CreateRequest(BaseModel):
 @router.post("", status_code=201)
 async def create_job(
     data: CreateRequest,
-    tenant: dict = Depends(current_tenant),
+    tenant: dict = Depends(video_tour_tenant),
     branch: Optional[dict] = Depends(current_branch),
 ):
     """Open a job and start the tile capture immediately.
@@ -136,7 +166,7 @@ async def _store_photo(tenant_id: str, job_id: str, upload: UploadFile, name: st
 async def upload_exterior(
     job_id: str,
     image: UploadFile = File(...),
-    tenant: dict = Depends(current_tenant),
+    tenant: dict = Depends(video_tour_tenant),
 ):
     """Store the exterior photo and, if the aerial is already done, start the
     drone generation.
@@ -162,7 +192,7 @@ async def upload_exterior(
 async def upload_interiors(
     job_id: str,
     images: list[UploadFile] = File(...),
-    tenant: dict = Depends(current_tenant),
+    tenant: dict = Depends(video_tour_tenant),
 ):
     """Store the room photos. Order is preserved — it is the order the rooms
     appear in the finished tour, and the order the prompt addresses them in.
@@ -197,7 +227,7 @@ async def upload_interiors(
 # Declared before /{job_id}: routes match in declaration order, so a literal
 # path has to come first or it gets swallowed as a job id.
 @router.get("/config")
-async def wizard_config(tenant: dict = Depends(current_tenant)):
+async def wizard_config(tenant: dict = Depends(video_tour_tenant)):
     """What the wizard needs before it can draw anything: the browser-safe Maps
     key and the server's photo cap, so the UI enforces the same limit the API
     does rather than a hard-coded copy that can drift."""
@@ -209,13 +239,13 @@ async def wizard_config(tenant: dict = Depends(current_tenant)):
 
 
 @router.get("")
-async def list_jobs(tenant: dict = Depends(current_tenant)):
+async def list_jobs(tenant: dict = Depends(video_tour_tenant)):
     """This tenant's tours, most recent first. Strictly scoped by tenant_id."""
     return {"jobs": await asyncio.to_thread(db.list_for_tenant, tenant["id"])}
 
 
 @router.get("/{job_id}")
-async def get_job(job_id: str, tenant: dict = Depends(current_tenant)):
+async def get_job(job_id: str, tenant: dict = Depends(video_tour_tenant)):
     """Polled by step 3's player. `player_state` collapses the backend statuses
     into the four states the UI actually renders."""
     job = await asyncio.to_thread(db.get, job_id, tenant["id"])
@@ -225,7 +255,7 @@ async def get_job(job_id: str, tenant: dict = Depends(current_tenant)):
 
 
 @router.get("/{job_id}/video")
-async def get_video(job_id: str, tenant: dict = Depends(current_tenant)):
+async def get_video(job_id: str, tenant: dict = Depends(video_tour_tenant)):
     """Stream a finished tour. Authenticated and tenant-scoped rather than
     served from a static mount, so a guessed job id gets a 404 and not a video."""
     job = await asyncio.to_thread(db.get, job_id, tenant["id"])
@@ -239,7 +269,7 @@ async def get_video(job_id: str, tenant: dict = Depends(current_tenant)):
 
 
 @router.post("/{job_id}/retry")
-async def retry_job(job_id: str, tenant: dict = Depends(current_tenant)):
+async def retry_job(job_id: str, tenant: dict = Depends(video_tour_tenant)):
     """Re-run a failed tour from whatever is still missing — never from the tile
     capture. A stitch that failed after two successful generations re-runs only
     ffmpeg, so the agency is not billed twice for work already on disk."""
@@ -255,7 +285,7 @@ async def retry_job(job_id: str, tenant: dict = Depends(current_tenant)):
 
 
 @router.post("/{job_id}/abandon")
-async def abandon_job(job_id: str, tenant: dict = Depends(current_tenant)):
+async def abandon_job(job_id: str, tenant: dict = Depends(video_tour_tenant)):
     """The agent closed the wizard mid-flow. Frees the job's media for early
     collection instead of holding it for the full retention window. Never
     raises: this fires on the way out of a screen."""

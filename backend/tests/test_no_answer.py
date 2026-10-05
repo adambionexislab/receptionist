@@ -295,3 +295,19 @@ def test_a_redelivered_webhook_declines_once(no_side_effects, monkeypatch):
 def test_an_unlisted_caller_is_still_answered(no_side_effects, monkeypatch):
     asyncio.run(_both_webhooks(_ctx(no_answer=False), monkeypatch))
     assert no_side_effects == {"reject": [], "realtime_tasks": ["c1"], "live_tasks": []}
+
+
+def test_a_whole_phone_book_is_added_in_one_go(client):
+    """A 6,000-contact import used to hit the per-request cap; the page now
+    sends batches, and each batch is one transaction."""
+    noanswer_db.add(TENANT["id"], "+393330000000", "Already")
+    entries = [{"number": f"+39333{i:07d}", "name": f"C{i}"} for i in range(1000)]
+    entries.append({"number": "333 000 0001", "name": "Same line as C1"})
+    entries.append({"number": "junk"})
+
+    resp = client.post("/dashboard/api/no-answer/bulk", json={"entries": entries})
+
+    # C0 is "Already"'s line; the repeat of C1 and the junk entry are skipped.
+    assert resp.json() == {"added": 999, "skipped": 3}
+    assert len(noanswer_db.list_for_tenant(TENANT["id"])) == 1000
+    assert noanswer_db.find(TENANT["id"], "+393330000001")["name"] == "C1"

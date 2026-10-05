@@ -306,6 +306,25 @@
   .na-howto { font-size: .82rem; color: var(--text-dim); margin-top: 10px; }
   .na-howto summary { cursor: pointer; color: var(--accent); width: fit-content; }
   .na-howto ul { margin: 8px 0 0; padding-left: 18px; line-height: 1.6; }
+  .na-progress {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-size: .88rem; color: var(--text-dim); margin: 4px 0 14px;
+  }
+  .na-progress.hidden { display: none; }
+  .na-progress progress {
+    flex: 1 1 100%; height: 8px; appearance: none; border: none;
+    border-radius: 999px; overflow: hidden; background: var(--surface-2);
+  }
+  .na-progress progress::-webkit-progress-bar { background: var(--surface-2); }
+  .na-progress progress::-webkit-progress-value { background: var(--accent); transition: width .2s; }
+  .na-progress progress::-moz-progress-bar { background: var(--accent); }
+  .na-spinner {
+    width: 16px; height: 16px; flex: none; border-radius: 50%;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    animation: na-spin .8s linear infinite;
+  }
+  @keyframes na-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .na-spinner { animation-duration: 2.4s; } }
   .na-preview { margin-bottom: 14px; }
   .na-preview-head { padding: 14px 16px; border-bottom: 1px solid var(--border); display: grid; gap: 8px; }
   .na-found { font-weight: 600; }
@@ -936,6 +955,13 @@
           </ul>
         </details>
         <div class="err" id="na-import-err"></div>
+        <!-- Shown while a contacts file is read, and while the ticked numbers
+             are saved: a phone book takes a few seconds either way. -->
+        <div class="na-progress hidden" id="na-progress" role="status" aria-live="polite">
+          <span class="na-spinner" aria-hidden="true"></span>
+          <span id="na-progress-text"></span>
+          <progress id="na-progress-bar" max="1" value="0" class="hidden"></progress>
+        </div>
 
         <!-- What the file held. Nothing is saved until the owner ticks people:
              a phone book is mostly clients, and they must keep reaching
@@ -1515,6 +1541,8 @@
       na_add_selected: "Aggiungi selezionati ({n})",
       na_none_found: "Nessun numero di telefono trovato nel file.",
       na_file_err: "Impossibile leggere il file.",
+      na_reading: "Lettura del file in corso…",
+      na_saving: "Salvataggio in corso… {done} di {total}",
       na_added: "{n} numeri aggiunti.",
       na_added_few: "{n} numeri aggiunti.",
       na_added_one: "1 numero aggiunto.",
@@ -1831,6 +1859,8 @@
       na_add_selected: "Pridať označené ({n})",
       na_none_found: "V súbore sa nenašlo žiadne telefónne číslo.",
       na_file_err: "Súbor sa nepodarilo načítať.",
+      na_reading: "Načítavam súbor…",
+      na_saving: "Ukladám… {done} z {total}",
       na_added: "Pridaných {n} čísel.",
       na_added_few: "Pridané {n} čísla.",
       na_added_one: "Pridané 1 číslo.",
@@ -3457,6 +3487,28 @@
     naRefreshSelected();
   }
 
+  // text → show the spinner line; text + done/total → also the bar;
+  // null → hide it.
+  function naProgress(text, done, total) {
+    $("na-progress").classList.toggle("hidden", text == null);
+    $("na-progress-text").textContent = text || "";
+    const bar = $("na-progress-bar");
+    bar.classList.toggle("hidden", total == null);
+    if (total != null) { bar.max = total; bar.value = done; }
+  }
+
+  // The preview's controls are frozen while it saves, so the selection can't
+  // change under a save that is already half sent.
+  function naLockPreview(locked) {
+    for (const id of ["na-add-selected", "na-preview-cancel", "na-select-all",
+                      "na-select-none", "na-search", "na-import-btn"]) {
+      $(id).disabled = locked;
+    }
+    for (const box of $("na-pick-list").querySelectorAll("input[type=checkbox]")) {
+      if (locked) box.disabled = true;
+    }
+  }
+
   $("na-import-btn").addEventListener("click", () => $("na-file").click());
 
   $("na-file").addEventListener("change", async () => {
@@ -3467,6 +3519,8 @@
     err.textContent = "";
     $("na-status").textContent = "";
     naCloseImport();
+    naProgress(S().na_reading);
+    $("na-import-btn").disabled = true;
     try {
       const text = await file.text();
       const resp = await api("/dashboard/api/no-answer/parse", {
@@ -3485,6 +3539,9 @@
       $("na-search").focus();
     } catch (_) {
       err.textContent = S().na_file_err;
+    } finally {
+      naProgress(null);
+      $("na-import-btn").disabled = false;
     }
   });
 
@@ -3504,26 +3561,47 @@
   $("na-preview-cancel").addEventListener("click", naCloseImport);
 
   $("na-add-selected").addEventListener("click", async () => {
-    const btn = $("na-add-selected");
-    const entries = NA_PICK.filter((c) => c.checked && !c.listed)
-      .map((c) => ({ number: c.number, name: c.name || "" }));
-    if (!entries.length) return;
-    btn.disabled = true;
+    const picked = NA_PICK.filter((c) => c.checked && !c.listed);
+    if (!picked.length) return;
+    naLockPreview(true);
     $("na-import-err").textContent = "";
+    const total = picked.length;
+    const saving = (done) =>
+      naProgress(S().na_saving.replace("{done}", done).replace("{total}", total), done, total);
+    saving(0);
+    // Sent in batches: a whole phone book is thousands of numbers, more than
+    // the server takes in one request (NA_BULK_BATCH stays under its cap).
+    // Small enough that the progress bar moves visibly on a big import.
+    const NA_BULK_BATCH = 500;
+    let added = 0;
     try {
-      const resp = await api("/dashboard/api/no-answer/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entries: entries }),
-      });
-      if (!resp.ok) throw new Error("bulk " + resp.status);
-      const result = await resp.json();
+      for (let i = 0; i < picked.length; i += NA_BULK_BATCH) {
+        const batch = picked.slice(i, i + NA_BULK_BATCH);
+        const resp = await api("/dashboard/api/no-answer/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            entries: batch.map((c) => ({ number: c.number, name: c.name || "" })),
+          }),
+        });
+        if (!resp.ok) throw new Error("bulk " + resp.status);
+        added += (await resp.json()).added || 0;
+        // Saved: a retry after a later batch fails must not send these again.
+        for (const c of batch) { c.listed = true; c.checked = false; }
+        saving(i + batch.length);
+      }
+      naLockPreview(false);
       naCloseImport();
       await loadNoAnswer();
-      $("na-status").textContent = pluralize("na_added", result.added || 0);
+      $("na-status").textContent = pluralize("na_added", added);
     } catch (_) {
+      naLockPreview(false);
       $("na-import-err").textContent = S().listing_save_err;
-      naRefreshSelected();
+      // Earlier batches did go through — show them, and leave the rest ticked.
+      if (added) loadNoAnswer();
+      renderNaPick();
+    } finally {
+      naProgress(null);
     }
   });
 

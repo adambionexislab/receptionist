@@ -329,6 +329,11 @@ class TenantSettings(BaseModel):
     collect_email: Optional[bool] = None
     # The agency's fallback WhatsApp number, international form; "" clears it.
     lead_whatsapp: Optional[str] = None
+    # Whether this client gets the ApollonIA Video tool. Off for everyone until
+    # opted in by hand — a tour costs real Runway credits, so it is let out one
+    # client at a time rather than to every tenant the moment the environment
+    # flag goes on.
+    video_tour_enabled: Optional[bool] = None
 
 
 @app.post("/admin/tenants/{tenant_id}/settings", dependencies=[Depends(_require_admin)])
