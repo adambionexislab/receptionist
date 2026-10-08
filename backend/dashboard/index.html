@@ -252,6 +252,9 @@
 
   /* ── agents cards ───────────────────────────────────────────────────── */
   .agents-toolbar { display: flex; margin-bottom: 16px; }
+  .listings-toolbar { gap: 10px; align-items: center; }
+  .listings-toolbar .btn { flex: none; }
+  .listings-search { flex: 1; max-width: 420px; padding: 8px 10px; font-size: .88rem; }
   .agents-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
   .agent-card {
     background: var(--surface); border: 1px solid var(--card-border);
@@ -900,12 +903,14 @@
 
     <section id="view-listings" class="view">
       <h2 id="listings-title">Immobili</h2>
-      <div class="agents-toolbar">
+      <div class="agents-toolbar listings-toolbar">
+        <input type="search" class="listings-search" id="listings-search" autocomplete="off">
         <button class="btn ghost" id="listing-add-btn">+ Aggiungi immobile</button>
       </div>
       <div id="listings-grid" class="listings-grid"></div>
       <div class="card">
         <div class="empty hidden" id="listings-empty">Nessun immobile disponibile.</div>
+        <div class="empty hidden" id="listings-no-results">Nessun immobile corrisponde alla ricerca.</div>
       </div>
     </section>
 
@@ -1453,6 +1458,8 @@
       th_address: "Indirizzo", th_zone: "Zona", th_type: "Tipo",
       th_rooms: "Locali", th_size: "m²", th_price: "Prezzo",
       listings_empty: "Nessun immobile disponibile.",
+      listings_search: "Cerca per indirizzo, zona, agente o descrizione",
+      listings_no_results: "Nessun immobile corrisponde alla ricerca.",
       listing_no_text: "Nessuna descrizione.",
       listing_description: "Descrizione",
       listing_copy: "Copia descrizione",
@@ -1779,6 +1786,8 @@
       th_address: "Adresa", th_zone: "Lokalita", th_type: "Typ",
       th_rooms: "Izby", th_size: "m²", th_price: "Cena",
       listings_empty: "Žiadne dostupné nehnuteľnosti.",
+      listings_search: "Hľadať podľa adresy, lokality, agenta alebo popisu",
+      listings_no_results: "Hľadaniu nezodpovedá žiadna nehnuteľnosť.",
       listing_no_text: "Žiadny opis.",
       listing_description: "Opis",
       listing_copy: "Kopírovať opis",
@@ -2090,6 +2099,7 @@
     /* The listings table's <th>s are gone (it's a card grid now), but the
        th_* strings live on as the card field labels — see listingReadCard. */
     "listings-empty": "listings_empty", "listing-add-btn": "listing_add",
+    "listings-no-results": "listings_no_results",
     "tab-agents": "agents", "agents-title": "agents",
     "agent-add-btn": "agent_add", "agents-empty": "agents_empty",
     "tab-branches": "branches", "branches-title": "branches",
@@ -2157,6 +2167,7 @@
     $("na-search").placeholder = s.na_search;
     $("na-number").placeholder = s.na_number_placeholder;
     $("na-list-search").placeholder = s.na_list_search;
+    $("listings-search").placeholder = s.listings_search;
     $("na-page-prev").setAttribute("aria-label", s.na_page_prev);
     $("na-page-next").setAttribute("aria-label", s.na_page_next);
     const transcriptEl = $("acq-transcript");
@@ -2624,6 +2635,8 @@
   function listingReadCard(l) {
     const s = S();
     const card = el("div", "listing-card");
+    // Read by the search filter; edit-mode cards carry none and always show.
+    card._listing = l;
 
     const head = el("div", "listing-card-head");
     const titleWrap = el("div", "listing-title-wrap");
@@ -2888,6 +2901,40 @@
     grid.innerHTML = "";
     empty.classList.toggle("hidden", rows.length > 0);
     for (const l of rows) grid.appendChild(listingReadCard(l));
+    filterListings();
+  }
+
+  // Lowercased and accent-stripped, so "kosicka" finds "Košická" and
+  // "citta" finds "Città" — agents type addresses without diacritics.
+  const foldText = (v) =>
+    String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+  function listingHaystack(l) {
+    const s = S();
+    const agent = l.agent_id ? agentById(l.agent_id) : null;
+    const type = (l.type || "").toLowerCase();
+    return foldText([
+      l.address, l.zone, l.text, s.types[type] || l.type,
+      agent ? agentLabel(agent) : "",
+    ].join(" "));
+  }
+
+  // Hides non-matching cards in place rather than re-rendering, so a card
+  // open in edit mode (or a half-filled new one) survives typing a search.
+  // Every word must match somewhere: "roma bilocale" narrows, not widens.
+  function filterListings() {
+    const words = foldText($("listings-search").value).split(/\s+/).filter(Boolean);
+    let total = 0, shown = 0;
+    for (const card of $("listings-grid").children) {
+      const l = card._listing;
+      if (!l) { card.classList.remove("hidden"); continue; }
+      total++;
+      const hay = words.length ? listingHaystack(l) : "";
+      const match = words.every((w) => hay.includes(w));
+      card.classList.toggle("hidden", !match);
+      if (match) shown++;
+    }
+    $("listings-no-results").classList.toggle("hidden", !(total > 0 && shown === 0 && words.length));
   }
 
   async function loadListings() {
@@ -3723,9 +3770,14 @@
   for (const t of document.querySelectorAll(".tab"))
     t.addEventListener("click", () => showView(t.dataset.view));
 
+  $("listings-search").addEventListener("input", filterListings);
+
   // Prepended: listings are ordered newest-first (see listings/db.py), so the
   // form sits where the saved listing will land.
   $("listing-add-btn").addEventListener("click", () => {
+    // Clear any search first, or the saved card could land among hidden ones.
+    $("listings-search").value = "";
+    filterListings();
     const card = listingEditCard(null);
     $("listings-grid").prepend(card);
     $("listings-empty").classList.add("hidden");
