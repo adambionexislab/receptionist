@@ -179,12 +179,20 @@ _SK_SYSTEM_PROMPT_BODY = (
     "nehnuteľnosť z ponuky ('volám kvôli bytu na Obchodnej ulici...'). Ak\n"
     "však volajúci chce predať svoju vlastnú nehnuteľnosť, je to TYP D.\n"
     "Postup:\n"
-    "1. Pred použitím get_listing_by_address sa uistite, že máte aspoň ulicu\n"
-    "   alebo konkrétnu adresu. Ak volajúci uviedol len typ nehnuteľnosti\n"
-    "   (napr. 'ten štvorizbový') bez adresy, najprv sa spýtajte:\n"
-    "   'Môžete mi dať adresu alebo ulicu nehnuteľnosti?'\n"
-    "   Až po získaní adresy použite get_listing_by_address.\n"
-    "2. Ak ste ju našli: hneď použite mark_listing_interest s presnou adresou\n"
+    "1. Použite get_listing_by_address s tým, čím volajúci nehnuteľnosť\n"
+    "   označil: adresou, ulicou, alebo názvom budovy či projektu (napr.\n"
+    "   'Rezidencia Anička') — nástroj prehľadáva aj opis nehnuteľností. Ak\n"
+    "   uviedol len typ nehnuteľnosti (napr. 'ten štvorizbový') bez adresy aj\n"
+    "   názvu, spýtajte sa IBA RAZ: 'Môžete mi dať adresu alebo názov\n"
+    "   nehnuteľnosti?'. Ak to nevie, nepýtajte sa znova: použite\n"
+    "   search_listings s obcou alebo lokalitou, ktorú spomenul, a\n"
+    "   pokračujte ako pri TYPE B od bodu 4.\n"
+    "2. Ak nájdete viac nehnuteľností s rovnakou adresou, vyberte tú, ktorá\n"
+    "   zodpovedá tomu, čo povedal volajúci (počet izieb, výmera, cena). Ak\n"
+    "   to na rozlíšenie nestačí, spýtajte sa ho, ktorú myslí, a spomeňte\n"
+    "   iba údaj, ktorým sa líšia (napr. 'Ten dvojizbový, alebo trojizbový?'),\n"
+    "   a počkajte na odpoveď.\n"
+    "   Ak ste ju našli: hneď použite mark_listing_interest s presnou adresou\n"
     "   nehnuteľnosti, potom JEDNOU vetou potvrďte, že je dostupná, a uveďte\n"
     "   najviac TRI kľúčové údaje (typ, počet izieb alebo výmeru, cenu).\n"
     "   NEVYMENÚVAJTE vybavenie (záhrada, terasa, garáž, prístrešok,\n"
@@ -546,10 +554,11 @@ _SK_GET_LISTING_TOOL = {
     "type": "function",
     "name": "get_listing_by_address",
     "description": (
-        "Vyhľadá konkrétnu nehnuteľnosť podľa adresy alebo jej časti. "
-        "Použite ho, keď volajúci spomenie konkrétnu nehnuteľnosť alebo "
-        "adresu. Vráti údaje o nehnuteľnosti, alebo prázdny zoznam, ak sa nič "
-        "nenašlo."
+        "Vyhľadá konkrétnu nehnuteľnosť podľa adresy alebo jej časti, alebo "
+        "podľa názvu budovy či developerského projektu (prehľadáva aj opis "
+        "nehnuteľnosti). Použite ho, keď volajúci spomenie konkrétnu "
+        "nehnuteľnosť, adresu alebo názov projektu. Vráti údaje o "
+        "nehnuteľnosti, alebo prázdny zoznam, ak sa nič nenašlo."
     ),
     "parameters": {
         "type": "object",
@@ -557,8 +566,9 @@ _SK_GET_LISTING_TOOL = {
             "address_query": {
                 "type": "string",
                 "description": (
-                    "Adresa presne tak, ako ju povedal volajúci — skopírujte "
-                    "ju doslovne, neparafrázujte ju ani si ju nedomýšľajte"
+                    "Adresa alebo názov projektu presne tak, ako ich povedal "
+                    "volajúci — skopírujte ich doslovne, neparafrázujte ich "
+                    "ani si ich nedomýšľajte"
                 ),
             }
         },

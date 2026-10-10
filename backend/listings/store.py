@@ -414,18 +414,34 @@ class ListingsStore:
         return results
 
     def get_by_address(self, address_query: str) -> list[dict]:
+        """Find the listing a caller means by address, street, area or name.
+
+        Callers often don't know the street but name the building or
+        development project ('rezidencia Anička'), which only the description
+        mentions — so the description is searched too. Every listing is scored
+        by how many of the caller's words it matches, and only the best-scoring
+        ones are returned: a description that shares one generic word with the
+        query must not outrank the listing that matches the whole of it. The
+        full query found verbatim in the address or area counts as matching
+        every word, so an exact address always wins.
+        """
         query = address_query.strip()
         qn = _norm(query)
-        words = [w for w in query.split() if len(w) > 3]
-        return [
-            l for l in self._all()
-            if qn in _norm(l["address"])
-            or qn in _norm(l["zone"])
-            or any(
-                _word_in(w, l["address"]) or _word_in(w, l["zone"])
-                for w in words
-            )
-        ]
+        if not qn:
+            return []
+        words = [w for w in query.replace(",", " ").split() if len(w) > 3]
+        scored = []
+        for l in self._all():
+            hay = f"{l['address']} {l['zone']} {l.get('text') or ''}"
+            score = sum(1 for w in words if _word_in(w, hay))
+            if qn in _norm(l["address"]) or qn in _norm(l["zone"]):
+                score += len(words) + 1
+            if score:
+                scored.append((score, l))
+        if not scored:
+            return []
+        best = max(s for s, _ in scored)
+        return [l for s, l in scored if s == best]
 
 
 class TenantListingsStore:

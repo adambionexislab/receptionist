@@ -262,12 +262,20 @@ _SYSTEM_PROMPT_BODY = (
     "in Via Roma...'). Se invece il chiamante vuole vendere un immobile di\n"
     "sua proprietà, è il TIPO D.\n"
     "Procedura:\n"
-    "1. Prima di usare get_listing_by_address, assicurati di avere almeno\n"
-    "   una via o un indirizzo specifico. Se il chiamante ha detto solo il\n"
-    "   tipo di immobile (es. 'il quadrilocale') senza indirizzo, chiedigi\n"
-    "   prima: 'Può darmi l'indirizzo o la via dell'immobile?'\n"
-    "   Solo dopo aver ottenuto un indirizzo usa get_listing_by_address.\n"
-    "2. Se trovato: usa subito mark_listing_interest con l'indirizzo esatto\n"
+    "1. Usa get_listing_by_address con ciò che il chiamante ha detto per\n"
+    "   identificare l'immobile: l'indirizzo, la via, oppure il nome\n"
+    "   dell'edificio o del progetto (es. 'Residenza Le Querce') — lo strumento\n"
+    "   cerca anche nella descrizione degli immobili. Se ha detto solo il tipo\n"
+    "   di immobile (es. 'il quadrilocale'), senza indirizzo né nome, chiedi\n"
+    "   UNA volta: 'Può darmi l'indirizzo o il nome dell'immobile?'. Se non lo\n"
+    "   sa, non chiederlo di nuovo: usa search_listings con il comune o la\n"
+    "   zona che ha nominato e prosegui come nel TIPO B dal punto 4.\n"
+    "2. Se trovi più immobili allo stesso indirizzo, scegli quello che\n"
+    "   corrisponde a ciò che ha detto il chiamante (locali, metratura,\n"
+    "   prezzo). Se questo non basta a distinguerli, chiedigli quale intende,\n"
+    "   citando solo il dato che li distingue (es. 'Quello da due locali o\n"
+    "   quello da tre?'), e aspetta la risposta.\n"
+    "   Se trovato: usa subito mark_listing_interest con l'indirizzo esatto\n"
     "   dell'immobile, poi conferma in UNA frase che è disponibile citando al\n"
     "   massimo TRE dati essenziali (tipo, locali o metratura, prezzo).\n"
     "   NON elencare le dotazioni (giardino, terrazzo, garage, box, cucina\n"
@@ -758,16 +766,18 @@ _GET_LISTING_TOOL: dict[str, Any] = {
     "type": "function",
     "name": "get_listing_by_address",
     "description": (
-        "Look up a specific listing by address or partial address. "
-        "Use this when the caller mentions a specific property or address. "
-        "Returns the listing details if found, or empty list if not found."
+        "Look up a specific listing by address or partial address, or by the "
+        "name of the building or development project (the listing "
+        "description is searched too). Use this when the caller mentions a "
+        "specific property, address or project name. Returns the listing "
+        "details if found, or empty list if not found."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "address_query": {
                 "type": "string",
-                "description": "The address exactly as spoken by the caller — copy it verbatim, do not paraphrase or reinterpret",
+                "description": "The address or project name exactly as spoken by the caller — copy it verbatim, do not paraphrase or reinterpret",
             }
         },
         "required": ["address_query"],

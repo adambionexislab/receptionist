@@ -648,7 +648,8 @@ def test_backend_writes_house_numbers_as_digits():
 
 def test_she_does_not_insist_on_a_street_the_caller_does_not_know():
     text = " ".join(live.build_voice_instructions(_ctx()).split())
-    assert "Spýtajte sa iba raz. Ak adresu ani ulicu nevie" in text
+    assert "Spýtajte sa iba raz. Ak to nevie, nevypytujte sa znova" in text
+    assert "názov budovy či projektu" in text
 
 
 def test_transcript_lines_carry_the_session_timeline(caplog):
