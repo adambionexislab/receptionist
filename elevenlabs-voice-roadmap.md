@@ -466,7 +466,7 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
 - **Exit:** endpoints respond correctly with `curl` from the VM (`POST /internal/voice/calls` for test DID 421482304191 → `{"decision":"realtime"}` while the test tenant is on `realtime`); production calls unaffected (check the next day's calls in the dashboard).
 - **Rollback:** revert commit, or unset `VOICE_AGENT_TOKEN` (endpoints go 404).
 
-### Phase 2: new VM, Asterisk + agent, test number only (≈4–5 days)
+### Phase 2: new VM, Asterisk + agent, test number only (≈4–5 days): **DONE 2026-10-19**
 - Sections 2.3–2.5, 4.2, 4.3: create the VM and firewall, build the Asterisk 22 image from the template with `func_curl`, mounted config, Eleven and OpenAI endpoints, and the agent service.
 - First test without moving any DID: create the new DIDWW trunk and point a **spare test DID** at it, or dial the context from inside the container (`channel originate`).
 - **Status 2026-10-19: infrastructure done** ([vm-setup-runbook.md](vm-setup-runbook.md) §2–§9): VM, firewall, Asterisk image and config, agent user/env/unit, trunk `apollonia-eleven` with test DID 421482304191 (test tenant, `realtime`). Passed:
@@ -494,7 +494,20 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
       - Regression tests for both; the first fails on the old behaviour.
     - **Debug transcription language** now comes from the tenant's locale (`sk`/`it`). Without it, "Dobrý deň" was transcribed as "Добрый день.". These transcripts only appear in the agent's DEBUG log; the lead e-mail is built from the tools, as on the SIP path.
 - **Exit:** a full call works end to end: greeting, listing search, phone-number read-back, booking tool, hangup, lead e-mail + WhatsApp, row in `calls`, usage counted.
+- **Exit test passed 2026-10-19:** about 10 calls on test DID 421482304191, with the test tenant on `voice_engine='eleven'`.
+  - **Same as the `marin` path:** greeting, listing search, interruption, booking, phone-number read-back in Slovak, goodbye + hang-up, lead e-mail, WhatsApp, `calls` row and usage.
+  - **Voice:** clearly better than `marin`.
+  - **Response time:** maybe slightly longer; acceptable.
+  - **Accent:** one call drifted slightly into a Czech accent while she was confused about an unusual surname. Recheck in **Phase 5** (with open item 1 below).
+  - `LOG_LEVEL` is back to `INFO` on the VM.
 - **Rollback:** nothing in production depends on the VM yet. Stop the agent and container, or delete the VM.
+
+### Open items after Phase 2 (2026-10-19)
+1. **Spell unclear names letter by letter before using them in tools.** A prompt change for **both engines** (locales.py / the Realtime prompt and the GPT-Live prompts). The surname that caused the Czech-accent drift is the trigger.
+2. **Caller-side transcripts: answered, no change needed.** The OpenAI SIP path doesn't store the caller's words anywhere: input transcription is off on purpose (comment in `router.py`'s session config). `call_sessions` and `contacts` hold the summary and the tool results, and only her lines are logged. So the agent matches by transcribing only at DEBUG and sending only her lines in `/end`. Reopen only if caller transcripts are wanted for both engines.
+3. **Pin `websockets==17.3`** in `voiceagent/requirements.txt` (currently `>=15`).
+4. **ElevenLabs failure: something better than hanging up** (today: `tts_failed` → hang-up). Options: a recorded apology, or switching the live session to OpenAI's own voice (`output_modalities` audio, `marin`) for the rest of the call. **Required before any customer traffic (Phase 5).**
+5. **DIDWW re-routing on 503** (§2.3 open item): select 503, or change `Hangup(34)`, and retest **before the trunk group goes live (Phase 4)**.
 
 ### Phase 3: move the demo DID (≈1 day)
 - DIDWW: demo DID → new trunk. Demo tenant → `voice_engine='eleven'`.
