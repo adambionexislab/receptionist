@@ -1,0 +1,2 @@
+# PBX files are deployed to Linux as-is: keep Unix line endings on every checkout
+voiceagent/** text eol=lf
