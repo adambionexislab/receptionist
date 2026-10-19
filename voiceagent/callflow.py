@@ -44,17 +44,30 @@ _FINISH = object()  # end-of-text marker in a reply's feed queue
 # Pause after the goodbye has played before hanging up, so its last syllable
 # isn't clipped by the hang-up.
 _AFTER_FAREWELL_SECONDS = 0.4
+# Safety nets, so she can never get stuck silent:
+# a response that never reports response.done stops holding the gate after this;
+_RESPONSE_STUCK_SECONDS = 60.0
+# a reply whose audio never completes stops blocking playback after this
+# (TTSStream gives up after MAX_AFTER_FLUSH_SECONDS on its own; this is the
+# backstop if even that doesn't happen).
+_REPLY_STUCK_SECONDS = 45.0
 
 
-def realtime_session(session: dict[str, Any]) -> dict[str, Any]:
+def realtime_session(session: dict[str, Any], transcribe_model: str = "") -> dict[str, Any]:
     """Render's OpenAI SIP accept config, made into the agent's session: the
     same prompt, tools, reasoning and turn detection, but text out, and the
-    caller's audio in as G.711 μ-law (what OpenAI gets over SIP today, D3)."""
+    caller's audio in as G.711 μ-law (what OpenAI gets over SIP today, D3).
+
+    transcribe_model is for debugging only (LOG_LEVEL=DEBUG): it adds input
+    transcription so the log shows what the caller said. Production leaves it
+    off, like the SIP path (a second, paid ASR pass whose only reader is the log)."""
     s = json.loads(json.dumps(session))
     s["type"] = "realtime"
     s["output_modalities"] = ["text"]
     audio_in = dict((s.get("audio") or {}).get("input") or {})
     audio_in["format"] = {"type": "audio/pcmu"}
+    if transcribe_model:
+        audio_in["transcription"] = {"model": transcribe_model}
     # Text out: the output audio block (voice "marin") no longer applies.
     s["audio"] = {"input": audio_in}
     return s
@@ -78,6 +91,7 @@ class Reply:
     is_farewell: bool = False
     queue: asyncio.Queue = field(default_factory=asyncio.Queue)
     feeder: asyncio.Task | None = None
+    done_at: float | None = None  # loop time of response.done
 
     @property
     def finished(self) -> bool:
@@ -134,11 +148,20 @@ class Call:
         self._ws = None
         self.gate = ResponseGate(self._oai_send)
         self._bg: set[asyncio.Task] = set()
+        self.response_open_since: float | None = None
+        self.tag = call_uuid[:8]
+        self.debug = logger.isEnabledFor(logging.DEBUG)
+
+    def _dbg(self, fmt: str, *args: Any) -> None:
+        if self.debug:
+            logger.debug("Call %s +%.2fs: " + fmt, self.tag, self.loop.time() - self.started_mono, *args)
 
     # ── plumbing ─────────────────────────────────────────────────────────────
     async def _oai_send(self, event: dict[str, Any]) -> None:
         if self._ws is None:
             return
+        if self.debug and event.get("type") != "input_audio_buffer.append":
+            self._dbg("→ openai %s", event.get("type"))
         try:
             await self._ws.send(json.dumps(event, ensure_ascii=False))
         except ConnectionClosed:
@@ -182,7 +205,10 @@ class Call:
 
         await self._oai_send({
             "type": "session.update",
-            "session": realtime_session(self.answer["session"]),
+            "session": realtime_session(
+                self.answer["session"],
+                self.cfg.debug_transcribe_model if self.debug else "",
+            ),
         })
         # Same greeting trigger as the SIP path: a user turn with the locale's
         # greeting prompt, then a response.
@@ -241,6 +267,7 @@ class Call:
 
     # ── caller → OpenAI ──────────────────────────────────────────────────────
     async def _caller_audio(self) -> None:
+        frames = 0
         while True:
             msg = await audiosocket.read_message(self.reader)
             if msg is None:
@@ -248,6 +275,9 @@ class Call:
                 return
             kind, payload = msg
             if kind == audiosocket.KIND_AUDIO:
+                frames += 1
+                if frames == 1 or frames % 250 == 0:  # first frame, then every ~5 s
+                    self._dbg("caller audio: %d frames (%d bytes in the last)", frames, len(payload))
                 await self._oai_send({
                     "type": "input_audio_buffer.append",
                     "audio": base64.b64encode(g711.pcm16_to_ulaw(payload)).decode(),
@@ -273,6 +303,7 @@ class Call:
 
         if etype == "response.created":
             self.gate.opened()
+            self.response_open_since = now
             rid = (msg.get("response") or {}).get("id") or f"r{len(self.by_response)}"
             reply = Reply(response_id=rid, is_farewell=self._farewell_next)
             if self._farewell_next:
@@ -280,9 +311,14 @@ class Call:
                 self.state["ending"] = True
             self.by_response[rid] = reply
             self.replies.append(reply)
+            self._dbg("response.created %s%s (gate open, %d reply(s) queued)",
+                      rid, " [farewell]" if reply.is_farewell else "", len(self.replies))
             # Open the speech stream now, while the model starts writing: it
             # hides the connection time (Phase 0).
-            reply.tts = self.tts_factory(self.cfg, self.voice, self.locale, reply.buffer.extend)
+            reply.tts = self.tts_factory(
+                self.cfg, self.voice, self.locale, reply.buffer.extend,
+                label=f"Call {self.tag} {rid[-8:]}",
+            )
             self._spawn(reply.tts.open())
             reply.feeder = self._spawn(self._feed(reply))
 
@@ -302,20 +338,28 @@ class Call:
         elif etype == "response.output_text.done":
             reply = self.by_response.get(msg.get("response_id"))
             if reply is not None:
+                self._dbg("text done %s: %r", reply.response_id, reply.text)
                 reply.queue.put_nowait(_FINISH)
 
         elif etype == "response.done":
             resp = msg.get("response") or {}
             reply = self.by_response.get(resp.get("id"))
+            status = resp.get("status")
             await self.gate.closed()
+            self.response_open_since = None
+            self._dbg("response.done %s status=%s (gate closed)", resp.get("id"), status)
             if reply is not None:
                 reply.response_done = True
+                reply.done_at = now
                 reply.queue.put_nowait(_FINISH)  # no-op if text already finished
                 if reply.heard is not None and not reply.replaced:
                     await self._replace_item(reply)
-            status = resp.get("status")
             if status not in (None, "completed", "cancelled"):
                 logger.warning("Call %s: response %s: %s", self.uuid, status, resp.get("status_details"))
+
+        elif etype == "conversation.item.input_audio_transcription.completed":
+            # Only when LOG_LEVEL=DEBUG turned transcription on.
+            self._dbg("caller said: %r", msg.get("transcript"))
 
         elif etype == "response.function_call_arguments.done":
             name = msg.get("name")
@@ -325,12 +369,18 @@ class Call:
                 self._spawn(self._run_tool(name, msg.get("call_id"), msg.get("arguments")))
 
         elif etype == "input_audio_buffer.speech_started":
+            self._dbg("caller speech started (gate %s, %d reply(s) queued)",
+                      "open" if self.gate.active else "closed", len(self.replies))
             self.state["last_speech_at"] = now
             self.state["awaiting_reply_since"] = None
             await self.barge_in()
 
         elif etype == "input_audio_buffer.speech_stopped":
+            self._dbg("caller speech stopped")
             self.state["awaiting_reply_since"] = now
+
+        elif etype in ("session.created", "session.updated"):
+            self._dbg("%s", etype)
 
         elif etype == "error":
             err = msg.get("error") or {}
@@ -446,8 +496,25 @@ class Call:
                 self.writer.write(audiosocket.pack(audiosocket.KIND_AUDIO, chunk))
                 reply.played_samples += len(chunk) // 2
                 self.state["last_speech_at"] = self.loop.time()
+            elif (
+                reply.done_at is not None
+                and not reply.finished
+                and self.loop.time() - reply.done_at > _REPLY_STUCK_SECONDS
+            ):
+                # Backstop: this reply's audio never completed. Don't let it
+                # block every reply after it.
+                logger.warning("Call %s: reply %s stuck — dropping it", self.uuid, reply.response_id)
+                reply.feed_closed = True
+                if reply.tts is not None:
+                    self._spawn(reply.tts.close())
+                reply.done_at = None
             elif reply.finished:
                 self.replies.popleft()
+                self._dbg(
+                    "reply %s played: %d bytes (%.1fs), stream end: %s",
+                    reply.response_id, reply.played_samples * 2, reply.played_samples / 8000,
+                    getattr(reply.tts, "end_reason", "") or "-",
+                )
                 if reply.text and reply.tts is not None and reply.tts.failed and not reply.cancelled:
                     # ElevenLabs could not speak this reply: the caller would
                     # sit in dead air. Hang up rather than leave them there
@@ -478,6 +545,15 @@ class Call:
             if ending_at and not self.state.get("ending") and now - ending_at > FAREWELL_TIMEOUT_SECONDS:
                 self.hang_up("farewell_timeout")
                 return
+            if (
+                self.response_open_since is not None
+                and now - self.response_open_since > _RESPONSE_STUCK_SECONDS
+            ):
+                # response.done never came: don't hold every later turn behind it.
+                logger.warning("Call %s: response open for %.0fs without response.done — releasing the gate",
+                               self.uuid, now - self.response_open_since)
+                self.response_open_since = None
+                await self.gate.closed()
             if should_nudge_reply(self.state, self.gate.active, now):
                 logger.warning("Call %s: no reply after the caller finished — requesting one", self.uuid)
                 self.state["awaiting_reply_since"] = None

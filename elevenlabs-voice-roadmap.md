@@ -267,7 +267,7 @@ Rule: **new code calls the existing functions; it does not restructure them.** I
 > - `turns.py`: response gate and nudge, **copied from `router.py` at `9a70526`**;
 > - `config.py`: settings from the env file.
 >
-> Tests: `voiceagent/tests/`, **145 passed** (full repo suite 786). The call flow is tested end to end against fake OpenAI, ElevenLabs and Render.
+> Tests: `voiceagent/tests/`, **147 passed** (full repo suite 788). The call flow is tested end to end against fake OpenAI, ElevenLabs and Render.
 >
 > **Not yet built:**
 > - the recorded apology for an ElevenLabs failure (for now the agent hangs up rather than leave dead air);
@@ -303,12 +303,13 @@ Rule: **new code calls the existing functions; it does not restructure them.** I
    | End of turn | `is_final_audio_for_turn` from the server; `close_socket: true` from us |
    | Idle | 20 s inactivity timeout; `keep_alive: true` resets it (not needed with one stream per response) |
    | Errors | `message`, `error`, `code`, `param` |
-   - Send `flush` at the end of every sentence and at the end of the response, so short replies ("Áno, rozumiem.") don't wait for the buffer to fill.
+   - **Flush exactly once, at the end of the reply** (corrected 2026-10-19 after the first VM calls). On this endpoint a flush ends the speech: text sent after it on the same stream is never spoken. The first build flushed at every sentence end, and every reply was cut after its first sentence. Short replies don't wait anyway, because the end-of-reply flush sends them at once.
+   - **End-of-reply detection never waits forever.** The reply is over at a final message (`is_final_audio_for_turn` / `is_final`), when the server closes the stream, after **3 s without audio** following the flush, or at the latest **30 s** after it. Behind that: playback drops a reply whose audio never completes (45 s), and the response gate is released if `response.done` never arrives (60 s). She can't get stuck silent.
    - **Alignment timing: measured in Phase 0, per chunk.** Support said `char_start_times_ms` counts from the start of the generated audio, but in practice it **restarts at 0 in every audio message**, and chunk boundaries vary between runs. The agent keeps a **running offset per reply** (add each message's last start + duration) and compares "ms of this reply already played" with offset + start to find the last character the caller heard.
    - **Spell out numbers before sending** (decided in Phase 0: digits read by the model drift into Czech; spelled out, they don't). The Phase 0 `sk_numbers.py` **moves into `voiceagent/`** as the agent's spell-out module: `spell_numbers()` and the streaming `SlovakNumberStream`, which holds back a number until it's complete across deltas. Phone numbers are read digit by digit, group by group; amounts and house numbers as Slovak numerals; times as "o štrnástej tridsať". Its self-tests become unit tests. Still to add: gender agreement ("jedna izba") and postal codes.
    - **`language_code`** from `ELEVENLABS_LANGUAGE_CODE` (`sk`) on every stream (decided in Phase 0, together with the spell-out).
    - **Pronunciation dictionary** from `ELEVENLABS_PRONUNCIATION_DICT_ID` / `_VERSION` in the first message of every stream (`pronunciation_dictionary_locators`). It holds **alias rules**; first rule: `Dovidenia → Do videnia`, plus lowercase.
-   - **No early flush.** Flush only at sentence ends and at the end of the reply. A fixed-word-count early flush truncated audio and sounded choppy in Phase 0 (outcome 5).
+   - **No early flush, and no sentence-end flush.** Any flush before the end of the reply truncates it (Phase 0 outcome 5, answered by the first VM calls). If long replies later need audio sooner, that's a separate design for Phase 4, for example **one stream per sentence**, not a mid-stream flush.
    - **Keep the connection path warm:** the first stream of a process takes ~900 ms to connect versus ~90 ms after (Phase 0), so open a throwaway stream at agent startup.
    - **Treat a close with code 1000 as the normal end of a stream,** even when `websockets` reports it as `ConnectionClosedError`.
    - **`voice_settings` for `eleven_v4_turbo`** (per ElevenLabs support): `stability`, `speed` and `similarity_boost`. Set them in the first message and tune them in Phase 4. Support stated this "in conversational configurations", so Phase 0 checks that this WebSocket accepts all three.
@@ -449,8 +450,10 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
        - **Streaming** (gpt-realtime → ElevenLabs) without the dictionary: **_/5** correct *(result to fill in)*.
      - **Decision:** keep the dictionary anyway, as the mechanism for future words. The `Dovidenia` alias stays in it as a safety net, which matters if streaming turns out to be less reliable than TTS-only.
   4. **Delay: within target.** Without early flush, `first_audio` median is **~230–240 ms** across runs, inside Phase 0's **≤ ~300 ms extra**. Cold start is ~900 ms on the first request versus ~90–100 ms warm, so **the agent warms the connection at startup**.
-  5. **Early flush: rejected.** `--first-flush-words 3` cut line 9 off after "môžem" (1.6 s of audio instead of ~4 s), and lines 1 and 5 sounded choppy. **The agent does not flush early**; it flushes only at sentence ends and at the end of the reply.
-     - **Open question:** was the truncation a bug in the Phase 0 script or the endpoint's behaviour?
+  5. **Early flush: rejected.** `--first-flush-words 3` cut line 9 off after "môžem" (1.6 s of audio instead of ~4 s), and lines 1 and 5 sounded choppy.
+     - **Answered 2026-10-19 by the first VM calls: endpoint behaviour, not a script bug.** On the Text-to-Dialogue stream, **a flush ends the speech**, and text sent after it on the same stream is never spoken.
+       - The first agent build flushed at every sentence end. Every reply was cut after its first sentence: the greeting stopped at "…som virtuálna asistentka Apollonia Voice Test." and "Ako vám môžem pomôcť?" was never heard.
+       - **The agent now flushes exactly once, at the end of each reply**, as in every Phase 0 run that produced complete audio (§4.2).
      - It only matters if Phase 4 needs lower delay. If so, understand the truncation first, and any retry flushes at the **first clause boundary**, never after a fixed word count.
 
 ### Phase 1: Render internal API (≈2 days)
@@ -472,6 +475,11 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
   - personal-number decline → 486 end to end.
   
   **Remaining for the Phase 2 exit:** install the agent (built 2026-10-19, §4.2; runbook §11), then the full end-to-end call on the test DID with the test tenant on `eleven`.
+  - **First real calls, 2026-10-19 21:28 and 21:29** (test tenant on `eleven`):
+    - **Worked:** registration, AudioSocket, gpt-realtime and the `/end` report.
+    - **Failed:** the ElevenLabs voice was heard, but the greeting stopped after its first sentence, and she then stayed silent until the caller hung up (0 tool calls). The cause was the flush at every sentence end (§4.2, Phase 0 outcome 5).
+    - **Fixed** (flush once per reply; robust end-of-reply detection; safety nets for the gate and playback; `LOG_LEVEL=DEBUG` tracing), with a test that reproduces the bug. **To redeploy and call again.**
+    - If she's still silent after a caller turn, the debug log shows whether caller audio reaches OpenAI at all: `caller audio: N frames`, `caller speech started/stopped`, `caller said: …`.
 - **Exit:** a full call works end to end: greeting, listing search, phone-number read-back, booking tool, hangup, lead e-mail + WhatsApp, row in `calls`, usage counted.
 - **Rollback:** nothing in production depends on the VM yet. Stop the agent and container, or delete the VM.
 
@@ -548,7 +556,8 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
 | **Slovak drifts into Czech on numbers** (phone numbers, prices, house numbers; Phase 0) | **Resolved in Phase 0:** spell-out module in the agent (`sk_numbers.py` → `voiceagent/`, §4.2) **plus** `language_code=sk` on every stream; together the drift is gone. Still to handle: gender agreement ("jedna izba"), postal codes |
 | Wrong stress on some words ("Dovidenia") | **Resolved for "Dovidenia" in Phase 0:** `language_code=sk` alone gave correct stress in 10/10 TTS-only samples; the alias rule `Dovidenia → Do videnia` (plus lowercase) stays in the pronunciation dictionary as a safety net (streaming result pending). New words go into the same dictionary as they come up (phoneme/IPA rules only if `eleven_v4_turbo` supports them) |
 | Slight Czech accent on some sentences (line 17) | `language_code=sk` made it passable; recheck on real calls in Phase 5 |
-| Early flush truncates audio (Phase 0: line 9 cut after "môžem"; choppy on lines 1 and 5) | The agent doesn't flush early. Open question (script bug or endpoint behaviour), only relevant if Phase 4 needs lower delay. Any retry flushes at the first clause boundary, never after a fixed word count, and only once the truncation is understood |
+| Any flush before the end of a reply truncates it (Phase 0 line 9; first VM calls: every reply cut after its first sentence) | **Answered: endpoint behaviour.** The agent flushes exactly once, at the end of each reply. Lower delay for long replies (Phase 4) would need a different design, such as one stream per sentence, never a mid-stream flush |
+| She gets stuck silent: a reply's audio never completes, or `response.done` never arrives | End of reply detected by final message, server close, 3 s quiet or 30 s cap; playback drops a stuck reply after 45 s; the gate is released after 60 s without `response.done`. Tested with a stream that goes quiet without a final message. `LOG_LEVEL=DEBUG` traces every turn |
 | Barge-in cuts at the wrong character | Alignment times restart at 0 per audio message (Phase 0): the agent keeps a running offset per reply |
 | Barge-in feels worse than OpenAI's native one | Alignment-based truncation; Phase 4 tuning; stay on the demo DID until it's good |
 | ElevenLabs concurrency limit (6) hit at peak | Slot held only while she is speaking (one stream per turn); short wait-and-retry on 429; log the waits; upgrade the plan when they appear regularly. On sustained errors, send *new* calls to the Asterisk OpenAI fallback |

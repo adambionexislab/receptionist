@@ -1,11 +1,16 @@
 """ElevenLabs Text-to-Dialogue streaming, one stream per reply.
 
-Decisions from Phase 0 (elevenlabs-voice-roadmap.md), all applied here:
+Decisions from Phase 0 and the first VM calls (elevenlabs-voice-roadmap.md):
   - eleven_v4_turbo only runs on the Text-to-Dialogue WebSocket.
   - language_code (sk) on every stream, and digits spelled out as Slovak words
     first (sk_numbers): together they stop the drift into Czech.
-  - flush only at sentence ends and at the end of the reply; an early flush
-    after a few words truncated audio.
+  - FLUSH ONCE, AT THE END OF THE REPLY. On this endpoint a flush ends the
+    speech: text sent after it on the same stream is never spoken (Phase 0's
+    early-flush run lost the rest of line 9; the first VM calls lost the
+    greeting's second sentence). So text goes in unflushed as it arrives, and
+    finish() sends the one flush.
+  - the end of a reply is detected robustly: a final message, the server
+    closing, or no audio for a while after the flush. It never waits forever.
   - alignment times restart at 0 in every audio message, so AlignmentTrack
     keeps a running offset to map "ms played" to "characters heard".
   - a close with code 1000 is the normal end of a stream.
@@ -30,8 +35,12 @@ from voiceagent.sk_numbers import SlovakNumberStream
 
 logger = logging.getLogger(__name__)
 
-SENTENCE_END = (".", "?", "!", "…")
 _OPEN_ATTEMPTS = 3
+# After the flush: no audio for this long means the reply is over, even if
+# ElevenLabs never says so. First audio comes ~0.1–0.9 s after the flush.
+QUIET_AFTER_FLUSH_SECONDS = 3.0
+# After the flush: give up on the reply's audio entirely after this long.
+MAX_AFTER_FLUSH_SECONDS = 30.0
 
 
 class AlignmentTrack:
@@ -76,20 +85,33 @@ class TTSStream:
         voice_id: str,
         language: str,
         on_audio: Callable[[bytes], None],
+        *,
+        connector=None,
+        label: str = "",
     ) -> None:
         self.cfg = cfg
         self.voice_id = voice_id
         self.language = language
         self.on_audio = on_audio
+        self.label = label or "tts"
         self.alignment = AlignmentTrack()
         self.sent: list[str] = []
-        self.done = asyncio.Event()  # all audio received (or the stream failed)
+        self.done = asyncio.Event()  # all audio received, or the stream ended
         self.failed = False
+        self.bytes_in = 0
+        self.end_reason = ""
+        self._connect = connector or connect
         self._ws = None
         self._reader: asyncio.Task | None = None
         self._open = asyncio.Event()
         self._numbers = SlovakNumberStream() if language == "sk" else None
         self._closed = False
+        self._t0 = time.monotonic()
+        self.flushed_at: float | None = None
+        self.last_audio_at: float | None = None
+
+    def _ms(self) -> str:
+        return f"+{(time.monotonic() - self._t0) * 1000:.0f}ms"
 
     def _url(self) -> str:
         query = {
@@ -127,7 +149,7 @@ class TTSStream:
         delay = 0.2
         for attempt in range(1, _OPEN_ATTEMPTS + 1):
             try:
-                self._ws = await connect(
+                self._ws = await self._connect(
                     self._url(),
                     additional_headers={"xi-api-key": self.cfg.elevenlabs_api_key},
                     max_size=None,
@@ -137,7 +159,7 @@ class TTSStream:
             except InvalidStatus as exc:
                 status = exc.response.status_code
                 if status == 429 and attempt < _OPEN_ATTEMPTS:
-                    logger.warning("ElevenLabs 429 (concurrency) — retry in %.1fs", delay)
+                    logger.warning("%s: ElevenLabs 429 (concurrency) — retry in %.1fs", self.label, delay)
                     await asyncio.sleep(delay)
                     delay *= 2
                     continue
@@ -149,33 +171,51 @@ class TTSStream:
         await self._ws.send(json.dumps(self._init_message()))
         self._reader = asyncio.create_task(self._read())
         self._open.set()
+        logger.debug("%s: stream open %s", self.label, self._ms())
 
     def _fail(self, why: str) -> None:
-        logger.error("ElevenLabs stream: %s", why)
+        logger.error("%s: ElevenLabs stream %s", self.label, why)
         self.failed = True
+        self.end_reason = "failed"
         self._open.set()
         self.done.set()
 
     async def _read(self) -> None:
         fmt = self.cfg.elevenlabs_output_format
+        reason = "closed"
         try:
             async for raw in self._ws:
                 msg = json.loads(raw)
                 if msg.get("error") or (msg.get("code") and not msg.get("audio")):
-                    logger.error("ElevenLabs error: %s", msg)
+                    logger.error("%s: ElevenLabs error: %s", self.label, msg)
                 if msg.get("audio"):
                     audio = base64.b64decode(msg["audio"])
                     pcm = g711.ulaw_to_pcm16(audio) if fmt.startswith("ulaw") else audio
+                    if self.last_audio_at is None:
+                        logger.debug("%s: first audio %s", self.label, self._ms())
+                    self.last_audio_at = time.monotonic()
+                    self.bytes_in += len(pcm)
                     self.alignment.add(msg.get("alignment"), len(pcm) / 16)  # 16 bytes per ms
                     self.on_audio(pcm)
                 if msg.get("is_final_audio_for_turn") or msg.get("is_final"):
+                    reason = "final"
                     break
         except ConnectionClosed as exc:
             if _close_code(exc) != 1000:
-                logger.warning("ElevenLabs stream closed: %s", exc)
+                logger.warning("%s: ElevenLabs stream closed: %s", self.label, exc)
+                reason = f"closed {_close_code(exc)}"
+        except asyncio.CancelledError:
+            reason = "cancelled"
+            raise
         except Exception:
-            logger.exception("ElevenLabs reader failed")
+            logger.exception("%s: ElevenLabs reader failed", self.label)
+            reason = "error"
         finally:
+            self.end_reason = self.end_reason or reason
+            logger.debug(
+                "%s: stream ended (%s) %s, %d bytes of audio",
+                self.label, self.end_reason, self._ms(), self.bytes_in,
+            )
             self.done.set()
 
     async def _send(self, payload: dict) -> None:
@@ -187,36 +227,61 @@ class TTSStream:
             pass
 
     async def feed(self, text: str) -> None:
-        """A text delta from gpt-realtime. Flushes at a sentence end."""
+        """A text delta from gpt-realtime, sent unflushed (see the module doc)."""
         await self._open.wait()
+        if self.flushed_at is not None:
+            logger.warning("%s: text after the flush would not be spoken — dropped: %r", self.label, text)
+            return
         if self._numbers is not None:
             text = self._numbers.feed(text)
         if not text:
             return
         self.sent.append(text)
-        payload: dict = {"inputs": [{"text": text, "voice_id": self.voice_id}]}
-        if text.rstrip().endswith(SENTENCE_END):
-            payload["flush"] = True
-        await self._send(payload)
+        await self._send({"inputs": [{"text": text, "voice_id": self.voice_id}]})
 
-    async def finish(self, timeout: float = 15.0) -> None:
-        """The reply's text is complete: flush the rest and wait for its audio."""
+    async def finish(self) -> None:
+        """The reply's text is complete: send the rest with the one flush, then
+        wait until its audio is in. Never waits forever: a final message, the
+        server closing, or a quiet stream all end the reply."""
         await self._open.wait()
+        if self.flushed_at is not None or self.failed:
+            await self.close()
+            return
         rest = self._numbers.finish() if self._numbers is not None else ""
+        payload: dict = {"flush": True}
         if rest:
             self.sent.append(rest)
-            await self._send({"inputs": [{"text": rest, "voice_id": self.voice_id}], "flush": True})
-        else:
-            await self._send({"flush": True})
+            payload["inputs"] = [{"text": rest, "voice_id": self.voice_id}]
+        self.flushed_at = time.monotonic()
+        await self._send(payload)
+        logger.debug("%s: flushed %s, %d chars", self.label, self._ms(), sum(map(len, self.sent)))
+        await self._wait_for_end()
         await self._send({"close_socket": True})
-        try:
-            await asyncio.wait_for(self.done.wait(), timeout)
-        except asyncio.TimeoutError:
-            logger.warning("ElevenLabs: no final audio within %.0fs", timeout)
         await self.close()
 
+    async def _wait_for_end(self) -> None:
+        while not self.done.is_set():
+            try:
+                await asyncio.wait_for(self.done.wait(), 0.25)
+                return
+            except asyncio.TimeoutError:
+                pass
+            now = time.monotonic()
+            quiet_since = max(self.flushed_at, self.last_audio_at or 0.0)
+            if now - quiet_since > QUIET_AFTER_FLUSH_SECONDS:
+                self.end_reason = "quiet"
+                logger.warning(
+                    "%s: no audio for %.1fs after the flush — treating the reply as complete",
+                    self.label, now - quiet_since,
+                )
+                return
+            if now - self.flushed_at > MAX_AFTER_FLUSH_SECONDS:
+                self.end_reason = "timeout"
+                logger.warning("%s: reply audio still incomplete after %.0fs — giving up", self.label, MAX_AFTER_FLUSH_SECONDS)
+                return
+
     async def close(self) -> None:
-        """Stop now (barge-in, call over). Audio still in flight is dropped."""
+        """Stop now (barge-in, end of reply, call over)."""
         if self._closed:
             return
         self._closed = True
@@ -234,7 +299,7 @@ async def warm(cfg: Config, voice_id: str) -> float:
     """Open and close one stream so the first real call doesn't pay the cold
     connection (~900 ms in Phase 0). Returns the connect time in ms."""
     t0 = time.perf_counter()
-    stream = TTSStream(cfg, voice_id, cfg.elevenlabs_language_code, lambda _pcm: None)
+    stream = TTSStream(cfg, voice_id, cfg.elevenlabs_language_code, lambda _pcm: None, label="warm-up")
     await stream.open()
     await stream.close()
     return (time.perf_counter() - t0) * 1000

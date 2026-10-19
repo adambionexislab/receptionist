@@ -31,6 +31,16 @@ async def _every(seconds: float, fn) -> None:
 
 async def main() -> None:
     cfg = config.load()
+    logging.getLogger().setLevel(cfg.log_level)
+    # Libraries stay at INFO even when the agent debugs: websockets at DEBUG
+    # would log every frame, including the audio.
+    for noisy in ("websockets", "asyncio"):
+        logging.getLogger(noisy).setLevel(logging.INFO)
+    if cfg.log_level == "DEBUG":
+        logger.info(
+            "Debug logging on%s",
+            f"; caller transcripts via {cfg.debug_transcribe_model}" if cfg.debug_transcribe_model else "",
+        )
     render = RenderAPI(cfg.render_api_base, cfg.voice_agent_token)
     reporter = EndReporter(render, cfg.spool_dir)
     agent = Agent(cfg, render, reporter)
@@ -76,5 +86,5 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     asyncio.run(main())

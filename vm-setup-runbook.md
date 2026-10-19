@@ -599,6 +599,18 @@ curl -s -X POST http://127.0.0.1:9093/calls -d 'from=421903123456&to=42148230419
 
 **Rollback:** `systemctl stop apollonia-agent`. The registration then times out and every call takes the fallback to OpenAI SIP (`marin`). Or set the test tenant back to `{"voice_engine":"realtime"}`.
 
+### 11.5 Debug logging
+To trace a call turn by turn, add `LOG_LEVEL=DEBUG` to `/etc/apollonia-agent.env` and run `systemctl restart apollonia-agent` (quiet hours). The log then shows, per call, with seconds since answer:
+- **caller audio:** `caller audio: N frames` for the first frame, then every ~5 s;
+- **turns:** `caller speech started/stopped`, and `caller said: …`;
+- **model:** `response.created` / `response.done` with status and the gate state, `text done`, and each event sent to OpenAI (`→ openai …`);
+- **speech:** each ElevenLabs stream's open, first audio, flush, end (`final` / `closed` / `quiet` / `timeout`) and bytes received;
+- **playback:** `reply … played: N bytes (x.xs)`.
+
+Never logged: keys and audio.
+
+`caller said` comes from **input transcription, which is switched on only at DEBUG.** It's a second, paid speech-to-text pass, which production deliberately leaves off, like the SIP path. The model is `gpt-4o-transcribe` by default; set `DEBUG_TRANSCRIBE_MODEL=` (empty) to keep debug logging without transcripts. Remove `LOG_LEVEL=DEBUG` again once done.
+
 **Restarts** (`systemctl restart apollonia-agent`) drop only calls in progress on this engine. Do them at quiet hours.
 
 ---

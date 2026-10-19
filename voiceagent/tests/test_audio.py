@@ -55,7 +55,7 @@ def test_alignment_keeps_a_running_offset_across_messages():
     assert track.audio_ms == 680
 
 
-async def test_tts_stream_spells_numbers_flushes_at_sentence_ends_and_sets_language():
+async def test_tts_stream_spells_numbers_flushes_once_at_the_end_and_sets_language():
     import json
 
     from voiceagent import config
@@ -92,9 +92,15 @@ async def test_tts_stream_spells_numbers_flushes_at_sentence_ends_and_sets_langu
 
     texts = [m["inputs"][0]["text"] for m in sock.sent if "inputs" in m]
     assert "".join(texts) == "Vaše číslo je nula deväť nula tri, jedna dva tri, štyri päť šesť. Ďakujem"
-    flushed = [m["inputs"][0]["text"] for m in sock.sent if "inputs" in m and m.get("flush")]
-    assert flushed[0].rstrip().endswith("šesť.")  # sentence end flushes
+    # On this endpoint a flush ends the speech, so there is exactly one, and it
+    # carries the end of the reply. A sentence end inside the reply doesn't flush.
+    flushes = [m for m in sock.sent if m.get("flush")]
+    assert len(flushes) == 1 and flushes[0] is sock.sent[-2]
+    assert flushes[0]["inputs"][0]["text"] == "Ďakujem"
     assert sock.sent[-1] == {"close_socket": True}
+    # Text arriving after the flush is not sent (it would never be spoken).
+    await stream.feed("navyše")
+    assert all("navyše" not in json.dumps(m) for m in sock.sent)
 
 
 def test_alignment_without_timing_still_advances():

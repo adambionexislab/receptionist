@@ -1,14 +1,24 @@
-"""A call end to end against fake OpenAI, ElevenLabs and Render."""
+"""A call end to end against fake OpenAI, ElevenLabs and Render.
+
+ElevenLabs is faked at the WebSocket, under the real TTSStream, and behaves
+like the real Text-to-Dialogue endpoint as observed (Phase 0, first VM calls):
+a flush speaks the text received so far and ends the speech; text sent after
+it on the same stream is never spoken. The first version of this fake spoke
+everything, which is how sentence-end flushes shipped and cut every reply
+after its first sentence.
+"""
 
 import asyncio
+import base64
 import json
+import re
 import uuid
 
 import pytest
 
-from voiceagent import audiosocket, config
+from voiceagent import audiosocket, config, eleven
 from voiceagent.callflow import Call
-from voiceagent.eleven import AlignmentTrack
+from voiceagent.eleven import TTSStream
 
 CFG = config.load({
     "OPENAI_API_KEY": "o", "ELEVENLABS_API_KEY": "e",
@@ -28,38 +38,76 @@ ANSWER = {
 }
 
 MS_PER_CHAR = 10  # fake speech: every character is 10 ms of audio
+BYTES_PER_MS = 16  # 8 kHz, 16-bit
 
 
-class FakeTTS:
-    instances: list["FakeTTS"] = []
+class FakeElevenLabs:
+    """One Text-to-Dialogue WebSocket, as the real endpoint behaves."""
 
-    def __init__(self, cfg, voice, language, on_audio):
-        self.voice, self.language, self.on_audio = voice, language, on_audio
-        self.alignment = AlignmentTrack()
-        self.done = asyncio.Event()
-        self.fed: list[str] = []
-        self.closed = False
-        self.failed = False
-        FakeTTS.instances.append(self)
+    instances: list["FakeElevenLabs"] = []
+    mode = "normal"  # "normal" | "silent" (never sends a final message or closes)
 
-    async def open(self):
-        pass
+    def __init__(self, url: str):
+        self.url = url
+        self.init: dict | None = None
+        self.pending = ""        # text received, not yet spoken
+        self.spoken = ""         # text that became audio
+        self.ignored = ""        # text sent after the flush: never spoken
+        self.flushed = False
+        self.outbox: asyncio.Queue = asyncio.Queue()
+        FakeElevenLabs.instances.append(self)
 
-    async def feed(self, text):
-        self.fed.append(text)
-        # Each piece is its own audio message; times restart at 0 (Phase 0).
-        self.alignment.add(
-            {"chars": list(text), "char_start_times_ms": [i * MS_PER_CHAR for i in range(len(text))]},
-            len(text) * MS_PER_CHAR,
-        )
-        self.on_audio(b"\x01\x00" * 8 * MS_PER_CHAR * len(text))
+    async def send(self, raw: str) -> None:
+        msg = json.loads(raw)
+        if self.init is None:
+            self.init = msg
+            return
+        for item in msg.get("inputs") or []:
+            if self.flushed:
+                self.ignored += item["text"]
+            else:
+                self.pending += item["text"]
+        if msg.get("flush") and not self.flushed:
+            self.flushed = True
+            self._speak(self.pending)
+            self.spoken, self.pending = self.pending, ""
+            if self.mode == "normal":
+                await self.outbox.put({"is_final_audio_for_turn": True})
+        if msg.get("close_socket") and self.mode == "normal":
+            await self.outbox.put({"is_final": True})
+            await self.outbox.put(None)
 
-    async def finish(self):
-        self.done.set()
+    def _speak(self, text: str) -> None:
+        for i in range(0, len(text), 12):  # several audio messages; times restart at 0
+            piece = text[i:i + 12]
+            self.outbox.put_nowait({
+                "audio": base64.b64encode(b"\x01\x00" * 8 * MS_PER_CHAR * len(piece)).decode(),
+                "alignment": {
+                    "chars": list(piece),
+                    "char_start_times_ms": [j * MS_PER_CHAR for j in range(len(piece))],
+                    "char_durations_ms": [MS_PER_CHAR] * len(piece),
+                },
+            })
 
-    async def close(self):
-        self.closed = True
-        self.done.set()
+    async def close(self) -> None:
+        await self.outbox.put(None)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        item = await self.outbox.get()
+        if item is None:
+            raise StopAsyncIteration
+        return json.dumps(item)
+
+
+async def fake_connect(url, **kwargs):
+    return FakeElevenLabs(url)
+
+
+def tts_factory(cfg, voice, language, on_audio, **kwargs):
+    return TTSStream(cfg, voice, language, on_audio, connector=fake_connect, **kwargs)
 
 
 class FakeOpenAI:
@@ -121,8 +169,10 @@ class FakeReporter:
 
 
 @pytest.fixture
-async def world():
-    FakeTTS.instances.clear()
+async def world(monkeypatch):
+    FakeElevenLabs.instances.clear()
+    FakeElevenLabs.mode = "normal"
+    monkeypatch.setattr(eleven, "QUIET_AFTER_FLUSH_SECONDS", 0.3)
     oai = FakeOpenAI()
     reader = asyncio.StreamReader()
     writer = FakeWriter()
@@ -133,11 +183,11 @@ async def world():
         assert "gpt-realtime-2.1" in url
         return oai
 
-    async def start():
+    async def start(factory=tts_factory):
         call = Call(
             CFG, render, reporter, str(uuid.uuid4()),
             {"answer": ANSWER, "caller": "421903123456", "dialed": "421482304191", "diversion": ""},
-            reader, writer, tts_factory=FakeTTS, oai_connect=oai_connect,
+            reader, writer, tts_factory=factory, oai_connect=oai_connect,
         )
         task = asyncio.create_task(call.run())
         await asyncio.sleep(0.01)
@@ -147,23 +197,80 @@ async def world():
 
 
 async def say(oai, rid, item_id, text, *, done=True):
-    """Model response `rid` writing `text` (as two deltas)."""
+    """Model response `rid` writing `text` word by word, as gpt-realtime does:
+    a delta often ends exactly at a sentence end ("Test. ")."""
     await oai.inbox.put({"type": "response.created", "response": {"id": rid}})
     await oai.inbox.put({"type": "response.output_item.added", "response_id": rid,
                          "item": {"id": item_id, "type": "message"}})
-    half = len(text) // 2
-    for piece in (text[:half], text[half:]):
-        await oai.inbox.put({"type": "response.output_text.delta", "response_id": rid, "delta": piece})
+    for word in re.findall(r"\S+\s*", text):
+        await oai.inbox.put({"type": "response.output_text.delta", "response_id": rid,
+                             "delta": word})
     if done:
         await oai.inbox.put({"type": "response.output_text.done", "response_id": rid})
         await oai.inbox.put({"type": "response.done", "response": {"id": rid, "status": "completed"}})
     await asyncio.sleep(0.05)
 
 
+async def caller_turn(oai):
+    await oai.inbox.put({"type": "input_audio_buffer.speech_started"})
+    await asyncio.sleep(0.02)
+    await oai.inbox.put({"type": "input_audio_buffer.speech_stopped"})
+
+
 def audio_bytes(writer):
     return sum(len(p) for k, p in writer.frames if k == audiosocket.KIND_AUDIO)
 
 
+async def wait_for(predicate, timeout=3.0):
+    loop = asyncio.get_running_loop()
+    end = loop.time() + timeout
+    while not predicate():
+        if loop.time() > end:
+            raise AssertionError("condition not reached")
+        await asyncio.sleep(0.02)
+
+
+# ── the bug from the first VM calls (2026-10-19) ─────────────────────────────
+async def test_a_two_sentence_greeting_is_spoken_whole_and_the_caller_gets_an_answer(world):
+    start, oai, reader, writer, *_ = world
+    call, task = await start()
+
+    greeting = "Dobrý deň, som virtuálna asistentka Apollonia Voice Test. Ako vám môžem pomôcť?"
+    await say(oai, "r1", "i1", greeting)
+    first = FakeElevenLabs.instances[0]
+    # One flush, at the end of the reply: nothing is left unspoken.
+    assert first.spoken == greeting and first.ignored == ""
+    await wait_for(lambda: call.transcript and call.transcript[-1]["text"] == greeting)
+    assert audio_bytes(writer) >= len(greeting) * MS_PER_CHAR * BYTES_PER_MS - 320
+
+    # The caller speaks; the server's response must be spoken and played.
+    played_before = audio_bytes(writer)
+    await caller_turn(oai)
+    await say(oai, "r2", "i2", "Áno, rozumiem. Čo hľadáte?")
+    await wait_for(lambda: call.transcript[-1]["text"] == "Áno, rozumiem. Čo hľadáte?")
+    assert FakeElevenLabs.instances[1].spoken == "Áno, rozumiem. Čo hľadáte?"
+    assert audio_bytes(writer) > played_before
+    reader.feed_eof()
+    await task
+
+
+async def test_a_stream_that_goes_quiet_without_a_final_still_ends_the_turn(world):
+    start, oai, reader, writer, *_ = world
+    FakeElevenLabs.mode = "silent"  # audio, then nothing: no final, no close
+    call, task = await start()
+    await say(oai, "r1", "i1", "Dobrý deň.")
+    await wait_for(lambda: call.transcript and call.transcript[-1]["text"] == "Dobrý deň.")
+    assert FakeElevenLabs.instances[0].spoken == "Dobrý deň."
+
+    FakeElevenLabs.mode = "normal"
+    await caller_turn(oai)
+    await say(oai, "r2", "i2", "Áno?")
+    await wait_for(lambda: call.transcript[-1]["text"] == "Áno?")
+    reader.feed_eof()
+    await task
+
+
+# ── the rest of a call ───────────────────────────────────────────────────────
 async def test_session_and_greeting_are_set_up(world):
     start, oai, reader, writer, *_ = world
     call, task = await start()
@@ -171,6 +278,7 @@ async def test_session_and_greeting_are_set_up(world):
     assert update["type"] == "session.update"
     assert update["session"]["output_modalities"] == ["text"]
     assert update["session"]["audio"]["input"]["format"] == {"type": "audio/pcmu"}
+    assert "transcription" not in update["session"]["audio"]["input"]  # INFO: off
     assert oai.sent[1]["item"]["content"][0]["text"] == "Pozdrav volajúceho."
     assert oai.sent[2] == {"type": "response.create"}
     reader.feed_eof()
@@ -184,21 +292,20 @@ async def test_caller_audio_goes_to_openai_as_ulaw(world):
     await asyncio.sleep(0.02)
     appended = [e for e in oai.sent if e["type"] == "input_audio_buffer.append"]
     assert len(appended) == 1
-    import base64
     assert len(base64.b64decode(appended[0]["audio"])) == 160
     reader.feed_eof()
     await task
 
 
-async def test_a_reply_is_spoken_spelled_out_and_played(world):
+async def test_numbers_are_spelled_and_the_stream_is_slovak(world):
     start, oai, reader, writer, *_ = world
     call, task = await start()
     await say(oai, "r1", "i1", "Číslo 0903 123 456.")
-    tts = FakeTTS.instances[0]
-    assert tts.voice == "voice-sk" and tts.language == "sk"
-    await asyncio.sleep(0.6)  # let the player write the audio out
-    assert audio_bytes(writer) >= sum(len(t) for t in tts.fed) * 16 * MS_PER_CHAR - 320
-    assert call.transcript[-1] == {"role": "apollonia", "text": "Číslo 0903 123 456."}
+    el = FakeElevenLabs.instances[0]
+    assert "language_code=sk" in el.url and "model_id=eleven_v4_turbo" in el.url
+    assert el.init == {"voices": ["voice-sk"]}
+    assert el.spoken == "Číslo nula deväť nula tri, jedna dva tri, štyri päť šesť."
+    await wait_for(lambda: call.transcript and call.transcript[-1]["text"] == "Číslo 0903 123 456.")
     reader.feed_eof()
     await task
 
@@ -220,7 +327,6 @@ async def test_barge_in_keeps_only_what_the_caller_heard(world):
     got = created["item"]["content"][0]["text"]
     assert text.startswith(got) and 0 < len(got) < len(text)
     assert abs(len(got) - len(heard)) <= 3
-    assert FakeTTS.instances[0].closed
     assert not call.replies  # playback stopped
     before = audio_bytes(writer)
     await asyncio.sleep(0.1)
@@ -257,6 +363,8 @@ async def test_a_tool_call_goes_to_render_and_its_output_back_to_the_model(world
     outputs = [e for e in oai.sent if e.get("item", {}).get("type") == "function_call_output"]
     assert outputs[0]["item"]["call_id"] == "fc1"
     assert oai.sent[-1] == {"type": "response.create"}
+    # The tool-only response's stream is closed without speaking.
+    assert FakeElevenLabs.instances[0].spoken == "" and not FakeElevenLabs.instances[0].flushed
     reader.feed_eof()
     await task
     assert reporter.reports[0][1]["tool_calls"] == [{"name": "search_listings", "arguments": '{"zone":"Pezinok"}'}]
@@ -285,19 +393,16 @@ async def test_end_call_plays_the_goodbye_then_hangs_up_and_reports(world):
     assert payload["transcript"][-1]["text"] == "Ďakujem, dovidenia."
 
 
-async def test_a_reply_elevenlabs_cannot_speak_hangs_up_instead_of_dead_air(world, monkeypatch):
+async def test_a_reply_elevenlabs_cannot_speak_hangs_up_instead_of_dead_air(world):
     start, oai, reader, writer, render, reporter = world
 
-    async def failing_open(self):
-        self.failed = True
-        self.done.set()
+    async def refused(url, **kwargs):
+        raise OSError("connection refused")
 
-    async def silent_feed(self, text):
-        pass
+    def failing_factory(cfg, voice, language, on_audio, **kwargs):
+        return TTSStream(cfg, voice, language, on_audio, connector=refused, **kwargs)
 
-    monkeypatch.setattr(FakeTTS, "open", failing_open)
-    monkeypatch.setattr(FakeTTS, "feed", silent_feed)
-    call, task = await start()
+    call, task = await start(failing_factory)
     await say(oai, "r1", "i1", "Dobrý deň.")
     await asyncio.wait_for(task, 2)
     assert reporter.reports[0][1]["ended_by"] == "tts_failed"

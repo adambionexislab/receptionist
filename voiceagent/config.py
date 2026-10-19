@@ -40,6 +40,10 @@ class Config:
     spool_dir: str = "/var/lib/apollonia-agent/spool"
     # Hard stop for one call; Render keeps a session for 3 h at most.
     max_call_seconds: float = 900.0
+    # LOG_LEVEL=DEBUG logs every turn (and, with this model, what the caller
+    # said). Never keys or audio.
+    log_level: str = "INFO"
+    debug_transcribe_model: str = "gpt-4o-transcribe"
 
     def voice_for(self, locale: str) -> str:
         return self.voices.get(locale) or self.voices.get("sk") or ""
@@ -84,4 +88,7 @@ def load(env: dict[str, str] | None = None) -> Config:
         agent_http_bind=_host_port(env.get("AGENT_HTTP_BIND") or "127.0.0.1:9093"),
         spool_dir=env.get("AGENT_SPOOL_DIR") or "/var/lib/apollonia-agent/spool",
         max_call_seconds=float(env.get("MAX_CALL_SECONDS") or 900),
+        log_level=(env.get("LOG_LEVEL") or "INFO").upper(),
+        # Empty string switches caller transcripts off even at DEBUG.
+        debug_transcribe_model=env.get("DEBUG_TRANSCRIBE_MODEL", "gpt-4o-transcribe"),
     )
