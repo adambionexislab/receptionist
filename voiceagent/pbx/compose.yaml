@@ -1,0 +1,9 @@
+services:
+  asterisk:
+    image: apollonia-pbx:22
+    container_name: apollonia-pbx
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./etc:/etc/asterisk:ro
+      - ./logs:/var/log/asterisk
