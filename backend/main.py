@@ -4,7 +4,7 @@ import hmac
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -19,6 +19,7 @@ from acquisizione.router import router as acquisizione_router
 from agents import db as agents_db
 from billing.router import router as billing_router
 from branches import db as branches_db
+from call.agent_api import router as voice_agent_router
 from call.router import router as call_router
 from calls import db as calls_db
 from config import settings
@@ -250,6 +251,7 @@ app.add_middleware(
 )
 
 app.include_router(call_router)
+app.include_router(voice_agent_router)
 app.include_router(signup_router)
 app.include_router(billing_router)
 app.include_router(demo_router)
@@ -334,6 +336,11 @@ class TenantSettings(BaseModel):
     # client at a time rather than to every tenant the moment the environment
     # flag goes on.
     video_tour_enabled: Optional[bool] = None
+    # Which engine answers this client's calls. 'eleven' only works once the
+    # client's number is routed to the ElevenLabs VM trunk in DIDWW — switching
+    # is a two-step change (elevenlabs-voice-roadmap.md §4.1); with the number
+    # still on OpenAI SIP the call is simply answered on Realtime.
+    voice_engine: Optional[Literal["realtime", "live", "eleven"]] = None
 
 
 @app.post("/admin/tenants/{tenant_id}/settings", dependencies=[Depends(_require_admin)])

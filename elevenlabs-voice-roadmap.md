@@ -231,13 +231,17 @@ Rule: **new code calls the existing functions; it does not restructure them.** I
   - `POST /calls` `{call_uuid, from, to, diversion}` → **one answer for everything decided before the call is picked up**, in this order:
     1. **personal-numbers check** (reuses the existing lookup): listed caller → `{decision: "decline"}`;
     2. **tenant engine:** tenant not on `eleven`, or unknown DID → `{decision: "realtime"}`, no session created;
-    3. otherwise `{decision: "eleven", instructions, tools, locale, voice_id, greeting cue, content strings for silence check / farewell}`.
+    3. otherwise `{decision: "eleven", locale, session, greeting_prompt, farewell_response}`:
+       - `session` is the **OpenAI SIP accept config, as is** (`_build_accept_config`): instructions, tools, `tool_choice`, reasoning and the tuned turn detection. The agent sets text output and its audio formats on top.
+       - `farewell_response` is the ready-made `response.create` for the goodbye (`_farewell_response_event`).
+       - **The voice ID stays on the VM:** the agent picks `ELEVENLABS_VOICE_ID_<LOCALE>` from `locale`.
     - It must answer fast: the agent waits at most 1.5 s (§4.2).
-    - Builds a synthetic `sip_headers` list and passes it to the **unchanged** `_resolve_call`, then `_build_system_prompt` / `_build_accept_config` for instructions and tools.
-    - Creates the server-side session with `_new_call_session`, kept in memory, keyed by `call_uuid`.
-  - `POST /calls/{uuid}/tool` `{name, arguments}` → tool result. Wraps `_execute_tool` with the stored session.
-  - `POST /calls/{uuid}/end` `{transcript[], ended_by, timestamps}` → runs the same end-of-call path as `_run_call`: `_persist_call`, lead summary, e-mail, WhatsApp, usage.
-    - The agent sends the **full transcript**, so a Render restart mid-call still produces the lead (session rebuilt from the payload if the in-memory one is gone).
+    - Builds a synthetic `sip_headers` list and passes it to the **unchanged** `_resolve_call`, then `_build_system_prompt` / `_build_accept_config` for instructions and tools. The prompt assembly is a **copy** of `_handle_realtime_incoming`'s few lines (`agent_api._instructions`): a prompt rule added there belongs there too.
+    - Creates the server-side session with `_new_call_session`, kept in memory, keyed by `call_uuid`. A retried registration for the same `call_uuid` returns the same session.
+  - `POST /calls/{uuid}/tool` `{name, arguments}` → `{output}`. Wraps `_execute_tool` with the stored session; `arguments` may be the model's JSON string or a parsed object. `output` is null for a name that isn't a data tool (`end_call` is the agent's own). Unknown call → 404.
+  - `POST /calls/{uuid}/end` `{started_at, ended_at, ended_by, from, to, diversion, tool_calls[], transcript[]}` → **202 at once**. Then, in the background, the same end-of-call path as `_run_call`: `_send_lead_email` (summary, e-mail, WhatsApp), then `_persist_call` (call row, contact, minutes). A repeat `/end` for the same call is a no-op, so retries never send two leads.
+    - **Restart safety:** the lead is built from what the **tools** put in the session, not from the transcript. So the agent sends `from/to/diversion` and **every data tool call in order** (`tool_calls`). If Render restarted mid-call and lost the session, `/end` resolves the call again and **replays the tool calls** to rebuild it, and the lead comes out the same. The `transcript` is only logged.
+  - **Built 2026-10-19:** `backend/call/agent_api.py`, `VOICE_AGENT_TOKEN` in `config.py`, mounted in `main.py`. `POST /admin/tenants/{id}/settings` accepts `voice_engine` (`realtime` | `live` | `eleven`).
 - **Tests** in `backend/tests/`:
   - auth required
   - unknown DID
@@ -247,6 +251,7 @@ Rule: **new code calls the existing functions; it does not restructure them.** I
   - end-of-call creates the lead and alerts
   - session-lost-then-end still persists
   - The full existing suite must stay green.
+  - **Done:** `backend/tests/test_agent_api.py` (20 tests, these cases plus retries, Diversion routing, the 202/no-op `/end`, and "an `eleven` tenant reaching OpenAI SIP is answered on Realtime") and one admin test for `voice_engine`. Full suite **641 passed**.
 
 ### 4.2 Hetzner agent (new top-level folder `voiceagent/`, which Render ignores because its Docker context is `./backend`)
 **Python 3.14** (the VM's system Python on Ubuntu 26.04) in a venv at `/opt/apollonia-agent/venv`, asyncio, systemd service on the VM host running as its own user `apollonia-agent` (§2.4). Check whether **Pipecat** already covers the realtime-text + ElevenLabs pipeline before writing it from scratch; either way these must exist:
@@ -290,7 +295,7 @@ Rule: **new code calls the existing functions; it does not restructure them.** I
    - **replace the assistant's conversation item with only the spoken part** (`conversation.item.delete` + `conversation.item.create`). Otherwise she thinks she said things the caller never heard.
 6. **Port the call-loop behaviour from `_run_call`:** `_ResponseGate` (one response at a time), reply nudge (`_should_nudge_reply`), silence check (`_should_check_caller_is_there`), farewell then hangup (`_farewell_response_event` + hangup after the goodbye has *finished playing*), and max-duration guard. The pure helper functions can be copied as they are. Write down which version of `router.py` they were copied from.
 7. **Tools:** `response.function_call_arguments.done` → Render `POST /calls/{uuid}/tool` → `conversation.item.create` (function_call_output) + `response.create`.
-8. **End of call:** on hangup from either side, send the transcript to Render `POST /calls/{uuid}/end` (retry with backoff; spool to disk if Render is unreachable, then retry).
+8. **End of call:** on hangup from either side, call Render `POST /calls/{uuid}/end` with the timestamps, `from/to/diversion`, **every data tool call in order** (needed to rebuild the session after a Render restart, §4.1) and the transcript. Retry with backoff until it gets a 202; spool to disk under `/var/lib/apollonia-agent` if Render is unreachable, then retry.
 9. **Greeting:** *optional improvement:* cache the pre-generated TTS greeting per tenant, so pickup is instant and the opening can't be cut off by the model regenerating it.
 10. **Health:** `/healthz` (OpenAI and ElevenLabs reachable, Render reachable, AudioSocket listening).
 
@@ -399,7 +404,11 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
 
 ### Phase 1: Render internal API (≈2 days)
 - Section 4.1. Tests green. Deploy through the nightly deploy.
-- **Exit:** endpoints respond correctly with `curl` from the new VM (or any host, before it exists); production calls unaffected (check the next day's calls in the dashboard).
+- **Status 2026-10-19: code done, not deployed.** Additive only: new `call/agent_api.py`, `VOICE_AGENT_TOKEN` setting, one `include_router`, `voice_engine` in the admin settings. Full suite 641 passed. **Remaining:**
+  1. merge to `main`;
+  2. set `VOICE_AGENT_TOKEN` on Render (the same value as in the VM's env file) so it goes out with the **nightly** deploy, not a daytime one;
+  3. the exit check below.
+- **Exit:** endpoints respond correctly with `curl` from the VM (`POST /internal/voice/calls` for test DID 421482304191 → `{"decision":"realtime"}` while the test tenant is on `realtime`); production calls unaffected (check the next day's calls in the dashboard).
 - **Rollback:** revert commit, or unset `VOICE_AGENT_TOKEN` (endpoints go 404).
 
 ### Phase 2: new VM, Asterisk + agent, test number only (≈4–5 days)

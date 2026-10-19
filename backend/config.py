@@ -64,6 +64,9 @@ class Settings(BaseSettings):
 
     # Multi-tenant
     ADMIN_TOKEN: Optional[str] = None
+    # Shared secret of the ElevenLabs voice agent on the Hetzner VM, which calls
+    # /internal/voice/* (call/agent_api.py). Unset → that API answers 404.
+    VOICE_AGENT_TOKEN: Optional[str] = None
     DATA_DIR: str = "/data"
     # HMAC key used to sign the agency dashboard session cookie. Falls back to
     # ADMIN_TOKEN (already set in prod) so sessions still sign if this is unset;

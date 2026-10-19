@@ -59,6 +59,21 @@ def test_agency_whatsapp_number_is_stored_normalized(client):
     assert cleared.json()["lead_whatsapp"] == ""
 
 
+def test_voice_engine_can_be_set_to_eleven_and_back(client):
+    tenant = tenants_db.create(agency_name="Studio", lead_email="a@b.it")
+    url = f"/admin/tenants/{tenant['id']}/settings"
+
+    resp = client.post(url, json={"voice_engine": "eleven"}, headers=_auth())
+    assert resp.status_code == 200
+    assert resp.json()["voice_engine"] == "eleven"
+
+    back = client.post(url, json={"voice_engine": "realtime"}, headers=_auth())
+    assert back.json()["voice_engine"] == "realtime"
+
+    bogus = client.post(url, json={"voice_engine": "marin"}, headers=_auth())
+    assert bogus.status_code == 422
+
+
 def test_unknown_tenant_is_a_404(client):
     resp = client.post(
         "/admin/tenants/nope/settings", json={"collect_email": True}, headers=_auth()
