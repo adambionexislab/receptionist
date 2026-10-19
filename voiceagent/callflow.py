@@ -54,7 +54,9 @@ _RESPONSE_STUCK_SECONDS = 60.0
 _REPLY_STUCK_SECONDS = 45.0
 
 
-def realtime_session(session: dict[str, Any], transcribe_model: str = "") -> dict[str, Any]:
+def realtime_session(
+    session: dict[str, Any], transcribe_model: str = "", language: str = ""
+) -> dict[str, Any]:
     """Render's OpenAI SIP accept config, made into the agent's session: the
     same prompt, tools, reasoning and turn detection, but text out, and the
     caller's audio in as G.711 μ-law (what OpenAI gets over SIP today, D3).
@@ -69,6 +71,10 @@ def realtime_session(session: dict[str, Any], transcribe_model: str = "") -> dic
     audio_in["format"] = {"type": "audio/pcmu"}
     if transcribe_model:
         audio_in["transcription"] = {"model": transcribe_model}
+        if language:
+            # The tenant's locale (sk/it). Without it the transcriber guesses,
+            # and wrote "Dobrý deň" as "Добрый день." (call 6cfd3174).
+            audio_in["transcription"]["language"] = language
     # Text out: the output audio block (voice "marin") no longer applies.
     s["audio"] = {"input": audio_in}
     return s
@@ -93,6 +99,7 @@ class Reply:
     queue: asyncio.Queue = field(default_factory=asyncio.Queue)
     feeder: asyncio.Task | None = None
     done_at: float | None = None  # loop time of response.done
+    used_tool: bool = False  # the response called a tool (its reply follows)
 
     @property
     def finished(self) -> bool:
@@ -210,6 +217,7 @@ class Call:
             "session": realtime_session(
                 self.answer["session"],
                 self.cfg.debug_transcribe_model if self.debug else "",
+                self.locale,
             ),
         })
         # Same greeting trigger as the SIP path: a user turn with the locale's
@@ -288,12 +296,18 @@ class Call:
             if kind == audiosocket.KIND_AUDIO:
                 frames += 1
                 if len(payload) != audiosocket.FRAME_BYTES:
+                    # Not 8 kHz slin: 160 bytes is the call's μ-law (the
+                    # AudioSocket Dial lost /c(slin)), 640 would be 16 kHz.
+                    # Converted as slin it reaches OpenAI as noise, so it is
+                    # refused, loudly, rather than forwarded.
                     odd_sizes += 1
-                    if odd_sizes in (1, 50):
-                        # 640 bytes per 20 ms would be 16 kHz, not the 8 kHz
-                        # slin kind 0x10 promises.
-                        logger.warning("Call %s: caller audio frame of %d bytes (expected %d)",
-                                       self.uuid, len(payload), audiosocket.FRAME_BYTES)
+                    if odd_sizes == 1 or odd_sizes % 250 == 0:
+                        logger.error(
+                            "Call %s: caller audio frame of %d bytes, expected %d (8 kHz slin) — "
+                            "not forwarded; is /c(slin) missing on the AudioSocket Dial? (%d so far)",
+                            self.uuid, len(payload), audiosocket.FRAME_BYTES, odd_sizes,
+                        )
+                    continue
                 if frames == 1 or frames % 250 == 0:  # first frame, then every ~5 s
                     self._dbg("caller audio: %d frames (%d bytes in the last)", frames, len(payload))
                 ulaw = g711.pcm16_to_ulaw(payload)
@@ -339,6 +353,12 @@ class Call:
                 self.state["ending"] = True
             self.by_response[rid] = reply
             self.replies.append(reply)
+            # A reply to the caller's turn is under way: nothing is owed any
+            # more. Counting it only once its audio had PLAYED let the nudge
+            # fire while a long reply was still playing, and she said it twice
+            # (call 6cfd3174). A response that ends with nothing in it puts
+            # the debt back (response.done below).
+            self.state["awaiting_reply_since"] = None
             self._dbg("response.created %s%s (gate open, %d reply(s) queued)",
                       rid, " [farewell]" if reply.is_farewell else "", len(self.replies))
             # Open the speech stream now, while the model starts writing: it
@@ -382,6 +402,15 @@ class Call:
                 reply.queue.put_nowait(_FINISH)  # no-op if text already finished
                 if reply.heard is not None and not reply.replaced:
                     await self._replace_item(reply)
+                if (
+                    not reply.text
+                    and not reply.used_tool
+                    and status != "cancelled"
+                    and not self.state.get("ending_at")
+                ):
+                    # She said nothing and called nothing: the turn was dropped,
+                    # and the caller is still owed a reply (the nudge's job).
+                    self.state["awaiting_reply_since"] = now
             if status not in (None, "completed", "cancelled"):
                 logger.warning("Call %s: response %s: %s", self.uuid, status, resp.get("status_details"))
 
@@ -394,6 +423,9 @@ class Call:
 
         elif etype == "response.function_call_arguments.done":
             name = msg.get("name")
+            reply = self.by_response.get(msg.get("response_id"))
+            if reply is not None:
+                reply.used_tool = True
             if name == "end_call":
                 await self._end_call(msg.get("call_id"))
             elif name:

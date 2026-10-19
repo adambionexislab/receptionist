@@ -341,7 +341,7 @@ exten => _X.,1,NoOp(Eleven inbound ${CALLERID(num)} -> ${EXTEN})
  same => n,GotoIf($["${REG}" = "decline"]?busy)
  same => n,GotoIf($["${CUT(REG,:,1)}" != "ok"]?fallback)  ; "realtime", "" (timeout) or anything else
  same => n,Set(UUID=${CUT(REG,:,2)})                       ; UUID created by the agent
- same => n,Dial(AudioSocket/127.0.0.1:9092/${UUID})
+ same => n,Dial(AudioSocket/127.0.0.1:9092/${UUID}/c(slin))   ; c(slin): 8 kHz 16-bit, 320-byte frames (without it: μ-law, 160 bytes → noise)
  same => n,GotoIf($["${DIALSTATUS}" != "ANSWER"]?fallback) ; agent didn't take the call
  same => n,Hangup()
  same => n(busy),Hangup(17)                               ; → SIP 486, before answer. Never re-routed (§2.3)
@@ -483,7 +483,16 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
   - **Second round (2026-10-19):** flush fix confirmed (greeting complete, replies and the nudge work, no stuck silence).
     - **New bug:** the caller's audio reaches OpenAI as noise. VAD fires, but she answers "nerozumela som… na linke je zrejme šum" every time. Her own audio towards the caller is fine.
     - **Code review:** the slin → μ-law conversion, the frame handling (only kind `0x10`) and the reassembly of split TCP reads are correct. A regression test proves it: a synthesized speech-like signal in AudioSocket framing, split into random TCP pieces with DTMF and error frames mixed in, reaches OpenAI as μ-law at **37 dB SNR**.
-    - **Added to find the cause on the next call:** warnings if OpenAI's confirmed input format isn't `audio/pcmu`, if frames aren't 320 bytes, or if Asterisk sends higher-rate slin kinds; caller transcripts and transcription failures at DEBUG; and `DEBUG_CAPTURE_DIR`, two WAVs per call (runbook §11.5). **Cause still open.**
+    - **Added to find the cause on the next call:** warnings if OpenAI's confirmed input format isn't `audio/pcmu`, if frames aren't 320 bytes, or if Asterisk sends higher-rate slin kinds; caller transcripts and transcription failures at DEBUG; and `DEBUG_CAPTURE_DIR`, two WAVs per call (runbook §11.5).
+    - **Cause found:** the AudioSocket Dial was missing **`/c(slin)`**. Asterisk sent the call's own μ-law (160-byte frames), which the agent converted as if it were slin.
+    - **Fixed in the dialplan:** `Dial(AudioSocket/127.0.0.1:9092/${UUID}/c(slin))` (runbook §6.3, `voiceagent/pbx/etc/extensions.conf`). Frames are now 320 bytes, OpenAI understands the caller ("Hľadám dvojizbový byt." → correct answer), and barge-in works.
+    - **The agent now refuses any other frame size with an ERROR** instead of forwarding noise. Capture was switched off and the files deleted.
+  - **Third round fixes (call 6cfd3174):**
+    - **Reply nudge repeated a question.** It fired at +16.8 s and +30.8 s while a reply generated earlier was still playing, so she said "Je to na prenájom, alebo na kúpu?" twice.
+      - A reply now counts as given at `response.created`, not at the end of playback.
+      - A response that ends with neither text nor a tool call still leaves the caller waiting, so a dropped turn is still nudged.
+      - Regression tests for both; the first fails on the old behaviour.
+    - **Debug transcription language** now comes from the tenant's locale (`sk`/`it`). Without it, "Dobrý deň" was transcribed as "Добрый день.". These transcripts only appear in the agent's DEBUG log; the lead e-mail is built from the tools, as on the SIP path.
 - **Exit:** a full call works end to end: greeting, listing search, phone-number read-back, booking tool, hangup, lead e-mail + WhatsApp, row in `calls`, usage counted.
 - **Rollback:** nothing in production depends on the VM yet. Stop the agent and container, or delete the VM.
 

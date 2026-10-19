@@ -375,6 +375,73 @@ async def test_capture_is_off_by_default(world, tmp_path):
     await task
 
 
+async def test_frames_that_are_not_8khz_slin_are_refused_loudly(world, caplog):
+    # 160-byte frames: the call's μ-law, because the Dial lost /c(slin).
+    start, oai, reader, *_ = world
+    call, task = await start()
+    for _ in range(3):
+        reader.feed_data(audiosocket.pack(audiosocket.KIND_AUDIO, b"\xff" * 160))
+    reader.feed_data(audiosocket.pack(audiosocket.KIND_AUDIO, b"\x00\x00" * 160))  # a good one
+    await asyncio.sleep(0.05)
+    appended = [e for e in oai.sent if e["type"] == "input_audio_buffer.append"]
+    assert len(appended) == 1  # only the 320-byte frame
+    errors = [r for r in caplog.records if r.levelname == "ERROR" and "c(slin)" in r.getMessage()]
+    assert len(errors) == 1  # once, not once per frame
+    reader.feed_eof()
+    await task
+
+
+# ── the reply nudge (call 6cfd3174, 2026-10-19) ──────────────────────────────
+async def test_a_long_reply_still_playing_is_not_nudged_into_a_repeat(world, monkeypatch):
+    """She answered (response.created → text → done) but the audio plays
+    longer than the nudge timeout. The nudge must not ask for another reply:
+    in call 6cfd3174 it did, and she repeated the question."""
+    from voiceagent import turns
+
+    monkeypatch.setattr(turns, "REPLY_NUDGE_SECONDS", 0.3)
+    start, oai, reader, *_ = world
+    call, task = await start()
+    assert oai.types().count("response.create") == 1  # the greeting
+
+    await caller_turn(oai)
+    long_reply = "Rozumiem, hľadáte dvojizbový byt. Je to na prenájom, alebo na kúpu? " * 2
+    await say(oai, "r1", "i1", long_reply.strip())  # ~1.4 s of audio
+    await asyncio.sleep(1.6)  # well past the nudge timeout, while it plays
+
+    assert oai.types().count("response.create") == 1  # no nudge, no repeat
+    reader.feed_eof()
+    await task
+
+
+async def test_a_dropped_turn_is_still_nudged(world, monkeypatch):
+    """A response with no text and no tool call leaves the caller owed a
+    reply: the nudge must still ask for one."""
+    from voiceagent import turns
+
+    monkeypatch.setattr(turns, "REPLY_NUDGE_SECONDS", 0.3)
+    start, oai, reader, *_ = world
+    call, task = await start()
+    await caller_turn(oai)
+    await oai.inbox.put({"type": "response.created", "response": {"id": "r1"}})
+    await oai.inbox.put({"type": "response.done", "response": {"id": "r1", "status": "completed"}})
+    await asyncio.sleep(1.6)
+    assert oai.types().count("response.create") == 2  # greeting + nudge
+    reader.feed_eof()
+    await task
+
+
+async def test_debug_transcription_uses_the_tenant_language(world, caplog):
+    import logging
+
+    caplog.set_level(logging.DEBUG, logger="voiceagent.callflow")
+    start, oai, reader, *_ = world
+    call, task = await start()
+    transcription = oai.sent[0]["session"]["audio"]["input"]["transcription"]
+    assert transcription == {"model": "gpt-4o-transcribe", "language": "sk"}
+    reader.feed_eof()
+    await task
+
+
 # ── the rest of a call ───────────────────────────────────────────────────────
 async def test_session_and_greeting_are_set_up(world):
     start, oai, reader, writer, *_ = world

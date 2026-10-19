@@ -292,7 +292,7 @@ exten => _X.,1,NoOp(Eleven inbound ${CALLERID(num)} -> ${EXTEN})
  same => n,GotoIf($["${REG}" = "decline"]?busy)
  same => n,GotoIf($["${CUT(REG,:,1)}" != "ok"]?fallback)
  same => n,Set(UUID=${CUT(REG,:,2)})
- same => n,Dial(AudioSocket/127.0.0.1:9092/${UUID})
+ same => n,Dial(AudioSocket/127.0.0.1:9092/${UUID}/c(slin))   ; c(slin): 8 kHz 16-bit, 320-byte frames (without it: μ-law, 160 bytes → noise)
  same => n,GotoIf($["${DIALSTATUS}" != "ANSWER"]?fallback)
  same => n,Hangup()
  same => n(busy),Hangup(17)                                   ; -> 486, never re-routed by DIDWW
@@ -315,6 +315,10 @@ exten => s,1,Set(PJSIP_HEADER(add,Diversion)=<sip:${ARG1}@91.99.238.181>\;reason
 Until the agent exists, the `CURL` gets no answer, so **every call takes the fallback**. That's how §9.3 tested the fallback path first.
 
 **Build notes:**
+- **`/c(slin)` on the AudioSocket Dial is required** (found 2026-10-19).
+  - **Without it:** Asterisk sends the caller's audio in the call's own codec, μ-law with 160-byte frames, inside AudioSocket audio frames. The agent expects 8 kHz 16-bit slin (320 bytes per 20 ms), so it converted μ-law as if it were PCM and OpenAI heard **noise** ("na linke je zrejme šum").
+  - **With `c(slin)`:** frames are 320 bytes and OpenAI understands the caller.
+  - The agent now refuses frames of any other size with an ERROR instead of forwarding them.
 - **`\;reason=unconditional` must be escaped.** In `extensions.conf` a `;` starts a comment, so without the backslash everything from `;reason` onward is dropped. The `Set` line is then cut off, **no Diversion header is sent**, and OpenAI / Render answer **404** (no tenant found).
 - The host in the Diversion URI is the VM's IP (`91.99.238.181`). Only the user part (the DID) matters to the router.
 - `Hangup(34)` (503) depends on DIDWW re-routing on 503, which isn't in DIDWW's default re-routing codes. It's an open item before the trunk group goes live (§10, roadmap Phase 4).
@@ -525,6 +529,7 @@ For OpenAI to answer for the right tenant, the test DID belongs to the **test te
 | No audio from OpenAI, or the INVITE is rejected for media | check `media_encryption=sdes` on `openai-sip` (§6.1), `pjsip reload`, call again |
 | TLS: **"server identity does not match"** | `allow_wildcard_certs=yes` on `transport-tls` (keep `verify_server=yes`). OpenAI's cert is CN=api.openai.com with SAN `*.api.openai.com` (§6.1) |
 | Other TLS handshake errors | check `ca-certificates` in the image and `ca_list_file` |
+| **Caller audio is noise** (she says she can't understand / "šum"; VAD still fires); agent log: `caller audio frame of 160 bytes … not forwarded` | the AudioSocket Dial is missing **`/c(slin)`**: `Dial(AudioSocket/127.0.0.1:9092/${UUID}/c(slin))` (§6.3), then `dialplan reload` |
 | OpenAI / Render answer **404** (tenant not found) | check that a Diversion header is actually sent (`pjsip set logger on`). If it's missing, the `;` in `[add-diversion]` isn't escaped as `\;` (§6.3). If it's present, compare its format with a direct DIDWW → OpenAI call's log line |
 
 ### 9.4 Personal-number decline on the fallback path
@@ -611,7 +616,7 @@ Never logged: keys and audio.
 
 **Caller audio checks.** These log at any level:
 - `OpenAI session input format is …, not audio/pcmu`: OpenAI didn't take the format, so it reads the μ-law as something else, which sounds like noise;
-- `caller audio frame of N bytes (expected 320)`: Asterisk isn't sending 8 kHz slin;
+- `ERROR … caller audio frame of N bytes, expected 320 … not forwarded`: Asterisk isn't sending 8 kHz slin, and the frame is refused. 160 bytes means `/c(slin)` is missing on the AudioSocket Dial (§6.3);
 - `ignoring AudioSocket message kind 0x1…`: Asterisk is sending slin at a higher sample rate.
 
 At DEBUG, `session.updated: input format …` shows what OpenAI confirmed.
