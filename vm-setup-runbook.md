@@ -544,10 +544,62 @@ Put the test phone's number on the test tenant's personal-numbers list and call 
     2. **change `Hangup(34)`** in `extensions.conf` to a hangup cause that maps to a SIP code DIDWW re-routes **by default** (never 486/603), in the repo first, then on the VM.
   - **Then retest:** roadmap Phase 4 test 3 (fallback fails → DIDWW re-routes to the OpenAI trunk), and test 4 (a decline still doesn't re-route).
   - Also confirm the **Ringing Timeout (5 s)** and **Timer B (6000 ms)** on the trunk.
-- **Agent install** (roadmap §4.2): code into `/opt/apollonia-agent`, venv, `systemctl enable --now apollonia-agent`, then the full roadmap Phase 2 exit test.
+- **Agent install:** see §11 (the code is in the repo under `voiceagent/`).
 - **Phase 3:** turn on **Hetzner automatic backups** for this VM (or snapshot before every Asterisk change from then on).
 - **Phase 4:** DIDWW **trunk group** (this trunk first, the OpenAI trunk second), and the failover tests.
 - **Monitoring:** uptime check on the agent's `/healthz` once the agent runs (roadmap §2.7).
+
+---
+
+## 11. Install the agent (roadmap §4.2)
+
+The agent is the repo folder [`voiceagent/`](voiceagent/): a Python package started as `python -m voiceagent` by the unit from §8.3. Its only dependency is `websockets`. It listens on loopback only: 127.0.0.1:9093 (registry for the dialplan) and 127.0.0.1:9092 (AudioSocket).
+
+### 11.1 Copy the code (from the user's PC, repo root)
+```powershell
+scp -r voiceagent root@91.99.238.181:/opt/apollonia-agent/
+```
+`/opt/apollonia-agent/voiceagent/` then holds the package; `pbx/` and `tests/` inside it are harmless. The files keep LF line endings (`.gitattributes`).
+
+### 11.2 venv, permissions, settings (on the VM)
+```bash
+apt -y install python3-venv            # or python3.14-venv, whichever has a candidate
+python3 -m venv /opt/apollonia-agent/venv
+/opt/apollonia-agent/venv/bin/pip install -r /opt/apollonia-agent/voiceagent/requirements.txt
+chown -R root:apollonia-agent /opt/apollonia-agent
+chmod -R g+rX,o-rwx /opt/apollonia-agent
+grep -E '^(RENDER_API_BASE|ELEVENLABS_LANGUAGE_CODE|ELEVENLABS_MODEL)=' /etc/apollonia-agent.env
+```
+**Expected:** `RENDER_API_BASE=https://www.apollon-ia.com` (the agent refuses to start without `https://`), `ELEVENLABS_LANGUAGE_CODE=sk`, `ELEVENLABS_MODEL=eleven_v4_turbo`. Optional env settings: `ELEVENLABS_STABILITY`, `ELEVENLABS_SPEED`, `ELEVENLABS_SIMILARITY_BOOST`, `MAX_CALL_SECONDS` (default 900), `AGENT_SPOOL_DIR` (default `/var/lib/apollonia-agent/spool`).
+
+### 11.3 Start and check
+```bash
+systemctl enable --now apollonia-agent
+systemctl status apollonia-agent --no-pager
+journalctl -u apollonia-agent -n 20 --no-pager
+curl -s http://127.0.0.1:9093/healthz; echo
+curl -s -X POST http://127.0.0.1:9093/calls -d 'from=421903123456&to=421482304191&diversion='; echo
+```
+**Expected:**
+- the service is `active (running)`, and the log shows `Listening: registry http://127.0.0.1:9093, AudioSocket 127.0.0.1:9092`;
+- the health check prints `{"ok": true, "active_calls": 0, "pending": 0}`;
+- the registration prints **`realtime`** while the test tenant is still on `realtime`. That's this machine → Render → back, the same path the dialplan uses.
+
+### 11.4 First ElevenLabs call (test DID only)
+1. Switch the **test tenant** to `voice_engine='eleven'`, from the user's PC, using `ADMIN_TOKEN`:
+   ```bash
+   curl -s -X POST "https://www.apollon-ia.com/admin/tenants/<TEST_TENANT_ID>/settings" \
+     -H "Authorization: Bearer <ADMIN_TOKEN>" -H 'Content-Type: application/json' \
+     -d '{"voice_engine":"eleven"}'
+   ```
+   `curl -X POST …/calls` from §11.3 now prints `ok:<uuid>`.
+2. Watch `journalctl -u apollonia-agent -f` and call **421482304191**.
+
+**Expected:** the call is answered in the ElevenLabs voice. Then work through the roadmap Phase 2 exit list: greeting, listing search, phone-number read-back, booking tool, interrupting her mid-sentence, her goodbye + hang-up, then lead e-mail + WhatsApp, a row in `calls`, and usage counted.
+
+**Rollback:** `systemctl stop apollonia-agent`. The registration then times out and every call takes the fallback to OpenAI SIP (`marin`). Or set the test tenant back to `{"voice_engine":"realtime"}`.
+
+**Restarts** (`systemctl restart apollonia-agent`) drop only calls in progress on this engine. Do them at quiet hours.
 
 ---
 
@@ -560,3 +612,4 @@ Put the test phone's number on the test tenant's personal-numbers list and call 
 - [x] §8 agent user, env file (`600`), keys in place, unit installed (not enabled)
 - [x] §9 trunk `apollonia-eleven` on test DID 421482304191; INVITE seen; fallback to OpenAI works; decline on fallback gives busy
 - [ ] §10 open item: DIDWW re-routing on 503 (before the trunk group goes live)
+- [ ] §11 agent installed, health check OK, registration answers `realtime`; first ElevenLabs call on the test DID

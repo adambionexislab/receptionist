@@ -255,6 +255,24 @@ Rule: **new code calls the existing functions; it does not restructure them.** I
   - **Done:** `backend/tests/test_agent_api.py` (20 tests, these cases plus retries, Diversion routing, the 202/no-op `/end`, and "an `eleven` tenant reaching OpenAI SIP is answered on Realtime") and one admin test for `voice_engine`. Full suite **641 passed**.
 
 ### 4.2 Hetzner agent (new top-level folder `voiceagent/`, which Render ignores because its Docker context is `./backend`)
+> **Built 2026-10-19, not yet installed on the VM.** Hand-written (D4), Python 3.14, one dependency (`websockets`). Install steps are in [vm-setup-runbook.md](vm-setup-runbook.md) §11. Modules:
+> - `server.py`: the loopback registry (`POST /calls` → `decline` | `realtime` | `ok:<uuid>`, `GET /healthz`) and the AudioSocket listener;
+> - `callflow.py`: one call, with gate, nudge, farewell → hang-up, barge-in with item replacement, silence and max-duration guards;
+> - `eleven.py`: one Text-to-Dialogue stream per reply, spell-out, `language_code`, dictionary, alignment offset, 429 retry, warm-up;
+> - `sk_numbers.py`: the spell-out module;
+> - `g711.py`: μ-law conversion;
+> - `audiosocket.py`: AudioSocket framing;
+> - `render_api.py`: the client for Render's `/internal/voice/*`;
+> - `reporting.py`: the `/end` report, with retry and an on-disk spool;
+> - `turns.py`: response gate and nudge, **copied from `router.py` at `9a70526`**;
+> - `config.py`: settings from the env file.
+>
+> Tests: `voiceagent/tests/`, **145 passed** (full repo suite 786). The call flow is tested end to end against fake OpenAI, ElevenLabs and Render.
+>
+> **Not yet built:**
+> - the recorded apology for an ElevenLabs failure (for now the agent hangs up rather than leave dead air);
+> - a cached greeting (optional);
+> - gender agreement and postal codes in `sk_numbers.py`.
 **Python 3.14** (the VM's system Python on Ubuntu 26.04) in a venv at `/opt/apollonia-agent/venv`, asyncio, systemd service on the VM host running as its own user `apollonia-agent` (§2.4). Check whether **Pipecat** already covers the realtime-text + ElevenLabs pipeline before writing it from scratch; either way these must exist:
 
 > **Python 3.14 check, before choosing Pipecat or any other dependency:**
@@ -272,7 +290,7 @@ Rule: **new code calls the existing functions; it does not restructure them.** I
 2. **AudioSocket server:** TCP. Reads 8 kHz signed-linear 20 ms frames and writes audio frames back; sends hangup when the call ends.
 3. **OpenAI realtime connection:**
    - `session.update` with Render's instructions and tools, `output_modalities: ["text"]`, the same `server_vad` settings as production (`_TURN_DETECTION`), `reasoning.effort: low`, no input transcription, no noise reduction (both settled decisions, see the comments in `router.py`).
-   - Caller audio: 8 kHz → 24 kHz PCM resample, or send `audio/pcmu` directly. Pick whichever gives better comprehension in Phase 2.
+   - Caller audio: **`audio/pcmu`** (decided, D3). AudioSocket's 8 kHz PCM is encoded to G.711 μ-law and sent as is: the same audio OpenAI gets over SIP today, so no resampling and no extra library.
 4. **TTS:** stream `response.output_text.delta` into the ElevenLabs **Text-to-Dialogue** WebSocket (`/v1/text-to-dialogue/stream-input`, `model_id=eleven_v4_turbo`, `output_format=pcm_8000`, `sync_alignment=true`, pronunciation dictionary). **One TTS stream per response:** open it on `response.created` (or when the first text arrives) and close it when the response is done or interrupted, so a concurrency slot is held only while she is speaking. Opening early hides the TLS handshake; Phase 0 checks whether an open-but-idle stream already counts against the limit.
    **Text-to-Dialogue WebSocket** (decided: the only one that supports `eleven_v4_turbo`). How it works, from the API reference:
    | | |
@@ -453,7 +471,7 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
   - fallback to OpenAI (`marin`, two-way audio, tenant found from Diversion);
   - personal-number decline → 486 end to end.
   
-  **Remaining for the Phase 2 exit:** the agent itself (§4.2) and the full end-to-end call.
+  **Remaining for the Phase 2 exit:** install the agent (built 2026-10-19, §4.2; runbook §11), then the full end-to-end call on the test DID with the test tenant on `eleven`.
 - **Exit:** a full call works end to end: greeting, listing search, phone-number read-back, booking tool, hangup, lead e-mail + WhatsApp, row in `calls`, usage counted.
 - **Rollback:** nothing in production depends on the VM yet. Stop the agent and container, or delete the VM.
 
@@ -534,7 +552,7 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
 | Barge-in cuts at the wrong character | Alignment times restart at 0 per audio message (Phase 0): the agent keeps a running offset per reply |
 | Barge-in feels worse than OpenAI's native one | Alignment-based truncation; Phase 4 tuning; stay on the demo DID until it's good |
 | ElevenLabs concurrency limit (6) hit at peak | Slot held only while she is speaking (one stream per turn); short wait-and-retry on 429; log the waits; upgrade the plan when they appear regularly. On sustained errors, send *new* calls to the Asterisk OpenAI fallback |
-| ElevenLabs outage mid-call | Agent detects it and plays a short pre-recorded apology, then ends the call. The lead is still sent (transcript so far). New calls use the fallback. |
+| ElevenLabs outage mid-call | **Now:** when a reply can't be spoken, the agent hangs up rather than leave the caller in dead air (`tts_failed`); the lead is still sent from what was gathered. **Still to build:** a short recorded apology before the hang-up. A concurrency 429 is retried briefly when the stream opens. |
 | Render restarts mid-call | Tool calls retry for a few seconds; the end-of-call payload carries the full transcript, so the lead is never lost |
 | Loop logic diverges from `router.py` | Copied helpers record their source version; any change to the call loop in `router.py` gets a "port to agent?" checklist item |
 | GDPR / customer trust | Subprocessor list updated (ElevenLabs, Hetzner) and customer informed before Phase 6 |
@@ -549,7 +567,10 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
   - **Benefit:** the two products are fully isolated, so restarts, deploys, firewall changes and CPU load on one never reach the other's customers. It also allows plain IP identification of the trunk and failover tests that power off the box.
 - **Decided: per-tenant voice with a two-step switch.** `voice_engine` per tenant; tenants not on `eleven` keep gpt-realtime-2.1 with `marin`. Moving a tenant means changing both the DIDWW routing and `voice_engine` (§4.1). Routing every DID through the trunk group so the tenant setting alone decides was considered and **not chosen**: it would put every tenant's calls, including the production customer's, through Hetzner.
 - **D2: Italian:** ElevenLabs for Italian tenants too, or Slovak only at first?
-- **D3: caller audio format to OpenAI:** 24 kHz resampled PCM vs `audio/pcmu`. Decide on comprehension in Phase 2.
-- **D4: Pipecat vs. hand-written agent:** decide after a short look at Pipecat's OpenAI-realtime + ElevenLabs support.
+- **D3: caller audio format to OpenAI. Decided 2026-10-19: `audio/pcmu`.** It's the same 8 kHz G.711 audio OpenAI gets over SIP today, so comprehension is unchanged, and it needs no resampling library (`audioop` is gone in Python 3.14).
+- **D4: Pipecat vs. hand-written agent. Decided 2026-10-19: hand-written.**
+  - The agent needs AudioSocket, the Text-to-Dialogue WebSocket with `eleven_v4_turbo`, barge-in from per-chunk alignment, and Render's `/internal/voice` API. A framework would have to be worked around for most of these.
+  - Pipecat's Python 3.14 support is unverified.
+  - Hand-written, the agent is about 1,600 lines including docstrings, with one dependency (`websockets`), and the call flow is unit-tested.
 - **D5: ElevenLabs plan:** depends on Phase 0 character estimates and expected concurrent calls.
 - **D6: pricing:** does the new voice change what customers pay (premium tier)?

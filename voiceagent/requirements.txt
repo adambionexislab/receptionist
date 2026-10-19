@@ -1,0 +1,2 @@
+# Runtime (Python 3.14 on the VM). Everything else is the standard library.
+websockets>=15
