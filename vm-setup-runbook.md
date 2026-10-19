@@ -609,6 +609,24 @@ To trace a call turn by turn, add `LOG_LEVEL=DEBUG` to `/etc/apollonia-agent.env
 
 Never logged: keys and audio.
 
+**Caller audio checks.** These log at any level:
+- `OpenAI session input format is …, not audio/pcmu`: OpenAI didn't take the format, so it reads the μ-law as something else, which sounds like noise;
+- `caller audio frame of N bytes (expected 320)`: Asterisk isn't sending 8 kHz slin;
+- `ignoring AudioSocket message kind 0x1…`: Asterisk is sending slin at a higher sample rate.
+
+At DEBUG, `session.updated: input format …` shows what OpenAI confirmed.
+
+**Audio capture (test calls only).** Add `DEBUG_CAPTURE_DIR=/var/lib/apollonia-agent/capture` to the env file and restart. It must be under `/var/lib/apollonia-agent`, the only path the unit may write to. Each call then leaves two WAVs:
+- `<uuid>-from-asterisk.wav`: 16-bit PCM, 8 kHz, as Asterisk sent it;
+- `<uuid>-to-openai.wav`: μ-law, 8 kHz, as OpenAI received it.
+
+Copy them with `scp root@91.99.238.181:/var/lib/apollonia-agent/capture/*.wav .` and listen:
+- **first clean, second noisy:** the conversion is wrong;
+- **both noisy:** the audio was already bad when it left Asterisk;
+- **both clean:** look at OpenAI's side (the format warning above, and the `caller said` transcripts).
+
+The files contain the caller's voice. Remove the setting and delete the files after testing.
+
 `caller said` comes from **input transcription, which is switched on only at DEBUG.** It's a second, paid speech-to-text pass, which production deliberately leaves off, like the SIP path. The model is `gpt-4o-transcribe` by default; set `DEBUG_TRANSCRIBE_MODEL=` (empty) to keep debug logging without transcripts. Remove `LOG_LEVEL=DEBUG` again once done.
 
 **Restarts** (`systemctl restart apollonia-agent`) drop only calls in progress on this engine. Do them at quiet hours.

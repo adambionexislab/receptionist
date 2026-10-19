@@ -183,9 +183,9 @@ async def world(monkeypatch):
         assert "gpt-realtime-2.1" in url
         return oai
 
-    async def start(factory=tts_factory):
+    async def start(factory=tts_factory, cfg=CFG):
         call = Call(
-            CFG, render, reporter, str(uuid.uuid4()),
+            cfg, render, reporter, str(uuid.uuid4()),
             {"answer": ANSWER, "caller": "421903123456", "dialed": "421482304191", "diversion": ""},
             reader, writer, tts_factory=factory, oai_connect=oai_connect,
         )
@@ -266,6 +266,111 @@ async def test_a_stream_that_goes_quiet_without_a_final_still_ends_the_turn(worl
     await caller_turn(oai)
     await say(oai, "r2", "i2", "Áno?")
     await wait_for(lambda: call.transcript[-1]["text"] == "Áno?")
+    reader.feed_eof()
+    await task
+
+
+# ── caller audio: AudioSocket slin → μ-law to OpenAI (the "šum" bug, 2026-10-19) ─
+def speech_like(seconds: float = 1.0) -> bytes:
+    """A voiced, speech-like 8 kHz slin signal: a gliding ~120–180 Hz
+    fundamental with decaying harmonics (formant-ish), vibrato, and a
+    syllable-rate loudness envelope with near-silent gaps."""
+    import math
+    from array import array
+
+    rate = 8000
+    out = array("h")
+    phase = 0.0
+    for n in range(int(seconds * rate)):
+        t = n / rate
+        f0 = 150 + 30 * math.sin(2 * math.pi * 1.3 * t) + 4 * math.sin(2 * math.pi * 5.5 * t)
+        phase += 2 * math.pi * f0 / rate
+        voiced = sum(math.sin(k * phase) / k ** 1.2 for k in range(1, 18) if k * f0 < 3400)
+        envelope = max(0.0, math.sin(2 * math.pi * 3.0 * t)) ** 0.7  # ~6 syllables/s
+        out.append(int(9000 * envelope * voiced / 2.2))
+    return out.tobytes()
+
+
+def snr_db(reference: bytes, received: bytes) -> float:
+    import math
+    from array import array
+
+    a, b = array("h"), array("h")
+    a.frombytes(reference)
+    b.frombytes(received)
+    signal = sum(x * x for x in a)
+    noise = sum((x - y) ** 2 for x, y in zip(a, b)) or 1
+    return 10 * math.log10(signal / noise)
+
+
+async def test_caller_audio_reaches_openai_as_the_same_signal(world):
+    """slin from Asterisk, framed and split like TCP does, with non-audio
+    messages in between, must reach OpenAI as μ-law of that same signal."""
+    import random
+
+    from voiceagent import g711
+
+    start, oai, reader, *_ = world
+    call, task = await start()
+    pcm = speech_like(1.0)
+    stream = bytearray()
+    for i, off in enumerate(range(0, len(pcm), audiosocket.FRAME_BYTES)):
+        stream += audiosocket.pack(audiosocket.KIND_AUDIO, pcm[off:off + audiosocket.FRAME_BYTES])
+        if i == 10:
+            stream += audiosocket.pack(audiosocket.KIND_DTMF, b"5")
+        if i == 20:
+            stream += audiosocket.pack(audiosocket.KIND_ERROR, b"\x01")
+    rnd = random.Random(7)
+    pos = 0
+    while pos < len(stream):  # arbitrary TCP segments: headers split, frames merged
+        size = rnd.randint(1, 700)
+        reader.feed_data(bytes(stream[pos:pos + size]))
+        pos += size
+        await asyncio.sleep(0)
+    await asyncio.sleep(0.05)
+
+    appended = [e for e in oai.sent if e["type"] == "input_audio_buffer.append"]
+    ulaw = b"".join(base64.b64decode(e["audio"]) for e in appended)
+    assert len(appended) == len(pcm) // audiosocket.FRAME_BYTES  # one per 0x10 frame, nothing else
+    assert len(ulaw) == len(pcm) // 2  # 1 byte per sample: 8 kHz μ-law
+    assert ulaw == g711.pcm16_to_ulaw(pcm)
+    decoded = g711.ulaw_to_pcm16(ulaw)
+    assert snr_db(pcm, decoded) > 30  # μ-law on speech is ~35–38 dB; noise would be ≤ 0
+    reader.feed_eof()
+    await task
+
+
+async def test_debug_capture_writes_both_sides_as_playable_wavs(world, tmp_path):
+    import dataclasses
+    import wave
+
+    from voiceagent import g711
+
+    start, oai, reader, *_ = world
+    cfg = dataclasses.replace(CFG, debug_capture_dir=str(tmp_path))
+    call, task = await start(cfg=cfg)
+    pcm = speech_like(0.2)
+    for off in range(0, len(pcm), audiosocket.FRAME_BYTES):
+        reader.feed_data(audiosocket.pack(audiosocket.KIND_AUDIO, pcm[off:off + audiosocket.FRAME_BYTES]))
+    await asyncio.sleep(0.05)
+    reader.feed_eof()
+    await task
+
+    raw = tmp_path / f"{call.uuid}-from-asterisk.wav"
+    sent = tmp_path / f"{call.uuid}-to-openai.wav"
+    with wave.open(str(raw)) as w:
+        assert (w.getframerate(), w.getsampwidth(), w.getnchannels()) == (8000, 2, 1)
+        assert w.readframes(w.getnframes()) == pcm
+    data = sent.read_bytes()
+    assert data[:4] == b"RIFF" and data[8:12] == b"WAVE"
+    assert int.from_bytes(data[20:22], "little") == 7  # WAVE_FORMAT_MULAW
+    assert data.endswith(g711.pcm16_to_ulaw(pcm))
+
+
+async def test_capture_is_off_by_default(world, tmp_path):
+    start, oai, reader, *_ = world
+    call, task = await start()
+    assert call.capture is None
     reader.feed_eof()
     await task
 

@@ -480,6 +480,10 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
     - **Failed:** the ElevenLabs voice was heard, but the greeting stopped after its first sentence, and she then stayed silent until the caller hung up (0 tool calls). The cause was the flush at every sentence end (§4.2, Phase 0 outcome 5).
     - **Fixed** (flush once per reply; robust end-of-reply detection; safety nets for the gate and playback; `LOG_LEVEL=DEBUG` tracing), with a test that reproduces the bug. **To redeploy and call again.**
     - If she's still silent after a caller turn, the debug log shows whether caller audio reaches OpenAI at all: `caller audio: N frames`, `caller speech started/stopped`, `caller said: …`.
+  - **Second round (2026-10-19):** flush fix confirmed (greeting complete, replies and the nudge work, no stuck silence).
+    - **New bug:** the caller's audio reaches OpenAI as noise. VAD fires, but she answers "nerozumela som… na linke je zrejme šum" every time. Her own audio towards the caller is fine.
+    - **Code review:** the slin → μ-law conversion, the frame handling (only kind `0x10`) and the reassembly of split TCP reads are correct. A regression test proves it: a synthesized speech-like signal in AudioSocket framing, split into random TCP pieces with DTMF and error frames mixed in, reaches OpenAI as μ-law at **37 dB SNR**.
+    - **Added to find the cause on the next call:** warnings if OpenAI's confirmed input format isn't `audio/pcmu`, if frames aren't 320 bytes, or if Asterisk sends higher-rate slin kinds; caller transcripts and transcription failures at DEBUG; and `DEBUG_CAPTURE_DIR`, two WAVs per call (runbook §11.5). **Cause still open.**
 - **Exit:** a full call works end to end: greeting, listing search, phone-number read-back, booking tool, hangup, lead e-mail + WhatsApp, row in `calls`, usage counted.
 - **Rollback:** nothing in production depends on the VM yet. Stop the agent and container, or delete the VM.
 

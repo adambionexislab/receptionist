@@ -44,6 +44,10 @@ class Config:
     # said). Never keys or audio.
     log_level: str = "INFO"
     debug_transcribe_model: str = "gpt-4o-transcribe"
+    # Opt-in, test calls only: saves the caller's audio per call (capture.py).
+    # Must be under /var/lib/apollonia-agent, the only writable path the
+    # systemd unit allows.
+    debug_capture_dir: str = ""
 
     def voice_for(self, locale: str) -> str:
         return self.voices.get(locale) or self.voices.get("sk") or ""
@@ -91,4 +95,5 @@ def load(env: dict[str, str] | None = None) -> Config:
         log_level=(env.get("LOG_LEVEL") or "INFO").upper(),
         # Empty string switches caller transcripts off even at DEBUG.
         debug_transcribe_model=env.get("DEBUG_TRANSCRIBE_MODEL", "gpt-4o-transcribe"),
+        debug_capture_dir=env.get("DEBUG_CAPTURE_DIR") or "",
     )

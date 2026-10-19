@@ -27,6 +27,7 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
 from voiceagent import audiosocket, g711
+from voiceagent.capture import open_capture
 from voiceagent.config import Config
 from voiceagent.eleven import TTSStream
 from voiceagent.render_api import RenderAPI, RenderError
@@ -151,6 +152,7 @@ class Call:
         self.response_open_since: float | None = None
         self.tag = call_uuid[:8]
         self.debug = logger.isEnabledFor(logging.DEBUG)
+        self.capture = open_capture(cfg.debug_capture_dir, call_uuid)
 
     def _dbg(self, fmt: str, *args: Any) -> None:
         if self.debug:
@@ -236,6 +238,8 @@ class Call:
         await self._finish()
 
     async def _finish(self) -> None:
+        if self.capture is not None:
+            self.capture.close()
         for reply in list(self.by_response.values()):
             if reply.tts is not None:
                 await reply.tts.close()
@@ -267,7 +271,14 @@ class Call:
 
     # ── caller → OpenAI ──────────────────────────────────────────────────────
     async def _caller_audio(self) -> None:
+        """Caller audio from Asterisk → G.711 μ-law → OpenAI.
+
+        Only kind 0x10 payloads (8 kHz slin, little-endian) are audio; the
+        reader returns exactly one message per call, however TCP split it, so
+        headers and other kinds never end up in the audio."""
         frames = 0
+        odd_sizes = 0
+        warned_kinds: set[int] = set()
         while True:
             msg = await audiosocket.read_message(self.reader)
             if msg is None:
@@ -276,17 +287,34 @@ class Call:
             kind, payload = msg
             if kind == audiosocket.KIND_AUDIO:
                 frames += 1
+                if len(payload) != audiosocket.FRAME_BYTES:
+                    odd_sizes += 1
+                    if odd_sizes in (1, 50):
+                        # 640 bytes per 20 ms would be 16 kHz, not the 8 kHz
+                        # slin kind 0x10 promises.
+                        logger.warning("Call %s: caller audio frame of %d bytes (expected %d)",
+                                       self.uuid, len(payload), audiosocket.FRAME_BYTES)
                 if frames == 1 or frames % 250 == 0:  # first frame, then every ~5 s
                     self._dbg("caller audio: %d frames (%d bytes in the last)", frames, len(payload))
+                ulaw = g711.pcm16_to_ulaw(payload)
+                if self.capture is not None:
+                    self.capture.from_asterisk.write(payload)
+                    self.capture.to_openai.write(ulaw)
                 await self._oai_send({
                     "type": "input_audio_buffer.append",
-                    "audio": base64.b64encode(g711.pcm16_to_ulaw(payload)).decode(),
+                    "audio": base64.b64encode(ulaw).decode(),
                 })
             elif kind == audiosocket.KIND_HANGUP:
                 self._end("caller")
                 return
             elif kind == audiosocket.KIND_ERROR:
                 logger.warning("Call %s: AudioSocket error %r", self.uuid, payload)
+            elif kind not in warned_kinds:
+                warned_kinds.add(kind)
+                # 0x11–0x18 are slin at higher sample rates (Asterisk 22): not
+                # supported here, and not forwarded.
+                logger.warning("Call %s: ignoring AudioSocket message kind 0x%02x (%d bytes)",
+                               self.uuid, kind, len(payload))
 
     # ── OpenAI events ────────────────────────────────────────────────────────
     async def _oai_events(self) -> None:
@@ -358,8 +386,11 @@ class Call:
                 logger.warning("Call %s: response %s: %s", self.uuid, status, resp.get("status_details"))
 
         elif etype == "conversation.item.input_audio_transcription.completed":
-            # Only when LOG_LEVEL=DEBUG turned transcription on.
+            # Only when LOG_LEVEL=DEBUG turned transcription on: what she heard.
             self._dbg("caller said: %r", msg.get("transcript"))
+
+        elif etype == "conversation.item.input_audio_transcription.failed":
+            self._dbg("caller turn could not be transcribed: %s", msg.get("error"))
 
         elif etype == "response.function_call_arguments.done":
             name = msg.get("name")
@@ -380,7 +411,13 @@ class Call:
             self.state["awaiting_reply_since"] = now
 
         elif etype in ("session.created", "session.updated"):
-            self._dbg("%s", etype)
+            audio_in = ((msg.get("session") or {}).get("audio") or {}).get("input") or {}
+            fmt = audio_in.get("format")
+            self._dbg("%s: input format %s, transcription %s, output %s", etype, fmt,
+                      audio_in.get("transcription"), (msg.get("session") or {}).get("output_modalities"))
+            if etype == "session.updated" and (fmt or {}).get("type") != "audio/pcmu":
+                # The caller's audio is μ-law: read as anything else it is noise.
+                logger.warning("Call %s: OpenAI session input format is %s, not audio/pcmu", self.uuid, fmt)
 
         elif etype == "error":
             err = msg.get("error") or {}
