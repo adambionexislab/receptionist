@@ -96,7 +96,7 @@ Tick these off as you go. Items marked **(P0)** are needed for the Phase 0 offli
     - alignment timestamps come with `sync_alignment=true` (§4.2 step 4).
   - Still to check in Phase 0: Slovak (and Italian) quality, and that `output_format=pcm_8000` works on this exact WebSocket. Support confirmed it "in conversational configurations"; a first connect settles it.
   - Your content may be made with a different model, and the same voice can sound different on another model, so Phase 0 must judge **v4 Turbo at 8 kHz**, not your content output.
-- [ ] **Pronunciation dictionary** (alias rules) for Slovak town and street names, and brand words like "ApollonIA". Note its ID and version. This replaces the prompt respellings we reverted.
+- [ ] **Pronunciation dictionary** (alias rules) for Slovak town and street names, and brand words like "ApollonIA". Note its ID and version. This replaces the prompt respellings we reverted. **Being created 2026-10-19**, first rule `Dovidenia → Do videnia` (plus lowercase); ID and version go in the VM's env file.
 - [ ] **Usage alert / spending cap** in the dashboard.
 - [ ] **Privacy:** read the ElevenLabs DPA. Check zero-retention or EU data residency options; these are usually Enterprise-only, so decide whether that matters for your customers. ElevenLabs becomes a **new subprocessor**: it receives her text, not the caller's voice.
 
@@ -204,6 +204,7 @@ Tick these off as you go. Items marked **(P0)** are needed for the Phase 0 offli
 | `ELEVENLABS_VOICE_ID_SK` | Slovak voice: `WtA85syCrJwasGeHGH2p` |
 | `ELEVENLABS_VOICE_ID_IT` | Italian voice (optional) |
 | `ELEVENLABS_PRONUNCIATION_DICT_ID` / `_VERSION` | from 2.1 |
+| `ELEVENLABS_LANGUAGE_CODE` | `sk` (ISO 639-1). `it` for Italian tenants later. Sent as the `language_code` query parameter on the Text-to-Dialogue stream. Supported by `eleven_v4_turbo` per ElevenLabs support; tested in Phase 0 against the drift into Czech |
 | `ELEVENLABS_OUTPUT_FORMAT` | `pcm_8000` (goes straight into AudioSocket's 8 kHz audio). Format is `codec_samplerate[_bitrate]`; only `mp3_*_192` (Creator+) and `pcm_44100` (Pro+) are tier-restricted, so `pcm_8000` needs no particular plan. Fallback if this endpoint refuses it: `ulaw_8000`, which the agent decodes to 16-bit PCM with a 256-entry lookup table |
 | `RENDER_API_BASE` | `https://<render-service>` |
 | `VOICE_AGENT_TOKEN` | same as Render |
@@ -285,7 +286,13 @@ Rule: **new code calls the existing functions; it does not restructure them.** I
    | Idle | 20 s inactivity timeout; `keep_alive: true` resets it (not needed with one stream per response) |
    | Errors | `message`, `error`, `code`, `param` |
    - Send `flush` at the end of every sentence and at the end of the response, so short replies ("Áno, rozumiem.") don't wait for the buffer to fill.
-   - **Alignment timing** (per ElevenLabs support): `char_start_times_ms` is the offset in ms **from the start of the generated audio**. With one stream per reply, that's the start of her reply, so barge-in can compare "ms of this reply already played" directly with these values to find the last character the caller heard. Phase 0 still prints the values from 2–3 consecutive messages to confirm they increase across messages and don't restart at 0 per chunk. The older Text-to-Speech WebSocket documented per-chunk times, so it's worth one look.
+   - **Alignment timing: measured in Phase 0, per chunk.** Support said `char_start_times_ms` counts from the start of the generated audio, but in practice it **restarts at 0 in every audio message**, and chunk boundaries vary between runs. The agent keeps a **running offset per reply** (add each message's last start + duration) and compares "ms of this reply already played" with offset + start to find the last character the caller heard.
+   - **Spell out numbers before sending** (decided in Phase 0: digits read by the model drift into Czech; spelled out, they don't). The Phase 0 `sk_numbers.py` **moves into `voiceagent/`** as the agent's spell-out module: `spell_numbers()` and the streaming `SlovakNumberStream`, which holds back a number until it's complete across deltas. Phone numbers are read digit by digit, group by group; amounts and house numbers as Slovak numerals; times as "o štrnástej tridsať". Its self-tests become unit tests. Still to add: gender agreement ("jedna izba") and postal codes.
+   - **`language_code`** from `ELEVENLABS_LANGUAGE_CODE` (`sk`) on every stream (decided in Phase 0, together with the spell-out).
+   - **Pronunciation dictionary** from `ELEVENLABS_PRONUNCIATION_DICT_ID` / `_VERSION` in the first message of every stream (`pronunciation_dictionary_locators`). It holds **alias rules**; first rule: `Dovidenia → Do videnia`, plus lowercase.
+   - **No early flush.** Flush only at sentence ends and at the end of the reply. A fixed-word-count early flush truncated audio and sounded choppy in Phase 0 (outcome 5).
+   - **Keep the connection path warm:** the first stream of a process takes ~900 ms to connect versus ~90 ms after (Phase 0), so open a throwaway stream at agent startup.
+   - **Treat a close with code 1000 as the normal end of a stream,** even when `websockets` reports it as `ConnectionClosedError`.
    - **`voice_settings` for `eleven_v4_turbo`** (per ElevenLabs support): `stability`, `speed` and `similarity_boost`. Set them in the first message and tune them in Phase 4. Support stated this "in conversational configurations", so Phase 0 checks that this WebSocket accepts all three.
    - The EU residency host (`wss://api.eu.residency.elevenlabs.io/...`) exists for this endpoint if the plan allows it.
    - Play the audio to AudioSocket at real-time pace using a small jitter buffer.
@@ -389,7 +396,7 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
 
 - **Decision (D1):** not used. It is too small for a second real-time product (1 vCPU / 1 GB, no swap). And because its config is baked into the image, adding even a context or `func_curl` would mean rebuilding and restarting the call assistant's container. Apollonia gets its own VM from Phase 2 onwards. The box's Dockerfile (`/opt/pbx`) and firewall serve only as templates (§2.4, §2.5).
 
-### Phase 0: offline voice and delay test (≈1 day)
+### Phase 0: offline voice and delay test (≈1 day): **DONE 2026-10-19**
 - Script in the scratchpad (not in the repo):
   - gpt-realtime text output → ElevenLabs Text-to-Dialogue WebSocket, `eleven_v4_turbo`, `pcm_8000`, with your voice. The first connect confirms `pcm_8000` on this endpoint, plus how the alignment times count and that `stability`, `speed` and `similarity_boost` are accepted (§4.2 step 4);
   - also measures the cost of opening a new TTS stream per turn (handshake time), and whether an open stream that isn't generating yet counts toward the concurrency limit;
@@ -401,6 +408,32 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
   - **extra delay ≤ ~300 ms** compared with native realtime audio, from an EU host;
   - the pronunciation dictionary fixes the problem words.
 - **If it fails:** stop. Nothing was changed.
+- **First run, 2026-10-19** (on the VM, `eleven_v4_turbo`, `pcm_8000`, voice `WtA85syCrJwasGeHGH2p`; script `phase0.py` + `sk_numbers.py`, kept outside the repo in `/root/phase0`):
+  - **Voice:** most lines sound **better than `marin`**.
+  - **Numbers drift into Czech.** On the phone-number, price and house-number lines (3–6) she switches to Czech while reading the digits.
+    - Fix under test: **`--spell-numbers`** sends digits as Slovak words. Phone numbers are read digit by digit, group by group; prices and house numbers as normal numerals.
+    - Second fix under test: **`--language sk`** (`language_code` query parameter, per ElevenLabs support and the API reference).
+  - **Czech accent on some lines.** Line 17 (*"Kedy by vám vyhovovalo, aby vám maklér zavolal?"*) sounds Slovak with a Czech accent.
+    - "Dovidenia" (line 20) is stressed on the wrong syllable; Slovak stresses the first, **DO**-vi-de-nia.
+    - Under test: `--language sk`, spelling variants via `--text-override`, and the pronunciation dictionary.
+    - **Dictionary rules:** alias rules work on every model. ElevenLabs documents **phoneme rules and inline IPA for `eleven_v4`** (also v3 and flash v2); it doesn't say whether that includes `eleven_v4_turbo`, so test it. IPA/CMU phonemes for non-English languages need v3/v4.
+  - **Timing:** `first_audio` median **231 ms** (128–363 ms), within the ≤ 300 ms target at the median. `first_text` median 545 ms, but that's gpt-realtime's own time and exists today too.
+    - **Cold start:** the first stream takes **~900 ms** to connect versus **~90 ms** warm. The agent should open one ElevenLabs connection at startup and keep the TLS/DNS path warm.
+    - **Streaming overhead:** about **+140 ms** compared with `--tts-only`. This endpoint has **no chunk-length or auto-mode setting** (API reference: generation starts once it has ~40 characters / 8 words, or on `flush`). The only lever is flushing early, and that was rejected (see outcome 5 below).
+  - **Alignment:** `char_start_times_ms` **restarts at 0 in every audio message**, and chunk boundaries differ between runs. This contradicts what support said. **The agent must keep a running offset** (sum of each message's last start + duration) to map "ms played" to "characters heard" (§4.2 step 4).
+  - **Normal close:** the server closes some streams with code 1000, which `websockets` reports as `ConnectionClosedError` (~7/20 lines). A normal close counts as end of stream (fixed in the script, and needed in the agent).
+- **Outcome (2026-10-19), after the follow-up runs on lines 1–6, 9, 17 and 20.** Phase 0's exit criteria are met: the voice is better, the delay is within target, and the problem words are fixed.
+  1. **Numbers: fixed.** `spell-sk` (`language_code=sk` + spell-out) sounds best, and the drift into Czech is gone. **Both go into the agent** (§4.2): `language_code=sk` on the Text-to-Dialogue stream, and `sk_numbers.py` moved into `voiceagent/` as the spell-out module.
+  2. **Line 17 accent:** slightly better with `language_code=sk`; **passable**. Recheck on real calls in **Phase 5**.
+  3. **"Dovidenia": fixed.** "Do videnia" (two words) is stressed correctly. It goes into the ElevenLabs **pronunciation dictionary as an alias rule** `Dovidenia → Do videnia`, plus lowercase `dovidenia → do videnia`. Dictionary ID and version go in the VM's env file (`ELEVENLABS_PRONUNCIATION_DICT_ID` / `_VERSION`).
+     - **Dictionary check:**
+       - **TTS-only:** stress correct in **10/10** samples with `language_code=sk`, **with and without** the dictionary. `language_code=sk` alone already fixes it there.
+       - **Streaming** (gpt-realtime → ElevenLabs) without the dictionary: **_/5** correct *(result to fill in)*.
+     - **Decision:** keep the dictionary anyway, as the mechanism for future words. The `Dovidenia` alias stays in it as a safety net, which matters if streaming turns out to be less reliable than TTS-only.
+  4. **Delay: within target.** Without early flush, `first_audio` median is **~230–240 ms** across runs, inside Phase 0's **≤ ~300 ms extra**. Cold start is ~900 ms on the first request versus ~90–100 ms warm, so **the agent warms the connection at startup**.
+  5. **Early flush: rejected.** `--first-flush-words 3` cut line 9 off after "môžem" (1.6 s of audio instead of ~4 s), and lines 1 and 5 sounded choppy. **The agent does not flush early**; it flushes only at sentence ends and at the end of the reply.
+     - **Open question:** was the truncation a bug in the Phase 0 script or the endpoint's behaviour?
+     - It only matters if Phase 4 needs lower delay. If so, understand the truncation first, and any retry flushes at the **first clause boundary**, never after a fixed word count.
 
 ### Phase 1: Render internal API (≈2 days)
 - Section 4.1. Tests green. Deploy through the nightly deploy.
@@ -408,6 +441,7 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
   1. merge to `main`;
   2. set `VOICE_AGENT_TOKEN` on Render (the same value as in the VM's env file) so it goes out with the **nightly** deploy, not a daytime one;
   3. the exit check below.
+- **Exit check passed 2026-10-19:** from the VM, `POST /internal/voice/calls` for 421482304191 → `{"decision":"realtime"}`, HTTP 200 (merged and pushed as `9a70526`, token set on Render). `RENDER_API_BASE` must include the scheme (`https://www.apollon-ia.com`); without it, curl gets a 307 redirect and an empty body. Still to do: the next-day check of production calls.
 - **Exit:** endpoints respond correctly with `curl` from the VM (`POST /internal/voice/calls` for test DID 421482304191 → `{"decision":"realtime"}` while the test tenant is on `realtime`); production calls unaffected (check the next day's calls in the dashboard).
 - **Rollback:** revert commit, or unset `VOICE_AGENT_TOKEN` (endpoints go 404).
 
@@ -493,6 +527,11 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
 | Own Asterisk image drifts from the template or misses modules | Image built from a copy of the call assistant's Dockerfile with `func_curl` added; module check after first start (§2.5); config mounted, so changes don't need rebuilds |
 | Small VM too slow (stutter) | 2 vCPU / 4 GB class; Phase 4 load test with simultaneous calls; move to CCX if needed |
 | v4 Turbo voice is worse than your content voice | Phase 0 tests exactly v4 Turbo at 8 kHz before any build |
+| **Slovak drifts into Czech on numbers** (phone numbers, prices, house numbers; Phase 0) | **Resolved in Phase 0:** spell-out module in the agent (`sk_numbers.py` → `voiceagent/`, §4.2) **plus** `language_code=sk` on every stream; together the drift is gone. Still to handle: gender agreement ("jedna izba"), postal codes |
+| Wrong stress on some words ("Dovidenia") | **Resolved for "Dovidenia" in Phase 0:** `language_code=sk` alone gave correct stress in 10/10 TTS-only samples; the alias rule `Dovidenia → Do videnia` (plus lowercase) stays in the pronunciation dictionary as a safety net (streaming result pending). New words go into the same dictionary as they come up (phoneme/IPA rules only if `eleven_v4_turbo` supports them) |
+| Slight Czech accent on some sentences (line 17) | `language_code=sk` made it passable; recheck on real calls in Phase 5 |
+| Early flush truncates audio (Phase 0: line 9 cut after "môžem"; choppy on lines 1 and 5) | The agent doesn't flush early. Open question (script bug or endpoint behaviour), only relevant if Phase 4 needs lower delay. Any retry flushes at the first clause boundary, never after a fixed word count, and only once the truncation is understood |
+| Barge-in cuts at the wrong character | Alignment times restart at 0 per audio message (Phase 0): the agent keeps a running offset per reply |
 | Barge-in feels worse than OpenAI's native one | Alignment-based truncation; Phase 4 tuning; stay on the demo DID until it's good |
 | ElevenLabs concurrency limit (6) hit at peak | Slot held only while she is speaking (one stream per turn); short wait-and-retry on 429; log the waits; upgrade the plan when they appear regularly. On sustained errors, send *new* calls to the Asterisk OpenAI fallback |
 | ElevenLabs outage mid-call | Agent detects it and plays a short pre-recorded apology, then ends the call. The lead is still sent (transcript so far). New calls use the fallback. |

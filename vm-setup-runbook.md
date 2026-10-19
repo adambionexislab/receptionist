@@ -31,7 +31,7 @@ You are guiding a human through this runbook on their machines. Rules:
 | `<DIDWW_SIP_IPS>` | the **7 Static Endpoint IPv4 addresses** from DIDWW's SIP connectivity reference (updated 14 Oct 2026): `46.19.209.14`, `46.19.210.14`, `46.19.212.14`, `46.19.213.14`, `46.19.214.14`, `46.19.215.14`, `185.238.173.14` | used in the Hetzner firewall, ufw and the pjsip `identify`. If DIDWW updates its list, change all three places |
 | `<OPENAI_PROJECT_ID>` | the project ID in today's OpenAI SIP URI (see `voiceagent/pbx/etc/pjsip.conf`, `[openai-sip]` aor) | the existing DIDWW → OpenAI trunk's destination |
 | `<LOCATION>` | nbg1 | same as the call assistant's box |
-| `<RENDER_URL>` | the Render API base URL | Render dashboard |
+| `<RENDER_URL>` | **`https://www.apollon-ia.com`**, the Render backend. **The `https://` is required:** without it, requests go out as plain HTTP, Render answers 307, and the body is empty | Render dashboard |
 | `<TEST_DID>` | **421482304191** on the new DIDWW trunk **`apollonia-eleven`**; owned by the test tenant "Apollonia Voice Test" (`voice_engine='realtime'`) | DIDWW panel / admin |
 
 Secrets (never in chat, never in this file): `ELEVENLABS_API_KEY`, the OpenAI agent key, `VOICE_AGENT_TOKEN`. Keep the originals in a password manager.
@@ -421,11 +421,12 @@ ELEVENLABS_API_KEY=<the telephony ElevenLabs key>
 ELEVENLABS_MODEL=eleven_v4_turbo
 ELEVENLABS_WS_URL=wss://api.elevenlabs.io/v1/text-to-dialogue/stream-input
 ELEVENLABS_VOICE_ID_SK=WtA85syCrJwasGeHGH2p
+ELEVENLABS_LANGUAGE_CODE=sk
 ELEVENLABS_VOICE_ID_IT=
 ELEVENLABS_PRONUNCIATION_DICT_ID=
 ELEVENLABS_PRONUNCIATION_DICT_VERSION=
 ELEVENLABS_OUTPUT_FORMAT=pcm_8000
-RENDER_API_BASE=<RENDER_URL>
+RENDER_API_BASE=https://www.apollon-ia.com
 VOICE_AGENT_TOKEN=<value from openssl above>
 AUDIOSOCKET_BIND=127.0.0.1:9092
 AGENT_HTTP_BIND=127.0.0.1:9093
