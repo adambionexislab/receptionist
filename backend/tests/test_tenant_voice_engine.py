@@ -1,8 +1,9 @@
 """Tests for the tenants.voice_engine column (tenants/db.py).
 
-Every tenant that existed before GPT-Live must keep being answered by the
+Every tenant that existed before the column must keep being answered by the
 Realtime model after the migration: the column defaults to 'realtime', and only
-a tenant explicitly set to 'live' changes engine (call/router._uses_live_engine).
+a tenant explicitly set to 'eleven' changes engine (call/agent_api.py).
+GPT-Live ('live') was removed: leftovers are moved to 'realtime'.
 """
 
 import sqlite3
@@ -47,13 +48,13 @@ def test_migration_is_idempotent(conn):
     tenants_db._migrate(conn)  # would raise "duplicate column" if not guarded
 
 
-def test_a_tenant_can_be_created_on_live_and_switched_back(conn):
+def test_a_tenant_can_be_created_on_eleven_and_switched_back(conn):
     conn.execute(tenants_db._SCHEMA)
     tenants_db._migrate(conn)
     tenant = tenants_db.create(
-        agency_name="Štúdio Demo Live", lead_email="a@b.sk", locale="sk", voice_engine="live"
+        agency_name="Štúdio Demo", lead_email="a@b.sk", locale="sk", voice_engine="eleven"
     )
-    assert tenants_db.get_by_id(tenant["id"])["voice_engine"] == "live"
+    assert tenants_db.get_by_id(tenant["id"])["voice_engine"] == "eleven"
 
     tenants_db.update_fields(tenant["id"], voice_engine="realtime")
     assert tenants_db.get_by_id(tenant["id"])["voice_engine"] == "realtime"
@@ -63,6 +64,17 @@ def test_update_fields_rejects_unknown_columns_and_the_id(conn):
     conn.execute(tenants_db._SCHEMA)
     tenants_db._migrate(conn)
     with pytest.raises(ValueError):
-        tenants_db.update_fields("x", engine="live")
+        tenants_db.update_fields("x", engine="eleven")
     with pytest.raises(ValueError):
         tenants_db.update_fields("x", id="y")
+
+
+def test_a_leftover_gpt_live_tenant_is_moved_to_realtime(conn):
+    conn.execute(tenants_db._SCHEMA)
+    tenants_db._migrate(conn)
+    conn.execute(
+        "INSERT INTO tenants (id, agency_name, lead_email, voice_engine) "
+        "VALUES ('old', 'Štúdio Demo Live', 'a@b.sk', 'live')"
+    )
+    tenants_db._migrate(conn)
+    assert tenants_db.get_by_id("old")["voice_engine"] == "realtime"

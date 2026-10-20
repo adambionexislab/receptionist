@@ -155,7 +155,7 @@ def test_a_listed_caller_is_declined_even_for_a_realtime_tenant(client, world):
     assert _start(client).json() == {"decision": "decline"}
 
 
-@pytest.mark.parametrize("engine", ["realtime", "live", None])
+@pytest.mark.parametrize("engine", ["realtime", None])
 def test_a_tenant_on_another_engine_is_handed_back(client, world, engine):
     world["voice_engine"] = engine
     assert _start(client).json() == {"decision": "realtime"}
@@ -286,7 +286,7 @@ async def test_a_lost_session_with_no_tenant_sends_nothing(client, wrapups):
 # ── the other engines are unaffected ─────────────────────────────────────────
 def test_an_eleven_tenant_reaching_openai_sip_is_answered_on_realtime(world):
     # The Asterisk fallback hands an 'eleven' tenant's call to OpenAI SIP; it
-    # must be answered there like any Realtime call, never left to GPT-Live.
+    # must be answered there like any Realtime call.
     ctx = call_router._resolve_call(
         "c1",
         [
@@ -295,4 +295,4 @@ def test_an_eleven_tenant_reaching_openai_sip_is_answered_on_realtime(world):
         ],
     )
     assert ctx.tenant["voice_engine"] == "eleven"
-    assert not call_router._uses_live_engine(ctx)
+    assert not ctx.no_answer  # nothing stops the Realtime handler from taking it

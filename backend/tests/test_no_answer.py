@@ -13,7 +13,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from call import live, router
+from call import router
 from dashboard import router as dashboard_router
 from noanswer import contacts_file
 from noanswer import db as noanswer_db
@@ -248,7 +248,7 @@ def _ctx(engine="realtime", no_answer=True):
 @pytest.fixture
 def no_side_effects(monkeypatch):
     """Record what each handler would do instead of calling OpenAI."""
-    calls = {"reject": [], "realtime_tasks": [], "live_tasks": []}
+    calls = {"reject": [], "realtime_tasks": []}
 
     async def fake_reject(call_id, status_code=603):
         calls["reject"].append((call_id, status_code))
@@ -256,29 +256,24 @@ def no_side_effects(monkeypatch):
     async def fake_run_call(call_id, *args, **kwargs):
         calls["realtime_tasks"].append(call_id)
 
-    async def fake_run_live_call(session_id, *args, **kwargs):
-        calls["live_tasks"].append(session_id)
-
     monkeypatch.setattr(router, "_reject_call", fake_reject)
     monkeypatch.setattr(router, "_run_call", fake_run_call)
-    monkeypatch.setattr(live, "run_live_call", fake_run_live_call)
     router._claimed_calls.clear()
     yield calls
     router._claimed_calls.clear()
 
 
-async def _both_webhooks(ctx, monkeypatch, call_id="c1"):
-    """Both OpenAI webhooks fire for every call; exactly one may decide."""
+async def _webhook(ctx, monkeypatch, call_id="c1"):
     monkeypatch.setattr(router, "_resolve_call", lambda cid, headers: ctx)
     await router._handle_realtime_incoming({"call_id": call_id, "sip_headers": []})
-    await live.handle_incoming({"type": "sip", "session_id": call_id, "sip_headers": []})
     await asyncio.sleep(0)
 
 
-@pytest.mark.parametrize("engine", ["realtime", "live"])
+@pytest.mark.parametrize("engine", ["realtime", "eleven"])
 def test_a_listed_caller_is_declined_busy_and_never_answered(engine, no_side_effects, monkeypatch):
-    asyncio.run(_both_webhooks(_ctx(engine=engine), monkeypatch))
-    assert no_side_effects == {"reject": [("c1", 486)], "realtime_tasks": [], "live_tasks": []}
+    # "eleven": the VM's fallback hands an ElevenLabs tenant's call to OpenAI SIP.
+    asyncio.run(_webhook(_ctx(engine=engine), monkeypatch))
+    assert no_side_effects == {"reject": [("c1", 486)], "realtime_tasks": []}
 
 
 def test_a_redelivered_webhook_declines_once(no_side_effects, monkeypatch):
@@ -293,8 +288,8 @@ def test_a_redelivered_webhook_declines_once(no_side_effects, monkeypatch):
 
 
 def test_an_unlisted_caller_is_still_answered(no_side_effects, monkeypatch):
-    asyncio.run(_both_webhooks(_ctx(no_answer=False), monkeypatch))
-    assert no_side_effects == {"reject": [], "realtime_tasks": ["c1"], "live_tasks": []}
+    asyncio.run(_webhook(_ctx(no_answer=False), monkeypatch))
+    assert no_side_effects == {"reject": [], "realtime_tasks": ["c1"]}
 
 
 def test_a_whole_phone_book_is_added_in_one_go(client):

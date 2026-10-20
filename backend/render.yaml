@@ -59,10 +59,6 @@ services:
         sync: false
       - key: TWILIO_PHONE_NUMBER_SK
         sync: false
-      # DID of the Slovak GPT-Live demo tenant (see call/live.py). Unset = no
-      # GPT-Live demo; every other tenant stays on the Realtime model.
-      - key: LIVE_DEMO_NUMBER_SK
-        sync: false
       - key: PUBLIC_BASE_URL
         sync: false
       - key: LEAD_EMAIL

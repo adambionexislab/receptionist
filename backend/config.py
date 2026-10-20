@@ -27,11 +27,8 @@ class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: Optional[str] = None
     # Signing secret (whsec_…) of the OpenAI project webhook that delivers
-    # `realtime.call.incoming` (and, for GPT-Live tenants,
-    # `live.transport.incoming`) events to POST /call/incoming. Both event
-    # types are subscribed on the same endpoint, so they share this secret.
-    # When set, the handler verifies the Standard-Webhooks signature and
-    # rejects forgeries.
+    # `realtime.call.incoming` events to POST /call/incoming. When set, the
+    # handler verifies the Standard-Webhooks signature and rejects forgeries.
     OPENAI_WEBHOOK_SECRET: Optional[str] = None
 
     # Twilio — numbers only. Inbound calls no longer hit a Twilio voice webhook:
@@ -46,12 +43,6 @@ class Settings(BaseSettings):
     # created/bound to it at startup, exactly as TWILIO_PHONE_NUMBER drives the
     # Italian demo tenant. Point an existing Twilio number's voice webhook here.
     TWILIO_PHONE_NUMBER_SK: Optional[str] = None
-    # Optional DID for the Slovak GPT-Live demo tenant ("Štúdio Demo Live").
-    # When set, a locale='sk', voice_engine='live' tenant is created on it at
-    # startup — or an existing tenant on that number is switched to it — and
-    # bound to the Slovak seed listings. Same DIDWW trunk as the other numbers,
-    # with Diversion Inject Mode on (the DID is routed from that header).
-    LIVE_DEMO_NUMBER_SK: Optional[str] = None
     # ISO country code to provision tenant numbers from. "AT" (Austria) is the
     # default: cheap to host, and on the intra-EU forwarding leg from an Italian
     # carrier it's price-capped/usually plan-included. "US" is cheapest to host
@@ -135,28 +126,6 @@ class Settings(BaseSettings):
     REALTIME_TRANSCRIBE_DELAY: str = "xhigh"
     # Property photo enhancement (declutter/relight/straighten).
     IMAGE_EDIT_MODEL: str = "gpt-image-2.5-flare"
-
-    # ── GPT-Live phone engine (tenants with voice_engine='live') ─────────────
-    # GPT-Live splits the agent in two: a full-duplex voice model that holds
-    # the conversation, and a Responses "delegation" backend that calls the
-    # tools (see call/live.py). The backend is chosen independently of the
-    # voice model; Luna is the cheaper, faster alternative to Terra.
-    LIVE_MODEL: str = "gpt-live-1"
-    LIVE_VOICE: str = "marin"
-    LIVE_BACKEND_MODEL: str = "gpt-5.6-terra"
-    # Every tool call waits on this model while the caller listens, so it is
-    # kept low: the tools are simple lookups and form-filling.
-    LIVE_BACKEND_REASONING: str = "low"
-    # auto | default | flex | priority. Empty = omit (the project default).
-    # "priority" is the lever for tool-call latency if the project has it.
-    LIVE_BACKEND_SERVICE_TIER: str = ""
-    # Have OpenAI store each GPT-Live call's audio (session `store: true`), so a
-    # call can be downloaded as stereo WAV — caller left, Apollonia right — from
-    # GET /admin/live-recording/{session_id}. A DIAGNOSTIC for the demo: it is
-    # how to tell audio the model cut short from audio the phone line lost.
-    # Off by default — these are real callers' voices, kept 30 days by OpenAI,
-    # and it needs storage enabled on the OpenAI project.
-    LIVE_STORE_SESSIONS: bool = False
 
     # ── Branch routing (which office a seller call belongs to) ───────────────
     # How far an office can be from a property and still be treated as covering

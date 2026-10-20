@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -142,38 +142,6 @@ def _setup_sk_demo() -> None:
     tenant_stores.attach(sk["id"], ListingsStore(locale="sk"))
 
 
-def _setup_live_demo() -> None:
-    """Slovak GPT-Live demo tenant — the Slovak demo above, answered by
-    GPT-Live instead of the Realtime model (see call/live.py).
-
-    When LIVE_DEMO_NUMBER_SK is set, ensure the tenant on that number is a
-    locale='sk', voice_engine='live' tenant, creating "Štúdio Demo Live" if
-    there is none. An existing tenant on the number (e.g. one made by hand) is
-    switched over rather than duplicated. Same Slovak seed listings as the
-    Realtime demo, so the two engines can be compared on identical data.
-    """
-    number = settings.LIVE_DEMO_NUMBER_SK
-    if not number:
-        return
-    tenant = db.get_by_twilio_number(number)
-    if tenant is None:
-        tenant = db.create(
-            agency_name="Štúdio Demo Live",
-            agent_name="Apollonia",
-            twilio_number=number,
-            lead_email=settings.LEAD_EMAIL or "",
-            locale="sk",
-            voice_engine="live",
-        )
-        logger.info("Created GPT-Live demo tenant 'Štúdio Demo Live' on %s", number)
-    elif tenant.get("locale") != "sk" or tenant.get("voice_engine") != "live":
-        db.update_fields(tenant["id"], locale="sk", voice_engine="live")
-        logger.info(
-            "Switched tenant %s on %s to the Slovak GPT-Live demo", tenant["id"], number
-        )
-    tenant_stores.attach(tenant["id"], ListingsStore(locale="sk"))
-
-
 async def _load_all_tenant_listings() -> None:
     tenants = await asyncio.to_thread(db.get_all_active)
     if not tenants:
@@ -202,7 +170,6 @@ async def lifespan(app: FastAPI):
     _check_session_signing()
     await asyncio.to_thread(_startup_migration)
     await asyncio.to_thread(_setup_sk_demo)
-    await asyncio.to_thread(_setup_live_demo)
     await asyncio.to_thread(leadgen_db.init)
     await asyncio.to_thread(salesnotes_db.init)
     await asyncio.to_thread(calls_db.init)
@@ -340,7 +307,7 @@ class TenantSettings(BaseModel):
     # client's number is routed to the ElevenLabs VM trunk in DIDWW — switching
     # is a two-step change (elevenlabs-voice-roadmap.md §4.1); with the number
     # still on OpenAI SIP the call is simply answered on Realtime.
-    voice_engine: Optional[Literal["realtime", "live", "eleven"]] = None
+    voice_engine: Optional[Literal["realtime", "eleven"]] = None
 
 
 @app.post("/admin/tenants/{tenant_id}/settings", dependencies=[Depends(_require_admin)])
@@ -367,25 +334,6 @@ async def admin_tenant_settings(tenant_id: str, data: TenantSettings):
     if fields:
         await asyncio.to_thread(db.update_fields, tenant_id, **fields)
     return await asyncio.to_thread(db.get_by_id, tenant_id)
-
-
-@app.get("/admin/live-recording/{session_id}", dependencies=[Depends(_require_admin)])
-async def admin_live_recording(session_id: str):
-    """Download a GPT-Live call's stored audio (see LIVE_STORE_SESSIONS):
-    stereo WAV, caller left, Apollonia right. session_id is the live_… id from
-    the call's log lines."""
-    from call import live
-
-    if not session_id.startswith("live_"):
-        raise HTTPException(status_code=400, detail="Expected a live_… session id")
-    resp = await live.download_recording(session_id)
-    if resp.status_code >= 400:
-        raise HTTPException(status_code=resp.status_code, detail=resp.text[:500])
-    return Response(
-        content=resp.content,
-        media_type="audio/wav",
-        headers={"Content-Disposition": f'attachment; filename="{session_id}.wav"'},
-    )
 
 
 @app.get("/success")

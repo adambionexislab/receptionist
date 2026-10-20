@@ -9,20 +9,17 @@ before any client relies on it). What must hold:
 
 import pytest
 
-from call import live
 from call import router
 from config import settings
 
 _DEMO_IT = "+390200000001"
 _DEMO_SK = "+421200000002"
-_DEMO_LIVE = "+421200000003"
 
 
 @pytest.fixture(autouse=True)
 def _demo_numbers(monkeypatch):
     monkeypatch.setattr(settings, "TWILIO_PHONE_NUMBER", _DEMO_IT)
     monkeypatch.setattr(settings, "TWILIO_PHONE_NUMBER_SK", _DEMO_SK)
-    monkeypatch.setattr(settings, "LIVE_DEMO_NUMBER_SK", _DEMO_LIVE)
 
 
 def _tenant(number, locale="sk", engine="realtime"):
@@ -40,9 +37,8 @@ def _tool(tools, name):
     return next(t for t in tools if t["name"] == name)
 
 
-@pytest.mark.parametrize("number", [_DEMO_IT, _DEMO_LIVE])
-def test_demo_numbers_collect_email(number):
-    assert router._collects_email(_tenant(number))
+def test_the_italian_demo_collects_email():
+    assert router._collects_email(_tenant(_DEMO_IT))
 
 
 def test_slovak_realtime_demo_is_opted_out():
@@ -89,39 +85,6 @@ def test_email_section_orders_name_spelling_and_readback(locale):
     }[locale]
     positions = [section.index(m) for m in markers]
     assert positions == sorted(positions)
-
-
-def _live_ctx(number):
-    return router._CallContext(
-        tenant=_tenant(number, engine="live"),
-        locale="sk",
-        content=router._content("sk"),
-        tenant_store=None,
-        lead_email="lead@example.com",
-        branch_names=[],
-        caller="+421900000000",
-        caller_number_known=True,
-    )
-
-
-def test_live_demo_gets_email_on_voice_backend_and_tools():
-    cfg = live.build_session_config(_live_ctx(_DEMO_LIVE))
-    assert "časť pred zavináčom mi vyhláskujte" in cfg["instructions"]
-    responses = cfg["delegation"]["responses"]
-    assert "'email'" in responses["instructions"]
-    props = _tool(responses["tools"], "record_caller_info")["parameters"]["properties"]
-    assert "email" in props
-    # The voice model has no tools, so it must not be told about tool fields.
-    assert "record_caller_info" not in cfg["instructions"]
-
-
-def test_live_production_tenant_gets_no_email():
-    cfg = live.build_session_config(_live_ctx("+43720000099"))
-    assert "zavináč" not in cfg["instructions"]
-    responses = cfg["delegation"]["responses"]
-    assert "zavináč" not in responses["instructions"]
-    props = _tool(responses["tools"], "record_caller_info")["parameters"]["properties"]
-    assert "email" not in props
 
 
 def _session(**extra):

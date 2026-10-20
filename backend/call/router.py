@@ -1254,10 +1254,7 @@ def _collects_email(tenant: Optional[dict[str, Any]]) -> bool:
         return True
     if tenant.get("collect_email"):
         return True
-    demo_numbers = (
-        settings.TWILIO_PHONE_NUMBER,
-        settings.LIVE_DEMO_NUMBER_SK,
-    )
+    demo_numbers = (settings.TWILIO_PHONE_NUMBER,)
     return any(_same_number(tenant.get("twilio_number"), n) for n in demo_numbers)
 
 
@@ -1573,12 +1570,10 @@ async def _hangup_call(call_id: str) -> bool:
     return False
 
 
-# Webhook deliveries are retried, and once GPT-Live SIP is enabled on the
-# project every call fires TWO webhooks — realtime.call.incoming and
-# live.transport.incoming — for the same pending call. OpenAI lets only the
-# first accept/reject through, but a losing duplicate would still have started
-# a second control task for the call. On the live path that task answers tool
-# calls, so it would run every tool twice. Claims expire so the dict stays small.
+# Webhook deliveries are retried, so the same pending call can arrive twice.
+# OpenAI lets only the first accept/reject through, but a losing duplicate
+# would still start a second control task for the call, which would answer
+# every tool call twice. Claims expire so the dict stays small.
 _CLAIM_TTL_SECONDS = 600.0
 _claimed_calls: dict[str, float] = {}
 
@@ -1621,8 +1616,8 @@ def _resolve_call(call_id: str, sip_headers: list[dict[str, Any]]) -> Optional[_
 
     Returns None when the dialed number belongs to no tenant and is not the
     env-var demo number. The caller of this decides what that means: the
-    Realtime webhook rejects the call, the live one leaves it alone so the
-    call is never declined twice."""
+    Realtime webhook rejects the call; the ElevenLabs agent API
+    (call/agent_api.py) hands it back to the dialplan."""
     caller = _extract_sip_number(_sip_header(sip_headers, "From")) or "sconosciuto"
     dialed = _extract_sip_number(_sip_header(sip_headers, "To"))
     # When a carrier forwards a line to the Apollonia number, the call's To
@@ -1752,41 +1747,13 @@ def _new_call_session(call_id: str, ctx: _CallContext) -> dict[str, Any]:
     }
 
 
-def _uses_live_engine(ctx: _CallContext) -> bool:
-    """Whether GPT-Live answers this call instead of the Realtime model.
-
-    Opt-in per tenant (tenants.voice_engine = 'live'), and only for a locale
-    that has GPT-Live prompts — the Realtime prompt cannot simply be reused,
-    because GPT-Live splits it between a voice model and a tool-calling
-    backend (see call/live.py). A live tenant in a locale without them is
-    answered on Realtime rather than not at all."""
-    tenant = ctx.tenant
-    if not tenant or (tenant.get("voice_engine") or "realtime") != "live":
-        return False
-    # A listed caller is declined by the Realtime handler; GPT-Live must leave
-    # it alone so the call gets exactly one decision.
-    if ctx.no_answer:
-        return False
-    from call import live  # live imports this module, so import it at use
-
-    if live.has_content(ctx.locale):
-        return True
-    logger.warning(
-        "Tenant %s is set to GPT-Live but locale %r has no GPT-Live prompts — "
-        "answering on Realtime",
-        tenant["id"], ctx.locale,
-    )
-    return False
-
-
 @router.post("/incoming")
 async def incoming_call(request: Request) -> Response:
-    """OpenAI's call webhooks: fire when a SIP call reaches our project's
-    connector. We verify the signature and hand the call to the engine its
-    tenant uses — `realtime.call.incoming` for the Realtime model,
-    `live.transport.incoming` for GPT-Live. Both fire for every call once
-    GPT-Live SIP is enabled on the project; each handler acts only on its own
-    tenants' calls and leaves the rest alone, so exactly one decides."""
+    """OpenAI's call webhook: fires when a SIP call reaches our project's
+    connector (`realtime.call.incoming`). We verify the signature and run the
+    call on the Realtime model. Any other event type is acknowledged and
+    ignored — including `live.transport.incoming`, which the project still
+    sends if GPT-Live SIP is enabled on it (GPT-Live was removed)."""
     raw = await request.body()
 
     secret = settings.OPENAI_WEBHOOK_SECRET
@@ -1809,12 +1776,6 @@ async def incoming_call(request: Request) -> Response:
     data = payload.get("data") or {}
     if etype == "realtime.call.incoming":
         return await _handle_realtime_incoming(data)
-    # live.call.incoming is the deprecated name of the same event; a project
-    # subscribed before the rename can still receive it.
-    if etype in ("live.transport.incoming", "live.call.incoming"):
-        from call import live
-
-        return await live.handle_incoming(data)
     logger.info("Ignoring webhook type=%s", etype)
     return Response(status_code=200)
 
@@ -1831,8 +1792,6 @@ async def _handle_realtime_incoming(data: dict[str, Any]) -> Response:
     ctx = _resolve_call(call_id, data.get("sip_headers") or [])
     if ctx is None:
         # Unknown number and not the env-var demo number: decline the call.
-        # Only this handler rejects — the live one ignores unknown numbers —
-        # so the call is never declined twice.
         await _reject_call(call_id, 404)
         return Response(status_code=200)
 
@@ -1845,13 +1804,6 @@ async def _handle_realtime_incoming(data: dict[str, Any]) -> Response:
         if _claim_call(call_id):
             logger.info("Declining call %s — caller is on the no-answer list", call_id)
             await _reject_call(call_id, 486)
-        return Response(status_code=200)
-
-    if _uses_live_engine(ctx):
-        # Its live.transport.incoming twin accepts it. Doing nothing here is
-        # the whole contract: an accept or reject from this side would win the
-        # call away from GPT-Live.
-        logger.info("Call %s belongs to a GPT-Live tenant — leaving it to GPT-Live", call_id)
         return Response(status_code=200)
 
     if not _claim_call(call_id):
@@ -2045,11 +1997,11 @@ async def _execute_tool(
 ) -> Optional[str]:
     """Run one of the agent's data tools and return its function_call_output.
 
-    Shared by both voice engines: the Realtime loop (the voice model calls the
-    tool itself) and GPT-Live (a delegated backend model calls it — see
-    call/live.py). Only the event plumbing around a tool call differs between
-    them; what a tool does to the call's session must not, or the lead email
-    would depend on which engine answered.
+    Shared by both voice engines: the Realtime loop over OpenAI SIP, and the
+    ElevenLabs agent on the VM (through call/agent_api.py). Only the event
+    plumbing around a tool call differs between them; what a tool does to the
+    call's session must not, or the lead email would depend on which engine
+    answered.
 
     end_call is not here: ending a call is engine-specific. Returns None for a
     name that is not a data tool, so the caller sends nothing back.

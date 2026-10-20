@@ -59,9 +59,11 @@ _ADDED_COLUMNS = {
     # until the team records the real Stripe billing date; the period falls
     # back to created_at, which is when provisioning happened.
     "billing_anchor": "TEXT",
-    # Which voice model answers this tenant's calls: 'realtime' (the
-    # gpt-realtime session every tenant has always had) or 'live' (GPT-Live,
-    # opt-in, see call/live.py). Read per call, so switching needs no deploy.
+    # Which voice engine answers this tenant's calls: 'realtime' (gpt-realtime
+    # over OpenAI SIP, every tenant's default) or 'eleven' (ElevenLabs voice on
+    # Apollonia's own VM, see call/agent_api.py; the tenant's number must also
+    # be routed to that trunk). Read per call, so switching needs no deploy.
+    # 'live' (GPT-Live) was removed; _migrate moves any leftover to 'realtime'.
     "voice_engine": "TEXT NOT NULL DEFAULT 'realtime'",
     # 1 → Apollonia also asks this tenant's callers for an e-mail address (see
     # call/router._collects_email). Off by default; set per client via
@@ -148,6 +150,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
         )
     if missing:
         logger.info("Backfilled access codes for %d tenant(s)", len(missing))
+
+    # GPT-Live is gone: a tenant still marked 'live' would be answered on
+    # Realtime anyway; say so in the data too.
+    moved = conn.execute(
+        "UPDATE tenants SET voice_engine = 'realtime' WHERE voice_engine = 'live'"
+    ).rowcount
+    if moved:
+        logger.info("Moved %d tenant(s) from the removed GPT-Live engine to realtime", moved)
 
 
 def get_connection() -> sqlite3.Connection:

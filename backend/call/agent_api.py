@@ -162,7 +162,7 @@ async def start_call(body: CallStart) -> dict[str, Any]:
 
     - decline:  the caller is on the tenant's personal-numbers list. The
                 dialplan answers 486, exactly what the OpenAI path does.
-    - realtime: not this engine's call (tenant on realtime/live, or a number
+    - realtime: not this engine's call (tenant on realtime, or a number
                 with no tenant). The dialplan hands it to OpenAI SIP, where
                 today's code takes it — including rejecting unknown numbers.
     - eleven:   take it. The session config, greeting and farewell come back

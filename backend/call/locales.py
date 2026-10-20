@@ -440,8 +440,7 @@ _SK_ASK_FOR_NUMBER = (
 
 # Demo tenants only (see router._collects_email): a trial of whether she can
 # take down an e-mail address by voice. Kept out of the body so production
-# tenants never ask for one. The steps alone are also the GPT-Live voice
-# model's version (call/live_prompts.py), which has no tools to fill in.
+# tenants never ask for one.
 SK_DEMO_EMAIL_STEPS = (
     "\n\n# E-mailová adresa volajúceho — DÔLEŽITÉ\n"
     "Hneď po tom, ako vám volajúci povie svoje meno, sa ho ako ĎALŠIU otázku\n"
