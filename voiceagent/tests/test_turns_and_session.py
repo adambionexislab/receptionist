@@ -71,6 +71,19 @@ def test_engine_additions_are_appended_after_render_s_prompt():
     assert realtime_session({"instructions": "x"})["instructions"] == "x"
 
 
+def test_phone_numbers_are_excluded_from_numbers_as_words():
+    """She writes phone numbers in digits, exactly as in the tool; sk_numbers
+    reads them digit by digit. If she wrote them in words herself, her
+    read-back could differ from the stored digits unnoticed."""
+    from voiceagent.prompts import engine_additions
+
+    text = engine_additions("sk")
+    assert "TELEFÓNNE ČÍSLA píšte VŽDY ČÍSLICAMI" in text
+    assert "'0903 123 456'" in text
+    # No example teaches her to write a phone number in words.
+    assert "nula deväť nula tri" not in text
+
+
 ENV = {
     "OPENAI_API_KEY": "o", "ELEVENLABS_API_KEY": "e",
     "RENDER_API_BASE": "https://www.apollon-ia.com/", "VOICE_AGENT_TOKEN": "t",

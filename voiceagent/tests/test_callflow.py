@@ -485,6 +485,32 @@ async def test_numbers_are_spelled_and_the_stream_is_slovak(world):
     await task
 
 
+async def test_a_read_back_phone_number_is_exactly_the_stored_digits(world):
+    """Her read-back must say the very digits the tool stored: she writes the
+    number in digits, and the caller hears them spelled one by one."""
+    from voiceagent.sk_numbers import _DIGIT
+
+    start, oai, reader, writer, render, reporter = world
+    call, task = await start()
+    stored = "0903123456"
+    await oai.inbox.put({"type": "response.created", "response": {"id": "r0"}})
+    await oai.inbox.put({"type": "response.function_call_arguments.done", "response_id": "r0",
+                         "name": "record_caller_info", "call_id": "fc1",
+                         "arguments": json.dumps({"phone": stored})})
+    await oai.inbox.put({"type": "response.done", "response": {"id": "r0", "status": "completed"}})
+    await asyncio.sleep(0.02)
+    await say(oai, "r1", "i1", "Zapísala som si číslo 0903 123 456, je to správne?")
+
+    spoken = FakeElevenLabs.instances[-1].spoken
+    assert not re.search(r"\d", spoken)  # nothing left for the TTS to read in Czech
+    words = re.findall(r"\b(" + "|".join(_DIGIT) + r")\b", spoken)
+    heard_digits = "".join(str(_DIGIT.index(w)) for w in words)
+    assert heard_digits == stored
+    assert json.loads(render.tools[0][1])["phone"] == stored
+    reader.feed_eof()
+    await task
+
+
 async def test_barge_in_keeps_only_what_the_caller_heard(world):
     start, oai, reader, writer, *_ = world
     call, task = await start()
