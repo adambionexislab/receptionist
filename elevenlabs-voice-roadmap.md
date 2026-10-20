@@ -175,7 +175,7 @@ Tick these off as you go. Items marked **(P0)** are needed for the Phase 0 offli
 
 ### 2.6 Render
 - [ ] New env var: `VOICE_AGENT_TOKEN` (long random shared secret; the same value goes on Hetzner).
-- [ ] *Optional:* `ELEVEN_DEMO_NUMBER_SK`, if the demo tenant should be created and pinned to `voice_engine='eleven'` at startup, the way `LIVE_DEMO_NUMBER_SK` does for GPT-Live.
+- [x] ~~*Optional:* `ELEVEN_DEMO_NUMBER_SK`~~ Not needed: the Slovak demo tenant was switched to `eleven` by hand (Phase 3), and its startup code leaves `voice_engine` alone.
 - [ ] Deploys keep going through the **nightly scheduled deploy** (`.github/workflows/scheduled-deploy.yml`). No manual daytime deploys.
 
 ### 2.7 Monitoring and operations
@@ -307,6 +307,7 @@ Rule: **new code calls the existing functions; it does not restructure them.** I
    - **End-of-reply detection never waits forever.** The reply is over at a final message (`is_final_audio_for_turn` / `is_final`), when the server closes the stream, after **3 s without audio** following the flush, or at the latest **30 s** after it. Behind that: playback drops a reply whose audio never completes (45 s), and the response gate is released if `response.done` never arrives (60 s). She can't get stuck silent.
    - **Alignment timing: measured in Phase 0, per chunk.** Support said `char_start_times_ms` counts from the start of the generated audio, but in practice it **restarts at 0 in every audio message**, and chunk boundaries vary between runs. The agent keeps a **running offset per reply** (add each message's last start + duration) and compares "ms of this reply already played" with offset + start to find the last character the caller heard.
    - **Spell out numbers before sending** (decided in Phase 0: digits read by the model drift into Czech; spelled out, they don't). The Phase 0 `sk_numbers.py` **moves into `voiceagent/`** as the agent's spell-out module: `spell_numbers()` and the streaming `SlovakNumberStream`, which holds back a number until it's complete across deltas. Phone numbers are read digit by digit, group by group; amounts and house numbers as Slovak numerals; times as "o štrnástej tridsať". Its self-tests become unit tests. Still to add: gender agreement ("jedna izba") and postal codes.
+   - **Numbers as inflected words (2026-10-20, Phase 3).** The spell-out only produces the basic form, so a digit in a sentence came out wrong: "so 6 izbami" became "so šesť izbami" instead of "so šiestimi izbami". The agent now adds to the session prompt (`voiceagent/prompts.py`, Slovak; **this engine only**, the shared Render prompt and the `marin` path are unchanged) that she writes every number **as words, correctly inflected**: rooms, floors, prices, times, dates, addresses, and phone numbers digit by digit. Digits still go into tools. `sk_numbers` stays as the safety net for any digit that slips through. Check on the next demo calls.
    - **`language_code`** from `ELEVENLABS_LANGUAGE_CODE` (`sk`) on every stream (decided in Phase 0, together with the spell-out).
    - **Pronunciation dictionary** from `ELEVENLABS_PRONUNCIATION_DICT_ID` / `_VERSION` in the first message of every stream (`pronunciation_dictionary_locators`). It holds **alias rules**; first rule: `Dovidenia → Do videnia`, plus lowercase.
    - **No early flush, and no sentence-end flush.** Any flush before the end of the reply truncates it (Phase 0 outcome 5, answered by the first VM calls). If long replies later need audio sooner, that's a separate design for Phase 4, for example **one stream per sentence**, not a mid-stream flush.
@@ -503,14 +504,21 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
 - **Rollback:** nothing in production depends on the VM yet. Stop the agent and container, or delete the VM.
 
 ### Open items after Phase 2 (2026-10-19)
-1. **Spell unclear names letter by letter before using them in tools.** A prompt change for **both engines** (locales.py / the Realtime prompt and the GPT-Live prompts). The surname that caused the Czech-accent drift is the trigger.
+1. **Spell unclear names letter by letter before using them in tools.** A prompt change for **both engines** (the Realtime prompt in locales.py, which both engines share; GPT-Live was removed). The surname that caused the Czech-accent drift is the trigger.
 2. **Caller-side transcripts: answered, no change needed.** The OpenAI SIP path doesn't store the caller's words anywhere: input transcription is off on purpose (comment in `router.py`'s session config). `call_sessions` and `contacts` hold the summary and the tool results, and only her lines are logged. So the agent matches by transcribing only at DEBUG and sending only her lines in `/end`. Reopen only if caller transcripts are wanted for both engines.
 3. **Pin `websockets==17.3`** in `voiceagent/requirements.txt` (currently `>=15`).
 4. **ElevenLabs failure: something better than hanging up** (today: `tts_failed` → hang-up). Options: a recorded apology, or switching the live session to OpenAI's own voice (`output_modalities` audio, `marin`) for the rest of the call. **Required before any customer traffic (Phase 5).**
 5. **DIDWW re-routing on 503** (§2.3 open item): select 503, or change `Hangup(34)`, and retest **before the trunk group goes live (Phase 4)**.
 
-### Phase 3: move the demo DID (≈1 day)
+### Phase 3: move the demo DID (≈1 day): **in progress since 2026-10-20**
 - DIDWW: demo DID → new trunk. Demo tenant → `voice_engine='eleven'`.
+- **Done 2026-10-20:** the Slovak demo "Štúdio Demo" (**421482304156**, `TWILIO_PHONE_NUMBER_SK`) is switched to `voice_engine='eleven'`, and its DIDWW number points at the VM trunk `apollonia-eleven`. Its startup code (`_setup_sk_demo`) doesn't touch `voice_engine`, so the switch survives deploys.
+  - **No failover yet:** the trunk group comes in Phase 4, after the 503 item. If the VM or Asterisk is down, demo calls fail; if only the agent is down, the dialplan falls back to OpenAI SIP (`marin`).
+  - **Backups: on (2026-10-20).** Hetzner automatic backups are enabled for the VM, and one manual backup was taken (§2.4).
+- **GPT-Live removed (2026-10-20):** it didn't work well in Slovak.
+  - **Code:** `call/live.py`, `call/live_prompts.py`, the `live.transport.incoming` branch, `_setup_live_demo`, `/admin/live-recording` and all `LIVE_*` settings are gone. Leftover `voice_engine='live'` tenants are moved to `realtime` on startup.
+  - **Tenant and number:** the GPT-Live demo tenant was deleted. Its number is no longer used by this product and is free to assign.
+  - The voice engines are now `realtime` (OpenAI SIP, `marin`) and `eleven` (this VM).
 - **Exit:** 10+ real calls from different phones and networks without failure.
 - **Rollback:** DIDWW, point the demo DID back at the OpenAI trunk (instant), and set the tenant back to `realtime`.
 

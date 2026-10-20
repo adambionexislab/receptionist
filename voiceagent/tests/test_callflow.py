@@ -451,6 +451,9 @@ async def test_session_and_greeting_are_set_up(world):
     assert update["session"]["output_modalities"] == ["text"]
     assert update["session"]["audio"]["input"]["format"] == {"type": "audio/pcmu"}
     assert "transcription" not in update["session"]["audio"]["input"]  # INFO: off
+    # Render's prompt, then this engine's Slovak addition (numbers as words).
+    assert update["session"]["instructions"].startswith("prompt")
+    assert "so šiestimi izbami" in update["session"]["instructions"]
     assert oai.sent[1]["item"]["content"][0]["text"] == "Pozdrav volajúceho."
     assert oai.sent[2] == {"type": "response.create"}
     reader.feed_eof()

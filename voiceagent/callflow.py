@@ -30,6 +30,7 @@ from voiceagent import audiosocket, g711
 from voiceagent.capture import open_capture
 from voiceagent.config import Config
 from voiceagent.eleven import TTSStream
+from voiceagent.prompts import engine_additions
 from voiceagent.render_api import RenderAPI, RenderError
 from voiceagent.reporting import EndReporter
 from voiceagent.turns import (
@@ -55,7 +56,10 @@ _REPLY_STUCK_SECONDS = 45.0
 
 
 def realtime_session(
-    session: dict[str, Any], transcribe_model: str = "", language: str = ""
+    session: dict[str, Any],
+    transcribe_model: str = "",
+    language: str = "",
+    extra_instructions: str = "",
 ) -> dict[str, Any]:
     """Render's OpenAI SIP accept config, made into the agent's session: the
     same prompt, tools, reasoning and turn detection, but text out, and the
@@ -67,6 +71,9 @@ def realtime_session(
     s = json.loads(json.dumps(session))
     s["type"] = "realtime"
     s["output_modalities"] = ["text"]
+    if extra_instructions:
+        # This engine's additions (prompts.py): her text is read by a TTS.
+        s["instructions"] = (s.get("instructions") or "") + extra_instructions
     audio_in = dict((s.get("audio") or {}).get("input") or {})
     audio_in["format"] = {"type": "audio/pcmu"}
     if transcribe_model:
@@ -218,6 +225,7 @@ class Call:
                 self.answer["session"],
                 self.cfg.debug_transcribe_model if self.debug else "",
                 self.locale,
+                engine_additions(self.locale),
             ),
         })
         # Same greeting trigger as the SIP path: a user turn with the locale's

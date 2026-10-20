@@ -59,6 +59,18 @@ def test_session_is_render_s_config_with_text_out_and_pcmu_in():
     assert render_session["audio"]["output"] == {"voice": "marin"}  # input not mutated
 
 
+def test_engine_additions_are_appended_after_render_s_prompt():
+    from voiceagent.prompts import engine_additions
+
+    s = realtime_session({"instructions": "Render prompt."}, extra_instructions=engine_additions("sk"))
+    assert s["instructions"].startswith("Render prompt.")
+    # Numbers as inflected words (the spell-out could only say "so šesť izbami").
+    assert "so šiestimi izbami" in s["instructions"]
+    assert "číslicami" in s["instructions"]  # tools keep digits
+    assert engine_additions("it") == ""  # no addition: nothing changes for Italian
+    assert realtime_session({"instructions": "x"})["instructions"] == "x"
+
+
 ENV = {
     "OPENAI_API_KEY": "o", "ELEVENLABS_API_KEY": "e",
     "RENDER_API_BASE": "https://www.apollon-ia.com/", "VOICE_AGENT_TOKEN": "t",
