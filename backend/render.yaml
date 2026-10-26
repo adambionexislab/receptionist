@@ -140,3 +140,21 @@ services:
         value: "1280:720"
       - key: VIDEO_TOUR_MAX_INTERIOR_PHOTOS
         value: "8"
+      # ── Querie landing page (/querie) ─────────────────────────────────────
+      # auto follows the rollout dates in querie/config.py.
+      - key: QUERIE_PHASE
+        value: auto
+      - key: QUERIE_META_PIXEL_ID
+        sync: false
+      - key: QUERIE_TIKTOK_PIXEL_ID
+        sync: false
+      - key: QUERIE_STRIPE_PRICE_ID
+        sync: false
+      - key: QUERIE_FOUNDER_COUPON_ID
+        sync: false
+      - key: QUERIE_STRIPE_TAX_RATE_ID
+        sync: false
+      - key: QUERIE_NOTIFY_EMAIL
+        sync: false
+      - key: QUERIE_EMAIL_FROM
+        sync: false

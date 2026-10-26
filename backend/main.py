@@ -29,6 +29,9 @@ from leadgen import db as leadgen_db
 from leadgen.router import router as leadgen_router
 from listings import db as listings_db
 from listings.store import ListingsStore, store, tenant_stores
+from querie import db as querie_db
+from querie.router import ASSETS_DIR as QUERIE_ASSETS_DIR
+from querie.router import router as querie_router
 from routers.leads import router as leads_router
 from routers.leads import webhook_router as leads_webhook_router
 from routers.whatsapp import router as whatsapp_webhook_router
@@ -179,6 +182,7 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(listings_db.init)
     await asyncio.to_thread(usage_db.init)
     await asyncio.to_thread(videotour_db.init)
+    await asyncio.to_thread(querie_db.init)
     await _load_all_tenant_listings()
     tasks = [asyncio.create_task(_sync_loop())]
     # The video-tour retention sweeper. Only when the tool is on: with the
@@ -228,6 +232,7 @@ app.include_router(leads_webhook_router)
 app.include_router(whatsapp_webhook_router)
 app.include_router(salesnotes_router)
 app.include_router(dashboard_router)
+app.include_router(querie_router)
 if settings.ACQUISIZIONE_ENABLED:
     app.include_router(acquisizione_router)
 if settings.VIDEO_TOUR_ENABLED:
@@ -342,6 +347,9 @@ async def success_page():
     # catch-all static mount below.
     return FileResponse(str(_LANDING_DIR / "success.html"))
 
+
+# Querie's own assets, mounted ahead of the catch-all landing mount below.
+app.mount("/querie/assets", StaticFiles(directory=str(QUERIE_ASSETS_DIR)), name="querie-assets")
 
 if _LANDING_DIR.is_dir():
     app.mount("/", StaticFiles(directory=str(_LANDING_DIR), html=True), name="landing")

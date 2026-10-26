@@ -21,6 +21,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from config import settings
+from querie import billing as querie_billing
 
 logger = logging.getLogger(__name__)
 
@@ -430,6 +431,13 @@ async def stripe_webhook(request: Request):
     except stripe.error.SignatureVerificationError:
         logger.warning("Stripe webhook: invalid signature")
         raise HTTPException(status_code=400, detail="Invalid signature")
+
+    # Querie shares this Stripe account and endpoint. Its objects carry
+    # metadata product=querie and are handled entirely by querie/billing.py,
+    # so they never get the ApollonIA payment emails below.
+    if querie_billing.is_querie(event["data"]["object"]):
+        await querie_billing.handle_event(event["type"], event["data"]["object"])
+        return {"status": "ok"}
 
     if event["type"] == "checkout.session.completed":
         session = _expand_session(event["data"]["object"])

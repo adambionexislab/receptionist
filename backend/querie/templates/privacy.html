@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{#- TODO: PLACEHOLDER. Replace the whole body with the policy from our lawyer.
+    The headings below are only a checklist of what the final text must cover;
+    #cookies is linked from the cookie banner, keep that id. -#}
+{% block title %}Ochrana osobných údajov – {{ product }}{% endblock %}
+{% block description %}Zásady ochrany osobných údajov služby {{ product }}.{% endblock %}
+{% block robots %}<meta name="robots" content="noindex, follow" />{% endblock %}
+{% block canonical %}{{ base }}/ochrana-osobnych-udajov{% endblock %}
+
+{% block styles %}
+    .doc { padding: 48px 0 72px; }
+    .doc .wrap { max-width: 760px; }
+    .doc h1 { font-size: clamp(1.8rem, 6vw, 2.4rem); margin-bottom: 12px; }
+    .doc h2 { font-size: 1.25rem; margin: 32px 0 8px; }
+    .doc p { color: var(--muted); }
+    .todo { border: 1px dashed var(--gold-line); background: var(--gold-soft); border-radius: var(--radius-sm); padding: 14px; color: var(--fg) !important; margin: 18px 0; }
+{% endblock %}
+
+{% block main %}
+<section class="doc">
+  <div class="wrap">
+    <h1>Ochrana osobných údajov</h1>
+    <p class="todo">Pracovná verzia. Konečné znenie zásad ochrany osobných údajov pripravujeme s právnikom a zverejníme ho pred spustením služby.</p>
+
+    <h2>Prevádzkovateľ</h2>
+    <p>{{ company_name }}, {{ company_address }}, Slovensko. Kontakt: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.
+      {# TODO: IČO, register entry, DPO contact if any. #}</p>
+
+    <h2>Aké údaje spracúvame a prečo</h2>
+    <p>{# TODO: lawyer #}Čakacia listina a registrácia: meno, e-mail, telefón, voliteľne názov firmy. Údaje o platbe spracúva Stripe.</p>
+
+    <h2>Nahrávky hovorov, e-maily a správy</h2>
+    <p>{# TODO: lawyer — roles (controller/processor), legal basis, recording notice, private contacts, no voice analysis. #}Doplníme.</p>
+
+    <h2>Kde sú údaje uložené a kto ich spracúva</h2>
+    <p>{# TODO: lawyer — EU storage, list of sub-processors (hosting, transcription/AI, email, Stripe), transfers outside the EU. #}Doplníme.</p>
+
+    <h2>Ako dlho údaje uchovávame</h2>
+    <p>{# TODO: lawyer #}Doplníme.</p>
+
+    <h2>Vaše práva</h2>
+    <p>{# TODO: lawyer #}Doplníme.</p>
+
+    <h2 id="cookies">Cookies</h2>
+    <p>Stránka {{ product }} používa reklamné cookies Meta (Facebook) a TikTok iba vtedy, keď s nimi súhlasíte v lište cookies.
+      Súhlas môžete kedykoľvek zmeniť cez odkaz „Nastavenia cookies“ v pätičke stránky. {# TODO: lawyer — list cookies and retention. #}</p>
+  </div>
+</section>
+{% endblock %}

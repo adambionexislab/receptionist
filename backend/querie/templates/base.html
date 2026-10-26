@@ -1,0 +1,326 @@
+{#- Shared layout for every Querie page. Rendered by querie/router.py; the
+    product name and all offer values come from querie/config.py. -#}
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}{{ product }}{% endblock %}</title>
+  <meta name="description" content="{% block description %}{% endblock %}" />
+  {% block robots %}<meta name="robots" content="index, follow" />{% endblock %}
+  <link rel="canonical" href="{{ site_url }}{% block canonical %}{{ base }}/{% endblock %}" />
+  <meta name="theme-color" content="#0b0b0c" />
+  <link rel="icon" href="{{ base }}/assets/favicon.svg" type="image/svg+xml" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="{{ product }}" />
+  <meta property="og:locale" content="sk_SK" />
+  <meta property="og:url" content="{{ site_url }}{{ self.canonical() }}" />
+  <meta property="og:title" content="{{ self.title() }}" />
+  <meta property="og:description" content="{{ self.description() }}" />
+  {# TODO: create the 1200×630 share image at backend/querie/assets/og-image.png #}
+  <meta property="og:image" content="{{ site_url }}{{ base }}/assets/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  {# TODO: consider self-hosting Outfit — Google Fonts sends the visitor's IP to Google. #}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg: #0b0b0c;
+      --bg-2: #101012;
+      --surface: #151518;
+      --surface-2: #1c1c20;
+      --border: #26262b;
+      --border-strong: #36363c;
+      --fg: #f4f4f5;
+      --muted: #a1a1aa;
+      --gold: #c49a00;
+      --gold-bright: #ddb21c;
+      --gold-soft: rgba(196, 154, 0, .12);
+      --gold-line: rgba(196, 154, 0, .38);
+      --danger: #f87171;
+      --radius: 16px;
+      --radius-sm: 10px;
+      --gutter: 20px;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 400 17px/1.6 'Outfit', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    h1, h2, h3 { line-height: 1.15; margin: 0; font-weight: 600; letter-spacing: -0.015em; }
+    p { margin: 0; }
+    a { color: var(--gold-bright); }
+    img { max-width: 100%; display: block; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 0 var(--gutter); }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    :focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; border-radius: 4px; }
+
+    /* Header */
+    .top {
+      position: sticky; top: 0; z-index: 20;
+      background: rgba(11, 11, 12, .86);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+    .brand { display: inline-flex; align-items: center; gap: 9px; color: var(--fg); text-decoration: none; font-weight: 600; font-size: 1.2rem; letter-spacing: -0.01em; }
+    .brand svg { width: 26px; height: 26px; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      min-height: 52px; padding: 0 24px;
+      border-radius: 999px; border: 0;
+      background: var(--gold); color: #0b0b0c;
+      font-family: inherit; font-size: 1rem; font-weight: 600; line-height: 1.2;
+      text-align: center; text-decoration: none; cursor: pointer;
+      transition: background .15s ease, transform .15s ease;
+    }
+    .btn:hover { background: var(--gold-bright); }
+    .btn:active { transform: translateY(1px); }
+    .btn[disabled] { opacity: .6; cursor: progress; }
+    .btn-sm { min-height: 40px; padding: 0 16px; font-size: .92rem; }
+    .btn-block { width: 100%; }
+
+    /* Sections */
+    section { padding: 64px 0; }
+    .section-alt { background: var(--bg-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .eyebrow { color: var(--gold-bright); font-size: .82rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 12px; }
+    .h2 { font-size: clamp(1.7rem, 5.5vw, 2.5rem); margin-bottom: 14px; }
+    .lead { color: var(--muted); font-size: 1.08rem; max-width: 640px; }
+    .grid { display: grid; gap: 14px; margin-top: 36px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+    .card h3 { font-size: 1.1rem; margin-bottom: 6px; }
+    .card p { color: var(--muted); font-size: .98rem; }
+    .icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--gold-soft); color: var(--gold-bright); margin-bottom: 14px; }
+    .icon svg { width: 21px; height: 21px; }
+
+    /* Founder offer strip + countdown */
+    .founder {
+      border: 1px solid var(--gold-line); background: var(--gold-soft);
+      border-radius: var(--radius-sm); padding: 12px 14px; font-size: .95rem;
+    }
+    .founder strong { color: var(--gold-bright); font-weight: 600; }
+    .countdown { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+
+    /* Footer */
+    footer { border-top: 1px solid var(--border); padding: 36px 0 110px; color: var(--muted); font-size: .9rem; }
+    footer .wrap { display: grid; gap: 14px; }
+    footer a, .linklike { color: var(--muted); }
+    footer nav { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+    .linklike { background: none; border: 0; padding: 0; font: inherit; text-decoration: underline; cursor: pointer; }
+
+    /* Cookie banner */
+    .cookie {
+      position: fixed; z-index: 50; left: 12px; right: 12px; bottom: 12px;
+      max-width: 560px; margin: 0 auto;
+      background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: var(--radius);
+      padding: 18px; box-shadow: 0 20px 50px rgba(0, 0, 0, .55);
+    }
+    .cookie p { font-size: .93rem; color: var(--muted); margin-bottom: 14px; }
+    .cookie strong { color: var(--fg); }
+    .cookie-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .btn-ghost { background: transparent; color: var(--fg); border: 1px solid var(--border-strong); }
+    .btn-ghost:hover { background: var(--surface); }
+
+    {% block styles %}{% endblock %}
+
+    @media (min-width: 720px) {
+      :root { --gutter: 28px; }
+      section { padding: 96px 0; }
+      footer { padding-bottom: 40px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="{{ base }}/" aria-label="{{ product }} – úvod">
+        {% include "_logo.svg" %}
+        <span>{{ product }}</span>
+      </a>
+      {% block header_cta %}{% endblock %}
+    </div>
+  </header>
+
+  <main>{% block main %}{% endblock %}</main>
+
+  <footer>
+    <div class="wrap">
+      <div>
+        <strong style="color:var(--fg)">{{ product }}</strong> prevádzkuje {{ company_name }},
+        {{ company_address }}, Slovensko.{% if company_id %} {{ company_id }}{% endif %}
+        {# TODO: add IČO / DIČ / IČ DPH (COMPANY_ID in querie/config.py) and the commercial register entry. #}
+      </div>
+      <nav aria-label="Pätička">
+        <a href="{{ terms_url }}" target="_blank" rel="noopener">Všeobecné obchodné podmienky</a>
+        <a href="{{ privacy_url }}">Ochrana osobných údajov</a>
+        <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>
+        {% if meta_pixel_id or tiktok_pixel_id %}
+        <button type="button" class="linklike" data-cookie-settings>Nastavenia cookies</button>
+        {% endif %}
+      </nav>
+      <div>© {{ year }} {{ company_name }}</div>
+    </div>
+  </footer>
+
+  {% if meta_pixel_id or tiktok_pixel_id %}
+  <div class="cookie" id="cookie-banner" role="dialog" aria-live="polite" aria-label="Súhlas s cookies" hidden>
+    <p><strong>Cookies na meranie reklamy.</strong> S vaším súhlasom použijeme cookies Meta (Facebook)
+      a TikTok, aby sme vedeli, ktoré reklamy fungujú. Bez súhlasu stránka funguje rovnako.
+      <a href="{{ privacy_url }}#cookies">Viac</a></p>
+    <div class="cookie-actions">
+      <button type="button" class="btn btn-sm btn-ghost" data-consent="denied">Odmietnuť</button>
+      <button type="button" class="btn btn-sm" data-consent="granted">Prijať</button>
+    </div>
+  </div>
+  {% endif %}
+
+  <script id="querie-config" type="application/json">{{ {
+    "meta": meta_pixel_id,
+    "tiktok": tiktok_pixel_id,
+    "serverNow": server_now_ms,
+    "pageEvent": page_event | default(none)
+  } | tojson }}</script>
+  <script>
+  (function () {
+    var cfg = JSON.parse(document.getElementById('querie-config').textContent);
+    var KEY = 'querie_cookie_consent';
+    function store(kind, key, value) {
+      try { return value === undefined ? window[kind].getItem(key) : window[kind].setItem(key, value); }
+      catch (e) { return null; }
+    }
+
+    /* ── Consent-gated pixels: nothing from Meta/TikTok loads before "Prijať". ── */
+    var banner = document.getElementById('cookie-banner');
+    var loaded = false;
+    function loadPixels() {
+      if (loaded) return;
+      loaded = true;
+      if (cfg.meta) {
+        !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+        fbq('init', cfg.meta);
+        fbq('track', 'PageView');
+      }
+      if (cfg.tiktok) {
+        !function(w,d,t){w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};n=d.createElement("script");n.type="text/javascript",n.async=!0,n.src=r+"?sdkid="+e+"&lib="+t;e=d.getElementsByTagName("script")[0];e.parentNode.insertBefore(n,e)}}(window,document,'ttq');
+        ttq.load(cfg.tiktok);
+        ttq.page();
+      }
+    }
+    window.querieTrack = function (metaEvent, tiktokEvent) {
+      if (!loaded) return;
+      if (window.fbq && metaEvent) fbq('track', metaEvent);
+      if (window.ttq && tiktokEvent) ttq.track(tiktokEvent);
+    };
+    if (banner) {
+      var choice = store('localStorage', KEY);
+      if (choice === 'granted') loadPixels();
+      else if (choice !== 'denied') banner.hidden = false;
+      banner.addEventListener('click', function (e) {
+        var value = e.target.getAttribute('data-consent');
+        if (!value) return;
+        store('localStorage', KEY, value);
+        banner.hidden = true;
+        if (value === 'granted') loadPixels();
+        // Withdrawing consent after pixels ran: reload so they are gone.
+        else if (loaded) location.reload();
+      });
+      document.querySelectorAll('[data-cookie-settings]').forEach(function (b) {
+        b.addEventListener('click', function () { banner.hidden = false; });
+      });
+    }
+    if (cfg.pageEvent) {
+      var once = 'querie_evt_' + cfg.pageEvent.key;
+      if (!store('sessionStorage', once)) {
+        store('sessionStorage', once, '1');
+        window.querieTrack(cfg.pageEvent.meta, cfg.pageEvent.tiktok);
+      }
+    }
+
+    /* ── Founder countdown, against server time so a wrong phone clock can't lie. ── */
+    var offset = cfg.serverNow - Date.now();
+    var timers = document.querySelectorAll('[data-deadline]');
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+    function tick() {
+      timers.forEach(function (el) {
+        var wrap = el.closest('[data-countdown-wrap]');
+        if (wrap) wrap.hidden = false;
+        var left = Date.parse(el.getAttribute('data-deadline')) - (Date.now() + offset);
+        if (left <= 0) {
+          el.textContent = 'ponuka skončila';
+          // The server drops the offer from the page; fetch that version once.
+          var flag = 'querie_reloaded_' + el.getAttribute('data-deadline');
+          if (!store('sessionStorage', flag)) { store('sessionStorage', flag, '1'); setTimeout(function () { location.reload(); }, 2000); }
+          return;
+        }
+        var s = Math.floor(left / 1000);
+        var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+        el.textContent = (d ? d + ' d ' : '') + pad(h) + ' h ' + pad(m) + ' min ' + pad(s % 60) + ' s';
+      });
+    }
+    if (timers.length) { tick(); setInterval(tick, 1000); }
+
+    /* ── Sign-up forms (waitlist / trial checkout). ── */
+    var params = new URLSearchParams(location.search);
+    var attribution = {};
+    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'ttclid'].forEach(function (k) {
+      if (params.get(k)) attribution[k] = params.get(k);
+    });
+    document.querySelectorAll('form[data-signup]').forEach(function (form) {
+      var button = form.querySelector('button[type=submit]');
+      var error = form.querySelector('[data-error]');
+      var label = button.textContent;
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        error.textContent = '';
+        if (!form.reportValidity()) return;
+        function field(n) { return form.elements.namedItem(n); }
+        var body = {
+          name: field('name').value, email: field('email').value, phone: field('phone').value,
+          company: field('company').value, consent: field('consent').checked,
+          website: field('website').value, attribution: attribution
+        };
+        button.disabled = true;
+        button.textContent = 'Odosielam…';
+        fetch(form.getAttribute('data-endpoint'), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        }).then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (data) {
+            if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : '');
+            return data;
+          });
+        }).then(function (data) {
+          if (form.getAttribute('data-signup') === 'checkout') {
+            window.querieTrack('InitiateCheckout', 'InitiateCheckout');
+            setTimeout(function () { location.href = data.url; }, loaded ? 300 : 0);
+            return;
+          }
+          window.querieTrack('Lead', 'CompleteRegistration');
+          var done = document.getElementById(form.getAttribute('data-success'));
+          form.hidden = true;
+          done.hidden = false;
+          done.focus();
+        }).catch(function (err) {
+          error.textContent = err.message || 'Niečo sa nepodarilo. Skúste to, prosím, znova.';
+          button.disabled = false;
+          button.textContent = label;
+        });
+      });
+    });
+  })();
+  </script>
+</body>
+</html>

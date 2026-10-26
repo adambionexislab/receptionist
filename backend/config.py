@@ -106,6 +106,28 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: Optional[str] = None
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
 
+    # ── Querie (separate product, landing page at /querie) ───────────────────
+    # Product constants (name, price, dates) live in querie/config.py; only the
+    # values that differ between environments are here.
+    # Ad pixels, loaded only after cookie consent. Unset → that pixel is off.
+    QUERIE_META_PIXEL_ID: Optional[str] = None
+    QUERIE_TIKTOK_PIXEL_ID: Optional[str] = None
+    # Recurring €139/month price (tax-exclusive) for the trial checkout. Until it
+    # is set the page stays in waitlist mode even after the launch date.
+    QUERIE_STRIPE_PRICE_ID: Optional[str] = None
+    # 25% off, duration "repeating", 3 months. Applied only before the founder
+    # deadline; unset → founder checkouts go through at full price.
+    QUERIE_FOUNDER_COUPON_ID: Optional[str] = None
+    # Optional Stripe tax rate (e.g. SK DPH 23%, exclusive) put on the subscription.
+    QUERIE_STRIPE_TAX_RATE_ID: Optional[str] = None
+    # Who gets "new waitlist sign-up / new trial" emails; falls back to LEAD_EMAIL.
+    QUERIE_NOTIFY_EMAIL: Optional[str] = None
+    # Sender for Querie customer emails; falls back to RESEND_FROM.
+    QUERIE_EMAIL_FROM: Optional[str] = None
+    # auto | waitlist | founder | trial. "auto" follows the dates in
+    # querie/config.py; the others pin the page, for previews or a late launch.
+    QUERIE_PHASE: str = "auto"
+
     # Text (non-realtime) reasoning models — see _TEXT_MODEL_DEFAULT above.
     # Post-call one-sentence lead summary prepended to the lead email.
     SUMMARY_MODEL: str = _TEXT_MODEL_DEFAULT

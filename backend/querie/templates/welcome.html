@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{#- Stripe Checkout's success_url. Fires the StartTrial pixel event once (if
+    the visitor consented); the real confirmation is the welcome email sent by
+    the checkout.session.completed webhook. -#}
+{% set page_event = {"key": "trial", "meta": "StartTrial", "tiktok": "Subscribe"} %}
+{% block title %}Vitajte – {{ product }}{% endblock %}
+{% block description %}Vaša skúšobná verzia {{ product }} je aktívna.{% endblock %}
+{% block robots %}<meta name="robots" content="noindex, nofollow" />{% endblock %}
+{% block canonical %}{{ base }}/vitajte{% endblock %}
+
+{% block styles %}
+    .welcome { padding: 64px 0 80px; }
+    .welcome .wrap { max-width: 640px; }
+    .welcome .icon { background: var(--gold); color: #0b0b0c; width: 52px; height: 52px; border-radius: 16px; }
+    .welcome .icon svg { width: 26px; height: 26px; }
+    .welcome h1 { font-size: clamp(1.9rem, 7vw, 2.6rem); margin-bottom: 14px; }
+    .welcome ul { padding-left: 1.2em; color: var(--muted); display: grid; gap: 8px; margin: 22px 0 28px; }
+    .welcome li strong { color: var(--fg); font-weight: 500; }
+{% endblock %}
+
+{% block main %}
+{% import "_icons.html" as ic %}
+<section class="welcome">
+  <div class="wrap">
+    <div class="icon">{{ ic.icon("check") }}</div>
+    <h1>Hotovo. Vaša skúšobná verzia beží.</h1>
+    <p class="lead">Ďakujeme! Potvrdenie s dátumom prvej platby a odkazom na zrušenie sme vám poslali e-mailom.</p>
+    <ul>
+      <li><strong>Dnes ste nezaplatili nič.</strong> Prvá platba prebehne {{ trial_days + 1 }}. deň, ak predtým nezrušíte.</li>
+      <li><strong>{{ reminder_days }} dni pred platbou</strong> vám pošleme pripomienku.</li>
+      <li><strong>Zrušíte jedným klikom</strong> cez odkaz v e-maile.</li>
+      {# TODO: describe the real onboarding step (app download, call forwarding). #}
+      <li><strong>Čoskoro sa vám ozveme</strong> s nastavením aplikácie a presmerovania hovorov.</li>
+    </ul>
+    <a class="btn" href="{{ base }}/">Späť na {{ product }}</a>
+  </div>
+</section>
+{% endblock %}
