@@ -510,8 +510,9 @@ Plus the Hetzner cloud firewall, ufw, fail2ban and cron jobs.
 4. **ElevenLabs failure: something better than hanging up** (today: `tts_failed` → hang-up). Options: a recorded apology, or switching the live session to OpenAI's own voice (`output_modalities` audio, `marin`) for the rest of the call. **Required before any customer traffic (Phase 5).**
 5. **DIDWW re-routing on 503** (§2.3 open item): select 503, or change `Hangup(34)`, and retest **before the trunk group goes live (Phase 4)**.
 
-### Phase 3: move the demo DID (≈1 day): **in progress since 2026-10-20**
+### Phase 3: move the demo DID (≈1 day): **DONE 2026-10-20**
 - DIDWW: demo DID → new trunk. Demo tenant → `voice_engine='eleven'`.
+- **Closed 2026-10-20 by the owner's decision:** Phase 3 is considered finished. The demo number 421482304156 runs on the ElevenLabs engine, alongside the test number. Still worth watching on demo calls: inflected numbers (`prompts.py`), phone-number read-back, the slight Czech accent (Phase 5 recheck).
 - **Done 2026-10-20:** the Slovak demo "Štúdio Demo" (**421482304156**, `TWILIO_PHONE_NUMBER_SK`) is switched to `voice_engine='eleven'`, and its DIDWW number points at the VM trunk `apollonia-eleven`. Its startup code (`_setup_sk_demo`) doesn't touch `voice_engine`, so the switch survives deploys.
   - **No failover yet:** the trunk group comes in Phase 4, after the 503 item. If the VM or Asterisk is down, demo calls fail; if only the agent is down, the dialplan falls back to OpenAI SIP (`marin`).
   - **Backups: on (2026-10-20).** Hetzner automatic backups are enabled for the VM, and one manual backup was taken (§2.4).
