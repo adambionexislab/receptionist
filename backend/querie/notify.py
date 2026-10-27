@@ -85,19 +85,37 @@ async def notify_owner_waitlist(signup: dict, attribution: Optional[dict]) -> No
     )
 
 
+async def send_report(*, to: str, url: Optional[str]) -> None:
+    lines = [
+        "Dobrý deň,",
+        "",
+        f"ďakujeme za záujem. Report „{qc.REPORT_TITLE}“ si stiahnete tu:",
+        url or f"{qc.SITE_URL}{qc.REPORT_PATH}",
+        "",
+        "Odkaz je osobný a funguje opakovane.",
+        "",
+        "S pozdravom,",
+        f"tím {qc.PRODUCT_NAME}",
+        f"{qc.COMPANY_NAME}, {qc.COMPANY_ADDRESS}",
+    ]
+    await _send_safely(to, f"Váš report: {qc.REPORT_TITLE}", "\n".join(lines), "report")
+
+
 async def notify_owner_trial(
     *, name: Optional[str], email: Optional[str], phone: Optional[str], company: Optional[str],
     quantity: int, founder: bool, first_charge: datetime.date, subscription_id: Optional[str],
+    annual: bool = False,
 ) -> None:
     lines = [
-        f"Nová skúšobná verzia {qc.PRODUCT_NAME}",
+        f"Nové skúšobné obdobie {qc.PRODUCT_NAME}",
         "",
         _row("Meno", name),
         _row("E-mail", email),
         _row("Telefón", phone),
         _row("Firma", company),
         _row("Používatelia", quantity),
-        _row("Zakladateľ", "áno (−25 % na 3 mesiace)" if founder else "nie"),
+        _row("Platba", "ročne" if annual else "mesačne"),
+        _row("Úvodná zľava", "áno (−25 % na 3 mesiace)" if founder else "nie"),
         _row("1. platba", offer.date_sk(first_charge)),
         _row("Subscription", subscription_id),
         "",
@@ -105,20 +123,28 @@ async def notify_owner_trial(
     ]
     await _send_safely(
         _owner(),
-        f"[{qc.PRODUCT_NAME}] Nová skúšobná verzia — {name or email}",
+        f"[{qc.PRODUCT_NAME}] Nové skúšobné obdobie — {name or email}",
         "\n".join(lines),
         "trial owner",
     )
 
 
-def _amount_lines(quantity: int, founder: bool) -> list[str]:
+def _amount_lines(quantity: int, founder: bool, annual: bool = False) -> list[str]:
+    if annual:
+        unit = offer.annual_total()
+        total = unit * Decimal(quantity)
+        per_user = f" ({quantity} × {offer.eur(unit)})" if quantity > 1 else ""
+        return [
+            f"Suma: {offer.eur(total)} bez DPH{per_user} za celý rok vopred",
+            f"(ročná platba: {offer.eur(qc.ANNUAL_MONTHLY_EUR)} mesačne za používateľa bez DPH).",
+        ]
     unit = offer.founder_price() if founder else qc.PRICE_EUR
     total = unit * Decimal(quantity)
     per_user = f" ({quantity} × {offer.eur(unit)})" if quantity > 1 else ""
     lines = [f"Suma: {offer.eur(total)} bez DPH{per_user}"]
     if founder:
         lines.append(
-            f"Zakladateľská cena platí prvé {qc.FOUNDER_MONTHS} mesiace, "
+            f"Úvodná cena platí prvé {qc.FOUNDER_MONTHS} mesiace, "
             f"potom {offer.eur(qc.PRICE_EUR)} mesačne za používateľa bez DPH."
         )
     return lines
@@ -133,23 +159,23 @@ def _cancel_lines(cancel_url: Optional[str]) -> list[str]:
 def _guarantee() -> str:
     return (
         f"Zabudli ste zrušiť? Ozvite sa do {qc.REFUND_WINDOW_DAYS} dní od prvej platby "
-        "a vrátime vám ju celú, bez otázok."
+        "a vrátime vám 100 % sumy, bez otázok."
     )
 
 
 async def send_trial_welcome(
     *, to: Optional[str], name: Optional[str], quantity: int, founder: bool,
-    first_charge: datetime.date, cancel_url: Optional[str],
+    first_charge: datetime.date, cancel_url: Optional[str], annual: bool = False,
 ) -> None:
     greeting = f"Dobrý deň, {name}," if name else "Dobrý deň,"
     lines = [
         greeting,
         "",
-        f"ďakujeme! Vaša {qc.TRIAL_DAYS}-dňová skúšobná verzia {qc.PRODUCT_NAME} je aktívna.",
+        f"ďakujeme! Vaše {qc.TRIAL_DAYS}-dňové skúšobné obdobie {qc.PRODUCT_NAME} je aktívne.",
         "",
         "Dnes ste nezaplatili nič.",
         f"Prvá platba: {offer.date_sk(first_charge)}, ak predtým nezrušíte.",
-        *_amount_lines(quantity, founder),
+        *_amount_lines(quantity, founder, annual),
         f"{qc.REMINDER_DAYS_BEFORE} dni pred prvou platbou vám pošleme pripomienku.",
         "",
         *_cancel_lines(cancel_url),
@@ -163,22 +189,22 @@ async def send_trial_welcome(
         f"{qc.COMPANY_NAME}, {qc.COMPANY_ADDRESS}",
     ]
     await _send_safely(
-        to, f"{qc.PRODUCT_NAME}: skúšobná verzia je aktívna", "\n".join(lines), "trial welcome"
+        to, f"{qc.PRODUCT_NAME}: skúšobné obdobie je aktívne", "\n".join(lines), "trial welcome"
     )
 
 
 async def send_trial_reminder(
     *, to: Optional[str], name: Optional[str], quantity: int, founder: bool,
-    first_charge: datetime.date, cancel_url: Optional[str],
+    first_charge: datetime.date, cancel_url: Optional[str], annual: bool = False,
 ) -> None:
     greeting = f"Dobrý deň, {name}," if name else "Dobrý deň,"
     lines = [
         greeting,
         "",
-        f"ako sme sľúbili, pripomíname sa: vaša skúšobná verzia {qc.PRODUCT_NAME} "
+        f"ako sme sľúbili, pripomíname sa: vaše skúšobné obdobie {qc.PRODUCT_NAME} "
         f"končí a {offer.date_sk(first_charge)} prebehne prvá platba.",
         "",
-        *_amount_lines(quantity, founder),
+        *_amount_lines(quantity, founder, annual),
         "",
         f"Ak chcete {qc.PRODUCT_NAME} používať ďalej, nemusíte robiť nič.",
         *_cancel_lines(cancel_url),

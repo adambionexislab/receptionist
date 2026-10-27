@@ -73,6 +73,25 @@ def founder_price() -> Decimal:
     return price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def annual_ready() -> bool:
+    """Yearly billing can be bought only once its Stripe price is set."""
+    return bool(settings.QUERIE_STRIPE_ANNUAL_PRICE_ID)
+
+
+def annual_total() -> Decimal:
+    """What one user pays per year on yearly billing: 12 × 119 = 1 428."""
+    return qc.ANNUAL_MONTHLY_EUR * 12
+
+
+def annual_saving() -> Decimal:
+    """Per user per year versus paying monthly: 12 × (139 − 119) = 240."""
+    return (qc.PRICE_EUR - qc.ANNUAL_MONTHLY_EUR) * 12
+
+
+def annual_saving_percent() -> int:
+    return int((annual_saving() / (qc.PRICE_EUR * 12) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
 def eur(amount: Decimal) -> str:
     """Slovak money format: 139 → "139 €", 104.25 → "104,25 €" (non-breaking space)."""
     amount = Decimal(amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)

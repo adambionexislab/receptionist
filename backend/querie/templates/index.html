@@ -8,7 +8,7 @@
 {% set cta_label = "Zapísať sa na čakaciu listinu" if is_waitlist else "Vyskúšať " ~ trial_days ~ " dní zadarmo" %}
 
 {% block title %}{{ product }} – hovory, e-maily a WhatsApp na jednom mieste{% endblock %}
-{% block description %}{{ product }} nahrá a prepíše vaše hovory, zhromaždí e-maily a správy z WhatsAppu a odpovie na otázky o každom klientovi. Pre maklérov a každého, kto žije na telefóne.{% endblock %}
+{% block description %}{{ product }} prepíše vaše hovory, zhromaždí e-maily a správy z WhatsAppu a odpovie na otázky o každom klientovi. Pre maklérov a každého, kto žije na telefóne.{% endblock %}
 
 {% block header_cta %}
 <a class="btn btn-sm" href="#registracia">{{ "Zapísať sa" if is_waitlist else "Vyskúšať zadarmo" }}</a>
@@ -22,12 +22,12 @@
 
 {% macro founder_note() -%}
 {% if is_founder %}
-<strong>Zakladateľská ponuka: −{{ founder_percent }} % na prvé {{ founder_months }} mesiace.</strong>
+<strong>Úvodná ponuka: −{{ founder_percent }} % na prvé {{ founder_months }} mesiace{% if annual_available %} pri mesačnej platbe{% endif %}.</strong>
 {{ founder_price | eur }} namiesto {{ price | eur }} mesačne bez DPH. Jednorazová ponuka, platí do {{ deadline_text }}{{ countdown() }}.
 {% else %}
-<strong>Zápisom si rezervujete zakladateľskú cenu:</strong>
-−{{ founder_percent }} % na prvé {{ founder_months }} mesiace ({{ founder_price | eur }} namiesto {{ price | eur }} bez DPH),
-ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}{{ countdown() }}.
+<strong>Zápisom si rezervujete úvodnú cenu:</strong>
+−{{ founder_percent }} % na prvé {{ founder_months }} mesiace{% if annual_available %} mesačného predplatného{% endif %} ({{ founder_price | eur }} namiesto {{ price | eur }} bez DPH),
+ak skúšobné obdobie aktivujete najneskôr {{ deadline_text }}{{ countdown() }}.
 {% endif %}
 {%- endmacro %}
 
@@ -105,29 +105,59 @@ ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}{{ countdown() }}
     .includes li { display: flex; gap: 10px; align-items: flex-start; font-size: .98rem; }
     .includes svg { width: 18px; height: 18px; flex: none; margin-top: 4px; color: var(--gold-bright); }
     .reserve { margin-top: 20px; }
+    .muted { color: var(--muted); }
 
-    .form-card h3 { font-size: 1.3rem; margin-bottom: 6px; }
-    .form-card > p { color: var(--muted); margin-bottom: 20px; }
-    .field { display: grid; gap: 6px; margin-bottom: 14px; }
-    .field label { font-size: .92rem; font-weight: 500; }
-    .opt { color: var(--muted); font-weight: 400; }
-    .field input {
-      width: 100%; min-height: 50px; padding: 0 14px;
-      background: var(--bg); color: var(--fg);
-      border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-      font: inherit; font-size: 16px; /* 16px stops iOS zooming into the field */
+    /* Monthly / yearly switch. Without JS the monthly prices stay, which is
+       also what an untouched form submits. */
+    .billing-switch {
+      position: relative; display: inline-grid; grid-template-columns: auto auto; gap: 4px;
+      border: 1px solid var(--border-strong); border-radius: 999px; padding: 4px; margin-bottom: 20px;
     }
-    .field input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-soft); }
-    .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-    .consent { display: flex; gap: 10px; align-items: flex-start; font-size: .9rem; color: var(--muted); margin: 6px 0 18px; }
-    .consent input { width: 20px; height: 20px; flex: none; margin-top: 2px; accent-color: var(--gold); }
+    .billing-switch input { position: absolute; opacity: 0; pointer-events: none; }
+    .billing-switch label {
+      cursor: pointer; border-radius: 999px; padding: 8px 16px; text-align: center;
+      font-size: .93rem; font-weight: 500; color: var(--muted); white-space: nowrap;
+    }
+    .billing-switch input:checked + label { background: var(--gold); color: #0b0b0c; }
+    .billing-switch input:focus-visible + label { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+    .billing-switch .save { font-size: .8rem; font-weight: 600; }
+    [data-billing="annual"] .m-only, [data-billing="monthly"] .a-only { display: none !important; }
+
+    .cta-open { margin-top: 24px; }
+
+    /* "Dnes neplatíte nič" — the three promises beside the price card */
+    .assurance { border-color: var(--gold-line); background: linear-gradient(180deg, var(--gold-soft), transparent 70%), var(--surface); }
+    .assurance h3 { font-size: 1.3rem; margin-bottom: 20px; }
+    .assure-list { list-style: none; counter-reset: assure; padding: 0; margin: 0; display: grid; gap: 20px; }
+    .assure-list li { counter-increment: assure; position: relative; padding-left: 46px; color: var(--muted); }
+    .assure-list li strong { color: var(--fg); font-weight: 600; }
+    .assure-list li::before {
+      content: counter(assure); position: absolute; left: 0; top: -2px; width: 30px; height: 30px; border-radius: 50%;
+      display: grid; place-items: center; font-weight: 600; font-size: .95rem; background: var(--gold); color: #0b0b0c;
+    }
+
+    /* Sign-up dialog */
+    .signup-dialog {
+      width: min(520px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 0;
+      border: 1px solid var(--border-strong); border-radius: var(--radius);
+      background: var(--surface); color: var(--fg); overflow: auto; overscroll-behavior: contain;
+    }
+    .signup-dialog::backdrop { background: rgba(0, 0, 0, .72); backdrop-filter: blur(3px); }
+    html:has(.signup-dialog[open]) { overflow: hidden; }
+    .dialog-inner { position: relative; padding: 24px 20px 20px; outline: none; }
+    .dialog-inner > h3 { font-size: 1.3rem; margin: 0 44px 6px 0; }
+    .dialog-sub { color: var(--muted); margin-bottom: 20px; }
+    .dialog-close {
+      position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; border: 0; border-radius: 50%;
+      background: transparent; color: var(--muted); font-size: 1.7rem; line-height: 1; cursor: pointer;
+    }
+    .dialog-close:hover { color: var(--fg); background: var(--surface-2); }
+    .done-close { margin-top: 20px; }
     .promise { border: 1px solid var(--gold-line); background: var(--gold-soft); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px; }
     .promise-lead { font-weight: 600; margin-bottom: 10px; }
     .promise dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: .92rem; }
     .promise dt { color: var(--muted); }
     .promise dd { margin: 0; }
-    .form-error { color: var(--danger); font-size: .93rem; margin-top: 10px; min-height: 1.2em; }
-    .form-note { color: var(--muted); font-size: .85rem; margin-top: 10px; text-align: center; }
     .done { text-align: left; outline: none; }
     .done .icon { background: var(--gold); color: #0b0b0c; }
     .done h3 { font-size: 1.3rem; margin-bottom: 8px; }
@@ -165,6 +195,7 @@ ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}{{ countdown() }}
       .hero { padding: 72px 0 96px; }
       .hero-grid { grid-template-columns: 1.1fr .9fr; gap: 56px; }
       .grid-3 { grid-template-columns: repeat(3, 1fr); }
+      .checks { grid-template-columns: repeat(3, 1fr); }
       .steps { grid-template-columns: repeat(3, 1fr); }
       .buy { grid-template-columns: .9fr 1.1fr; gap: 20px; }
     }
@@ -176,20 +207,21 @@ ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}{{ countdown() }}
   <div class="wrap hero-grid">
     <div>
       <div class="pill">Pre maklérov a každého, kto žije na telefóne</div>
-      <h1>Desiatky hovorov denne. <span>Zapamätať si všetko sa nedá.</span></h1>
+      <h1>Desiatky hovorov, e-mailov a správ denne.<span>Zapamätať si všetko sa nedá.</span></h1>
       <p class="lead">
-        {{ product }} nahrá a prepíše každý váš hovor a pridá k nemu e-maily aj správy z WhatsAppu.
-        Keď potrebujete vedieť, čo kto chcel, jednoducho sa opýtate. Po slovensky.
+        {{ product }} prepíše každý váš hovor a pridá k nemu e-maily aj správy z WhatsAppu.
+        Keď potrebujete vedieť, čo kto chcel, jednoducho sa opýtate.
       </p>
       {% if founder_open %}
-      <p class="founder">{{ founder_note() }}</p>
+      {#- No prices in the hero; the pricing card has the details. #}
+      <p class="founder"><strong>Zaregistrujte sa najneskôr {{ deadline_text }} a získate zľavu {{ founder_percent }} % na prvé {{ founder_months }} mesiace{% if annual_available %} pri mesačnej platbe{% endif %}.</strong>{{ countdown() }}</p>
       {% endif %}
       <div class="cta-row">
         <a class="btn" href="#registracia">{{ cta_label }}</a>
         {% if is_waitlist %}
         <p class="micro">{% if launch_upcoming %}Spúšťame v {{ launch_at | weekday_acc_sk }} {{ launch_at | date_sk }}. {% endif %}Zápis je nezáväzný a nič neplatíte.</p>
         {% else %}
-        <p class="micro">Dnes neplatíte nič · Pripomenieme sa {{ reminder_days }} dni pred prvou platbou · Zrušíte jedným klikom</p>
+        <p class="micro">Dnes neplatíte nič · Pripomenieme sa {{ reminder_days }} dni pred prvou platbou · Zrušíte kedykoľvek</p>
         {% endif %}
       </div>
     </div>
@@ -240,19 +272,19 @@ ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}{{ countdown() }}
 <section id="ako-to-funguje">
   <div class="wrap">
     <p class="eyebrow">Ako to funguje</p>
-    <h2 class="h2">Tri kroky. Žiadne nové zvyky.</h2>
+    <h2 class="h2">Telefonujete cez aplikáciu. Zvyšok sa deje sám.</h2>
     <div class="steps">
       <div class="card step">
-        <h3>Ponecháte si svoje číslo</h3>
-        <p>Hovory sa presmerujú do nášho systému a zazvonia v aplikácii vo vašom telefóne. Na iPhone aj Androide rovnako.</p>
+        <h3>Stiahnete si aplikáciu</h3>
+        <p>Nainštalujete si aplikáciu {{ product }} do iPhonu alebo Androidu. Hovory na vaše číslo sa do nej presmerujú, takže číslo si ponecháte.</p>
       </div>
       <div class="card step">
-        <h3>Všetko sa zaznamená samo</h3>
-        <p>Každý hovor sa nahrá a celý sa prepíše. Volajúci počuje automatické upozornenie na nahrávanie. E-maily z Gmailu a správy z WhatsAppu pribudnú automaticky.</p>
+        <h3>Voláte a prijímate hovory v nej</h3>
+        <p>Všetky hovory vybavujete v aplikácii. Každý sa nahrá a celý sa prepíše, volajúci počuje automatické upozornenie na nahrávanie. E-maily z Gmailu a správy z WhatsAppu pribudnú automaticky.</p>
       </div>
       <div class="card step">
         <h3>Opýtate sa</h3>
-        <p>Napíšte otázku po slovensky. Dostanete odpoveď s odkazmi na pôvodné hovory a správy.</p>
+        <p>Napíšte otázku vlastnými slovami. Dostanete odpoveď s odkazmi na pôvodné hovory a správy.</p>
         <div class="examples">
           <span class="example">„Čo odo mňa chcel pán Novák minulý týždeň?“</span>
           <span class="example">„Zhrň všetko, čo viem o klientovi Horváthovi.“</span>
@@ -296,7 +328,7 @@ ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}{{ countdown() }}
       <div class="card">
         <div class="icon">{{ ic.icon("user") }}</div>
         <h3>Vaše číslo zostáva</h3>
-        <p>Aj keď voláte vy, klient vidí vaše obvyklé mobilné číslo.</p>
+        <p>Aj keď voláte z aplikácie, klient vidí vaše obvyklé mobilné číslo.</p>
       </div>
     </div>
   </div>
@@ -333,12 +365,6 @@ ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}{{ countdown() }}
     <p class="eyebrow">Súkromie a GDPR</p>
     <h2 class="h2">Vaše hovory patria vám.</h2>
     <div class="checks">
-      {# TODO: verify — Render region of the service and disk, and where the transcription/chat
-         providers (e.g. OpenAI) process data. Keep or reword this claim accordingly. #}
-      <div class="check">
-        <div class="icon">{{ ic.icon("globe") }}</div>
-        <div><h3>Dáta uložené v EÚ</h3><p>Nahrávky, prepisy a správy ukladáme na serveroch v Európskej únii.</p></div>
-      </div>
       <div class="check">
         <div class="icon">{{ ic.icon("bell") }}</div>
         <div><h3>Upozornenie pri každom hovore</h3><p>Na začiatku každého nahrávaného hovoru zaznie automatické upozornenie.</p></div>
@@ -360,117 +386,167 @@ ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}{{ countdown() }}
 </section>
 
 {# ── Pricing + sign-up ──────────────────────────────────────────────────── #}
-<section class="section-alt" id="registracia">
+{#- data-billing sits on the section so it covers the price card and the dialog. #}
+<section class="section-alt" id="registracia"{% if annual_available %} data-billing="monthly"{% endif %}>
   <div class="wrap">
     <p class="eyebrow">Cena</p>
     <h2 class="h2">Jedna cena. Všetky funkcie.</h2>
     <div class="buy">
       <div class="card price-card">
-        {% if is_founder %}
-        <span class="badge">Zakladateľská ponuka{{ countdown() }}</span>
-        <div class="amount"><strong>{{ founder_price | eur }}</strong><s>{{ price | eur }}</s></div>
-        <p class="per">mesačne za používateľa, bez DPH</p>
-        <p class="then">Prvé {{ founder_months }} mesiace. Potom {{ price | eur }} mesačne bez DPH.</p>
-        {% else %}
-        {% if is_waitlist and founder_open %}<span class="badge">Rezervujte si zakladateľskú cenu</span>{% endif %}
-        <div class="amount"><strong>{{ price | eur }}</strong></div>
-        <p class="per">mesačne za používateľa, bez DPH</p>
+        {% if annual_available %}
+        {#- Radios belong to the sign-up form (form=…), so the choice is submitted with it. #}
+        <div class="billing-switch" role="radiogroup" aria-label="Spôsob platby">
+          <input type="radio" id="bill-monthly" name="billing" value="monthly" form="signup-form" checked />
+          <label for="bill-monthly">Mesačne</label>
+          <input type="radio" id="bill-annual" name="billing" value="annual" form="signup-form" />
+          <label for="bill-annual">Ročne <span class="save">−{{ annual_saving_percent }} %</span></label>
+        </div>
+        {% endif %}
+        <div class="m-only">
+          {% if is_founder %}
+          <span class="badge">Úvodná ponuka{{ countdown() }}</span>
+          <div class="amount"><strong>{{ founder_price | eur }}</strong><s>{{ price | eur }}</s></div>
+          <p class="per">mesačne za používateľa, bez DPH</p>
+          <p class="then">Prvé {{ founder_months }} mesiace. Potom {{ price | eur }} mesačne bez DPH.</p>
+          {% else %}
+          {% if is_waitlist and founder_open %}<span class="badge">Rezervujte si úvodnú cenu</span>{% endif %}
+          <div class="amount"><strong>{{ price | eur }}</strong></div>
+          <p class="per">mesačne za používateľa, bez DPH</p>
+          {% endif %}
+        </div>
+        {% if annual_available %}
+        <div class="a-only">
+          <div class="amount"><strong>{{ annual_monthly | eur }}</strong><s>{{ price | eur }}</s></div>
+          <p class="per">mesačne za používateľa pri ročnej platbe, bez DPH</p>
+          <p class="then">Účtované raz ročne: {{ annual_total | eur }} za používateľa. Ušetríte {{ annual_saving | eur }} ročne.</p>
+          {% if founder_open %}<p class="then muted">Úvodná zľava platí len pri mesačnej platbe.</p>{% endif %}
+        </div>
         {% endif %}
         {# TODO: verify — no minute/call limits or extra fees, or state them here. #}
         <ul class="includes">
           <li>{{ ic.icon("check") }} {{ trial_days }} dní zadarmo na vyskúšanie</li>
           <li>{{ ic.icon("check") }} Nahrávanie a prepis hovorov</li>
           <li>{{ ic.icon("check") }} Gmail a WhatsApp na jednom mieste</li>
-          <li>{{ ic.icon("check") }} Chatbot, ktorý odpovedá po slovensky</li>
+          <li>{{ ic.icon("check") }} Chatbot, ktorý odpovedá na vaše otázky</li>
           <li>{{ ic.icon("check") }} Zápisy do kalendára Google a Outlook</li>
           <li>{{ ic.icon("check") }} iPhone aj Android</li>
         </ul>
+        <button type="button" class="btn btn-block cta-open" data-open-signup>{{ cta_label }}</button>
         {% if is_waitlist and founder_open %}
         <p class="founder reserve">{{ founder_note() }}</p>
         {% endif %}
       </div>
 
-      <div class="card form-card">
-        {% if is_waitlist %}
-        <h3>Zapíšte sa na čakaciu listinu</h3>
-        <p>{% if launch_upcoming %}V {{ launch_at | weekday_acc_sk }} {{ launch_at | date_sk }} vám pošleme odkaz na aktiváciu skúšobnej verzie.{% else %}Ozveme sa vám e-mailom, hneď ako vás budeme môcť spustiť.{% endif %}</p>
-        {% else %}
-        <h3>Začnite {{ trial_days }} dní zadarmo</h3>
-        <p>Najprv kontakt, v ďalšom kroku kartu cez zabezpečenú bránu Stripe.</p>
-        {% endif %}
-
-        <form data-signup="{{ 'waitlist' if is_waitlist else 'checkout' }}"
-              data-endpoint="{{ base }}/api/{{ 'waitlist' if is_waitlist else 'checkout' }}"
-              data-success="signup-done" novalidate>
-          <div class="field">
-            <label for="f-name">Meno a priezvisko</label>
-            <input id="f-name" name="name" autocomplete="name" required maxlength="120" />
-          </div>
-          <div class="field">
-            <label for="f-email">E-mail</label>
-            <input id="f-email" name="email" type="email" autocomplete="email" inputmode="email" required maxlength="200" />
-          </div>
-          <div class="field">
-            <label for="f-phone">Telefón</label>
-            <input id="f-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="+421 9xx xxx xxx" required maxlength="30" />
-          </div>
-          <div class="field">
-            <label for="f-company">Realitná kancelária / firma <span class="opt">(nepovinné)</span></label>
-            <input id="f-company" name="company" autocomplete="organization" maxlength="160" />
-          </div>
-          <div class="hp" aria-hidden="true">
-            <label for="f-website">Nevypĺňajte</label>
-            <input id="f-website" name="website" tabindex="-1" autocomplete="off" />
-          </div>
-          {# TODO: legal review of the consent wording. The waitlist forms no contract, so it
-             asks only about personal data; the trial accepts the VOP too. #}
-          <label class="consent">
-            <input type="checkbox" name="consent" required />
+      <div class="card assurance">
+        <h3>Dnes neplatíte nič.</h3>
+        <ol class="assure-list">
+          <li>
             {% if is_waitlist %}
-            <span>Súhlasím so spracovaním osobných údajov na účel zaradenia na čakaciu listinu a kontaktovania
-              v súvislosti so spustením {{ product }} podľa <a href="{{ privacy_url }}" target="_blank" rel="noopener">Zásad ochrany osobných údajov</a>.</span>
+            <strong>Prvá platba až {{ trial_days + 1 }}. deň po aktivácii.</strong>
             {% else %}
-            <span>Súhlasím so <a href="{{ terms_url }}" target="_blank" rel="noopener">Všeobecnými obchodnými podmienkami</a>
-              a <a href="{{ privacy_url }}" target="_blank" rel="noopener">Zásadami ochrany osobných údajov</a>.</span>
+            <strong>Prvá platba až {{ first_charge | date_sk }}</strong> ({{ trial_days + 1 }}. deň).
             {% endif %}
-          </label>
-
-          {% if not is_waitlist %}
-          <div class="promise">
-            <p class="promise-lead">Dnes neplatíte nič. Pripomenieme sa {{ reminder_days }} dni pred prvou platbou. Zrušíte jedným klikom.</p>
-            <dl>
-              <dt>Cena</dt>
-              <dd>{% if is_founder %}{{ founder_price | eur }} prvé {{ founder_months }} mesiace, potom {{ price | eur }}{% else %}{{ price | eur }}{% endif %} mesačne za používateľa, bez DPH</dd>
-              <dt>Prvá platba</dt>
-              <dd>{{ first_charge | weekday_sk }} {{ first_charge | date_sk }} ({{ trial_days + 1 }}. deň), ak predtým nezrušíte</dd>
-              <dt>Zrušenie</dt>
-              <dd>Odkazom v potvrdzovacom e-maile alebo v pripomienke, kedykoľvek pred {{ first_charge | date_sk }}. Bez poplatku.</dd>
-            </dl>
-          </div>
-          {% endif %}
-
-          <button type="submit" class="btn btn-block">{{ "Zapísať sa" if is_waitlist else "Pokračovať na zadanie karty" }}</button>
-          <p class="form-error" data-error role="alert"></p>
-          <p class="form-note">{% if is_waitlist %}Nezáväzné. Žiadna karta, žiadna platba.{% else %}Počet používateľov zvolíte v ďalšom kroku. Údaje o karte k nám neprichádzajú.{% endif %}</p>
-        </form>
-
-        {% if is_waitlist %}
-        <div class="done" id="signup-done" tabindex="-1" hidden>
-          <div class="icon">{{ ic.icon("check") }}</div>
-          <h3>Ste na zozname. Ďakujeme!</h3>
-          {% if launch_upcoming %}
-          <p>V {{ launch_at | weekday_acc_sk }} {{ launch_at | date_sk }} vám pošleme e-mail s odkazom na aktiváciu.</p>
-          {% else %}
-          <p>Ozveme sa vám e-mailom, hneď ako vás budeme môcť spustiť.</p>
-          {% endif %}
-          {% if founder_open %}
-          <p>Zakladateľskú cenu {{ founder_price | eur }} bez DPH na prvé {{ founder_months }} mesiace získate, ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}.</p>
-          {% endif %}
-        </div>
-        {% endif %}
+            Dovtedy máte {{ product }} {{ trial_days }} dní úplne zadarmo.
+          </li>
+          <li>
+            <strong>{{ reminder_days }} dni pred koncom skúšobného obdobia vám pošleme pripomienku,</strong>
+            aby ste nezabudli. Zrušíte kedykoľvek.
+          </li>
+          <li>
+            <strong>Aj keď zabudnete zrušiť,</strong> máte {{ refund_days }} dní od platby na to, aby ste požiadali
+            o vrátenie peňazí. Vrátime 100 % sumy, bez otázok.
+          </li>
+        </ol>
       </div>
     </div>
   </div>
+
+  {#- Opened by the price card's button (showModal). Esc, ×, or a click outside closes it. #}
+  <dialog id="signup-dialog" class="signup-dialog" aria-labelledby="signup-title">
+    {#- autofocus here, not on the × or a field: no focus ring, no keyboard popping up on phones. #}
+    <div class="dialog-inner" tabindex="-1" autofocus>
+      <button type="button" class="dialog-close" data-close-signup aria-label="Zavrieť">&times;</button>
+      {% if is_waitlist %}
+      <h3 id="signup-title">Zapíšte sa na čakaciu listinu</h3>
+      <p class="dialog-sub">{% if launch_upcoming %}V {{ launch_at | weekday_acc_sk }} {{ launch_at | date_sk }} vám pošleme odkaz na aktiváciu skúšobného obdobia.{% else %}Ozveme sa vám e-mailom, hneď ako vás budeme môcť spustiť.{% endif %}</p>
+      {% else %}
+      <h3 id="signup-title">Začnite {{ trial_days }} dní zadarmo</h3>
+      <p class="dialog-sub">Najprv kontakt, v ďalšom kroku kartu cez zabezpečenú bránu Stripe.</p>
+      {% endif %}
+
+      <form id="signup-form" data-signup="{{ 'waitlist' if is_waitlist else 'checkout' }}"
+            data-endpoint="{{ base }}/api/{{ 'waitlist' if is_waitlist else 'checkout' }}"
+            data-success="signup-done" novalidate>
+        <div class="field">
+          <label for="f-name">Meno a priezvisko</label>
+          <input id="f-name" name="name" autocomplete="name" required maxlength="120" />
+        </div>
+        <div class="field">
+          <label for="f-email">E-mail</label>
+          <input id="f-email" name="email" type="email" autocomplete="email" inputmode="email" required maxlength="200" />
+        </div>
+        <div class="field">
+          <label for="f-phone">Telefón</label>
+          <input id="f-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="+421 9xx xxx xxx" required maxlength="30" />
+        </div>
+        <div class="field">
+          <label for="f-company">Realitná kancelária / firma <span class="opt">(nepovinné)</span></label>
+          <input id="f-company" name="company" autocomplete="organization" maxlength="160" />
+        </div>
+        <div class="hp" aria-hidden="true">
+          <label for="f-website">Nevypĺňajte</label>
+          <input id="f-website" name="website" tabindex="-1" autocomplete="off" />
+        </div>
+        {# TODO: legal review of the consent wording. The waitlist forms no contract, so it
+           asks only about personal data; the trial accepts the VOP too. #}
+        <label class="consent">
+          <input type="checkbox" name="consent" required />
+          {% if is_waitlist %}
+          <span>Súhlasím so spracovaním osobných údajov na účel zaradenia na čakaciu listinu a kontaktovania
+            v súvislosti so spustením {{ product }} podľa <a href="{{ privacy_url }}" target="_blank" rel="noopener">Zásad ochrany osobných údajov</a>.</span>
+          {% else %}
+          <span>Súhlasím so <a href="{{ terms_url }}" target="_blank" rel="noopener">Všeobecnými obchodnými podmienkami</a>
+            a <a href="{{ privacy_url }}" target="_blank" rel="noopener">Zásadami ochrany osobných údajov</a>.</span>
+          {% endif %}
+        </label>
+
+        {% if not is_waitlist %}
+        <div class="promise">
+          <p class="promise-lead">Dnes neplatíte nič. Pripomenieme sa {{ reminder_days }} dni pred prvou platbou. Zrušíte kedykoľvek.</p>
+          <dl>
+            <dt>Cena</dt>
+            <dd><span class="m-only">{% if is_founder %}{{ founder_price | eur }} prvé {{ founder_months }} mesiace, potom {{ price | eur }}{% else %}{{ price | eur }}{% endif %} mesačne za používateľa, bez DPH</span>
+              {%- if annual_available %}<span class="a-only">{{ annual_total | eur }} ročne za používateľa ({{ annual_monthly | eur }} mesačne), bez DPH</span>{% endif %}</dd>
+            <dt>Prvá platba</dt>
+            <dd>{{ first_charge | weekday_sk }} {{ first_charge | date_sk }} ({{ trial_days + 1 }}. deň), ak predtým nezrušíte</dd>
+            <dt>Zrušenie</dt>
+            <dd>Odkazom v potvrdzovacom e-maile alebo v pripomienke, kedykoľvek pred {{ first_charge | date_sk }}. Bez poplatku.</dd>
+          </dl>
+        </div>
+        {% endif %}
+
+        <button type="submit" class="btn btn-block">{{ "Zapísať sa" if is_waitlist else "Pokračovať na zadanie karty" }}</button>
+        <p class="form-error" data-error role="alert"></p>
+        <p class="form-note">{% if is_waitlist %}Nezáväzné. Žiadna karta, žiadna platba.{% else %}Počet používateľov zvolíte v ďalšom kroku. Údaje o karte k nám neprichádzajú.{% endif %}</p>
+      </form>
+
+      {% if is_waitlist %}
+      <div class="done" id="signup-done" tabindex="-1" hidden>
+        <div class="icon">{{ ic.icon("check") }}</div>
+        <h3>Ste na zozname. Ďakujeme!</h3>
+        {% if launch_upcoming %}
+        <p>V {{ launch_at | weekday_acc_sk }} {{ launch_at | date_sk }} vám pošleme e-mail s odkazom na aktiváciu.</p>
+        {% else %}
+        <p>Ozveme sa vám e-mailom, hneď ako vás budeme môcť spustiť.</p>
+        {% endif %}
+        {% if founder_open %}
+        <p>Úvodnú cenu {{ founder_price | eur }} bez DPH na prvé {{ founder_months }} mesiace získate, ak skúšobné obdobie aktivujete najneskôr {{ deadline_text }}.</p>
+        {% endif %}
+        <button type="button" class="btn btn-block btn-ghost done-close" data-close-signup>Zavrieť</button>
+      </div>
+      {% endif %}
+    </div>
+  </dialog>
 </section>
 
 {# ── Risk reversal ──────────────────────────────────────────────────────── #}
@@ -482,7 +558,7 @@ ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}{{ countdown() }}
       <div class="card">
         <div class="icon">{{ ic.icon("gift") }}</div>
         <h3>{{ trial_days }} dní zadarmo</h3>
-        <p>Kartu zadáte pri registrácii, no strhneme z nej až {{ trial_days + 1 }}. deň. Dovtedy máte všetko naplno.</p>
+        <p>Kartu zadáte pri registrácii, no platba až {{ trial_days + 1 }}. deň. Dovtedy máte všetko naplno.</p>
       </div>
       <div class="card">
         <div class="icon">{{ ic.icon("bell") }}</div>
@@ -491,14 +567,14 @@ ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}{{ countdown() }}
       </div>
       <div class="card">
         <div class="icon">{{ ic.icon("x") }}</div>
-        <h3>Zrušíte jedným klikom</h3>
+        <h3>Zrušíte kedykoľvek</h3>
         <p>Odkaz na zrušenie je v potvrdení aj v pripomienke. Bez telefonovania a vysvetľovania.</p>
       </div>
       {# TODO: verify reading — refund requested within N days after the first charge. #}
       <div class="card guarantee">
         <div class="icon">{{ ic.icon("undo") }}</div>
         <h3>Zabudli ste zrušiť?</h3>
-        <p>Ozvite sa do {{ refund_days }} dní od prvej platby a vrátime vám ju celú, bez otázok.</p>
+        <p>Ozvite sa do {{ refund_days }} dní od prvej platby a vrátime vám 100 % sumy, bez otázok.</p>
       </div>
     </div>
   </div>
@@ -513,24 +589,32 @@ ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}{{ countdown() }}
       {% if is_waitlist %}
       <details>
         <summary>Čo sa stane po zápise na čakaciu listinu?</summary>
-        <p>{% if launch_upcoming %}V {{ launch_at | weekday_acc_sk }} {{ launch_at | date_sk }} vám pošleme e-mail s odkazom na aktiváciu {{ trial_days }}-dňovej skúšobnej verzie.{% else %}Ozveme sa vám e-mailom s odkazom na aktiváciu {{ trial_days }}-dňovej skúšobnej verzie.{% endif %}
-          Zápis je nezáväzný a nič neplatíte.{% if founder_open %} Ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}, získate zakladateľskú cenu.{% endif %}</p>
+        <p>{% if launch_upcoming %}V {{ launch_at | weekday_acc_sk }} {{ launch_at | date_sk }} vám pošleme e-mail s odkazom na aktiváciu {{ trial_days }}-dňového skúšobného obdobia.{% else %}Ozveme sa vám e-mailom s odkazom na aktiváciu {{ trial_days }}-dňového skúšobného obdobia.{% endif %}
+          Zápis je nezáväzný a nič neplatíte.{% if founder_open %} Ak skúšobné obdobie aktivujete najneskôr {{ deadline_text }}, získate úvodnú cenu.{% endif %}</p>
       </details>
       {% endif %}
       <details>
-        <summary>Prečo pri skúšobnej verzii zadávam kartu?</summary>
-        <p>Aby {{ product }} po skúšobnej dobe fungoval bez prerušenia. Pri registrácii z karty nestrhneme nič, prvá platba prebehne až {{ trial_days + 1 }}. deň.
+        <summary>Prečo pri skúšobnom období zadávam kartu?</summary>
+        <p>Aby {{ product }} po skúšobnom období fungoval bez prerušenia. Pri registrácii z karty nestrhneme nič, prvá platba prebehne až {{ trial_days + 1 }}. deň.
           {{ reminder_days }} dni pred ňou vám pošleme pripomienku s dátumom a sumou. Platby spracúva Stripe, údaje o karte k nám neprichádzajú.</p>
       </details>
       <details>
         <summary>Ako zruším predplatné?</summary>
         {# TODO: verify — cancellation after the trial takes effect at the end of the paid month. #}
-        <p>Jedným klikom cez odkaz v potvrdzovacom e-maile alebo v pripomienke. Ak zrušíte počas skúšobnej doby, nezaplatíte nič.
-          Neskôr môžete zrušiť kedykoľvek ku koncu zaplateného mesiaca.</p>
+        <p>Jedným klikom cez odkaz v potvrdzovacom e-maile alebo v pripomienke. Ak zrušíte počas skúšobného obdobia, nezaplatíte nič.
+          Neskôr môžete zrušiť kedykoľvek ku koncu zaplateného {{ "obdobia (mesiaca alebo roka)" if annual_available else "mesiaca" }}.</p>
       </details>
+      {% if annual_available %}
+      <details>
+        <summary>Môžem platiť ročne?</summary>
+        <p>Áno. Pri ročnej platbe stojí {{ product }} {{ annual_monthly | eur }} mesačne za používateľa bez DPH, teda {{ annual_total | eur }}
+          raz ročne vopred. Oproti mesačnej platbe ušetríte {{ annual_saving | eur }} ročne. Aj tu máte {{ trial_days }} dní zadarmo
+          a prvá ročná platba prebehne až {{ trial_days + 1 }}. deň.{% if founder_open %} Úvodná zľava platí len pri mesačnej platbe.{% endif %}</p>
+      </details>
+      {% endif %}
       <details>
         <summary>Čo sa stane po {{ trial_days }} dňoch?</summary>
-        <p>Ak nezrušíte, {{ trial_days + 1 }}. deň strhneme {{ price | eur }} bez DPH za každého používateľa{% if founder_open %} (so zakladateľskou ponukou {{ founder_price | eur }} prvé {{ founder_months }} mesiace){% endif %}
+        <p>Ak nezrušíte, {{ trial_days + 1 }}. deň strhneme {{ price | eur }} bez DPH za každého používateľa{% if founder_open %} (s úvodnou ponukou {{ founder_price | eur }} prvé {{ founder_months }} mesiace){% endif %}
           a potom raz mesačne. Ak ste zabudli zrušiť, ozvite sa do {{ refund_days }} dní od prvej platby a vrátime vám ju.</p>
       </details>
       <details>
@@ -552,9 +636,9 @@ ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}{{ countdown() }}
         <p>Áno. Čísla a e-mailové adresy, ktoré označíte ako súkromné, sa nikdy nenahrávajú ani neukladajú.</p>
       </details>
       <details>
-        <summary>Kde sú moje dáta a čo s nimi robíte?</summary>
-        {# TODO: verify — EU storage (see the privacy section above) and "we don't sell data". #}
-        <p>Ukladáme ich v Európskej únii a používame ich len na to, aby vám {{ product }} vedel odpovedať. Hlas ani emócie neanalyzujeme
+        <summary>Čo robíte s mojimi dátami?</summary>
+        {# TODO: verify — "we don't sell data". #}
+        <p>Používame ich len na to, aby vám {{ product }} vedel odpovedať. Hlas ani emócie neanalyzujeme
           a vaše dáta nepredávame. Viac v <a href="{{ privacy_url }}">zásadách ochrany osobných údajov</a>.</p>
       </details>
     </div>
@@ -564,14 +648,14 @@ ak skúšobnú verziu aktivujete najneskôr {{ deadline_text }}{{ countdown() }}
 {# ── Final CTA ──────────────────────────────────────────────────────────── #}
 <section class="final">
   <div class="wrap">
-    <h2 class="h2">Prestaňte si všetko pamätať.</h2>
-    <p class="lead">Nechajte to na {{ product }} a sústreďte sa na klientov.</p>
+    <h2 class="h2">{{ product }} si pamätá každé slovo. Aj to, čo by vám dávno vypadlo z hlavy.</h2>
+    <p class="lead">Rozpočet, ktorý klient spomenul mimochodom. Poschodie bytu z hovoru spred troch týždňov. Kto chcel balkón a kto garáž. Stačí sa opýtať.</p>
     <div class="cta-row">
       <a class="btn" href="#registracia">{{ cta_label }}</a>
       {% if founder_open %}
-      <p class="micro">Zakladateľská cena {{ founder_price | eur }} bez DPH platí {{ "" if is_founder else "pri aktivácii " }}do {{ deadline_text }}{{ countdown() }}</p>
+      <p class="micro">Úvodná cena {{ founder_price | eur }} bez DPH platí {{ "" if is_founder else "pri aktivácii " }}do {{ deadline_text }}{{ countdown() }}</p>
       {% elif not is_waitlist %}
-      <p class="micro">Dnes neplatíte nič. Zrušíte jedným klikom.</p>
+      <p class="micro">Dnes neplatíte nič. Zrušíte kedykoľvek.</p>
       {% endif %}
     </div>
   </div>

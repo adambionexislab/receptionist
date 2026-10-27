@@ -12,7 +12,11 @@ Routes:
   POST /querie/api/waitlist              waitlist sign-up
   POST /querie/api/checkout              store sign-up, open trial Checkout
   GET  /querie/zrusit, /querie/sprava    signed one-click cancel / manage links
+  GET  /querie/pdf_report                PDF report page (email → download)
+  POST /querie/api/report                store the email, return the signed download link
+  GET  /querie/pdf_report/stiahnut       the PDF, for a signed link
   GET  /admin/querie-signups             CSV export (ADMIN_TOKEN)
+  GET  /admin/querie-report-leads        CSV export of report emails (ADMIN_TOKEN)
 """
 
 import asyncio
@@ -26,13 +30,13 @@ from typing import Optional
 
 import stripe
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel, ValidationError, field_validator
 
 from config import settings
-from querie import billing, db, notify, offer
+from querie import billing, db, notify, offer, report
 from querie import config as qc
 
 logger = logging.getLogger(__name__)
@@ -71,6 +75,13 @@ def _context() -> dict:
         "server_now_ms": int(at.timestamp() * 1000),
         "price": qc.PRICE_EUR,
         "founder_price": offer.founder_price(),
+        # Yearly billing is shown as pricing info on the waitlist, but offered at
+        # checkout only once its Stripe price exists.
+        "annual_available": phase == "waitlist" or offer.annual_ready(),
+        "annual_monthly": qc.ANNUAL_MONTHLY_EUR,
+        "annual_total": offer.annual_total(),
+        "annual_saving": offer.annual_saving(),
+        "annual_saving_percent": offer.annual_saving_percent(),
         "founder_percent": qc.FOUNDER_DISCOUNT_PERCENT,
         "founder_months": qc.FOUNDER_MONTHS,
         "trial_days": qc.TRIAL_DAYS,
@@ -84,6 +95,8 @@ def _context() -> dict:
         "contact_email": qc.CONTACT_EMAIL,
         "terms_url": qc.TERMS_URL,
         "privacy_url": qc.PRIVACY_URL,
+        "report_path": qc.REPORT_PATH,
+        "report_title": qc.REPORT_TITLE,
         "meta_pixel_id": qc.meta_pixel_id(),
         "tiktok_pixel_id": qc.tiktok_pixel_id(),
         "year": at.year,
@@ -123,12 +136,28 @@ async def querie_welcome():
 _ATTRIBUTION_KEYS = {"utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "fbclid", "ttclid"}
 
 
+def _clean_email(v: str) -> str:
+    v = v.strip().lower()
+    local, _, domain = v.partition("@")
+    if not local or "." not in domain or " " in v or len(v) > 200:
+        raise ValueError("Skontrolujte, prosím, e-mailovú adresu.")
+    return v
+
+
+def _clean_attribution(v) -> Optional[dict]:
+    if not isinstance(v, dict):
+        return None
+    clean = {k: str(val)[:200] for k, val in v.items() if k in _ATTRIBUTION_KEYS and val}
+    return clean or None
+
+
 class SignupIn(BaseModel):
     name: str
     email: str
     phone: str
     company: Optional[str] = None
     consent: bool = False
+    billing: str = "monthly"
     # Honeypot: invisible to people, filled in by naive bots.
     website: Optional[str] = None
     attribution: Optional[dict] = None
@@ -146,11 +175,7 @@ class SignupIn(BaseModel):
     @field_validator("email")
     @classmethod
     def _email(cls, v: str) -> str:
-        v = v.strip().lower()
-        local, _, domain = v.partition("@")
-        if not local or "." not in domain or " " in v or len(v) > 200:
-            raise ValueError("Skontrolujte, prosím, e-mailovú adresu.")
-        return v
+        return _clean_email(v)
 
     @field_validator("phone")
     @classmethod
@@ -167,13 +192,17 @@ class SignupIn(BaseModel):
         v = " ".join((v or "").split())
         return v[:160] or None
 
+    @field_validator("billing")
+    @classmethod
+    def _billing(cls, v: str) -> str:
+        if v not in ("monthly", "annual"):
+            raise ValueError("Zvoľte, prosím, mesačnú alebo ročnú platbu.")
+        return v
+
     @field_validator("attribution")
     @classmethod
     def _attribution(cls, v: Optional[dict]) -> Optional[dict]:
-        if not isinstance(v, dict):
-            return None
-        clean = {k: str(val)[:200] for k, val in v.items() if k in _ATTRIBUTION_KEYS and val}
-        return clean or None
+        return _clean_attribution(v)
 
 
 def _parse(payload, consent_error: str) -> SignupIn:
@@ -249,17 +278,84 @@ async def checkout(request: Request, payload: dict = Body(...)):
         return JSONResponse({"detail": "Skúste to, prosím, znova."}, status_code=400)
     if offer.current_phase() == "waitlist":
         raise HTTPException(409, "Registrácia ešte nie je otvorená. Zapíšte sa na čakaciu listinu.")
+    annual = data.billing == "annual"
+    if annual and not offer.annual_ready():
+        raise HTTPException(409, "Ročná platba momentálne nie je dostupná. Zvoľte, prosím, mesačnú.")
     await _store(data, "checkout_started", request)
     try:
         session_id, url, founder = await asyncio.to_thread(
             billing.create_checkout,
-            email=data.email, name=data.name, phone=data.phone, company=data.company,
+            email=data.email, name=data.name, phone=data.phone, company=data.company, annual=annual,
         )
     except stripe.error.StripeError as exc:
         logger.error("Querie checkout session failed: %s", exc)
         raise HTTPException(502, "Platobnú bránu sa nepodarilo otvoriť. Skúste to, prosím, znova.")
     await asyncio.to_thread(db.set_checkout_session, data.email, session_id, founder)
     return {"url": url}
+
+
+# ── PDF report (lead magnet) ─────────────────────────────────────────────────
+@router.get(qc.REPORT_PATH, response_class=HTMLResponse, include_in_schema=False)
+async def report_page():
+    return _render("report.html")
+
+
+@router.get(qc.REPORT_PATH + "/", include_in_schema=False)
+async def report_page_slash(request: Request):
+    query = request.url.query
+    return RedirectResponse(qc.REPORT_PATH + (f"?{query}" if query else ""), status_code=308)
+
+
+@router.post("/querie/api/report")
+async def report_request(request: Request, background: BackgroundTasks, payload: dict = Body(...)):
+    _rate_limit(request)
+    if not isinstance(payload, dict):
+        raise HTTPException(422, "Skontrolujte, prosím, e-mailovú adresu.")
+    try:
+        email = _clean_email(str(payload.get("email") or ""))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    if payload.get("consent") is not True:
+        raise HTTPException(422, "Na stiahnutie reportu potvrďte, prosím, súhlas so spracovaním e-mailu.")
+    if payload.get("website"):
+        logger.info("Querie report honeypot tripped — dropped")
+        return {"url": qc.REPORT_PATH}
+    await asyncio.to_thread(
+        db.upsert_report_lead,
+        email=email,
+        consent_version=qc.REPORT_CONSENT_VERSION,
+        attribution=_clean_attribution(payload.get("attribution")),
+        user_agent=(request.headers.get("user-agent") or "")[:300],
+    )
+    url = report.download_url(email)
+    if not url:
+        logger.error("Querie report: no SESSION_SECRET/ADMIN_TOKEN to sign download links")
+        raise HTTPException(503, "Report sa teraz nepodarilo pripraviť. Skúste to, prosím, o chvíľu.")
+    background.add_task(notify.send_report, to=email, url=report.download_url(email, absolute=True))
+    logger.info("Querie report lead stored")
+    return {"url": url}
+
+
+_REPORT_MISSING = (
+    "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
+    "<title>Report</title><body style='font-family:system-ui;background:#0b0b0c;color:#f4f4f5;padding:2rem'>"
+    "<p>{msg} Napíšte nám na <a style='color:#c49a00' href='mailto:{email}'>{email}</a> a pošleme vám ho.</p>"
+)
+
+
+@router.get(qc.REPORT_PATH + "/stiahnut", include_in_schema=False)
+async def report_download(t: str = ""):
+    email = report.verify_token(t)
+    if not email:
+        msg = "Tento odkaz na report je neplatný."
+        return HTMLResponse(_REPORT_MISSING.format(msg=msg, email=qc.CONTACT_EMAIL), status_code=400)
+    path = report.pdf_path()
+    if not path:
+        logger.error("Querie report PDF missing: %s", qc.REPORT_DIR / qc.REPORT_FILE)
+        msg = "Report sa práve nedá stiahnuť."
+        return HTMLResponse(_REPORT_MISSING.format(msg=msg, email=qc.CONTACT_EMAIL), status_code=503)
+    await asyncio.to_thread(db.count_report_download, email)
+    return FileResponse(path, media_type="application/pdf", filename=qc.REPORT_FILE)
 
 
 # ── one-click cancel / manage ────────────────────────────────────────────────
@@ -304,15 +400,8 @@ def _require_admin(credentials: Optional[HTTPAuthorizationCredentials] = Depends
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
-@router.get("/admin/querie-signups", dependencies=[Depends(_require_admin)])
-async def export_signups():
-    rows = await asyncio.to_thread(db.all_signups)
+def _csv(rows: list[dict], columns: list[str], filename: str) -> Response:
     out = io.StringIO()
-    columns = [
-        "created_at", "status", "name", "email", "phone", "company", "founder",
-        "consent_at", "consent_version", "attribution", "stripe_customer_id",
-        "stripe_subscription_id", "updated_at",
-    ]
     writer = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore")
     writer.writeheader()
     writer.writerows(rows)
@@ -320,5 +409,23 @@ async def export_signups():
     return Response(
         "﻿" + out.getvalue(),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=querie-signups.csv"},
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.get("/admin/querie-signups", dependencies=[Depends(_require_admin)])
+async def export_signups():
+    rows = await asyncio.to_thread(db.all_signups)
+    return _csv(rows, [
+        "created_at", "status", "name", "email", "phone", "company", "founder",
+        "consent_at", "consent_version", "attribution", "stripe_customer_id",
+        "stripe_subscription_id", "updated_at",
+    ], "querie-signups.csv")
+
+
+@router.get("/admin/querie-report-leads", dependencies=[Depends(_require_admin)])
+async def export_report_leads():
+    rows = await asyncio.to_thread(db.all_report_leads)
+    return _csv(rows, [
+        "created_at", "email", "downloads", "consent_at", "consent_version", "attribution", "updated_at",
+    ], "querie-report-leads.csv")

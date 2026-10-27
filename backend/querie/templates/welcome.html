@@ -4,7 +4,7 @@
     the checkout.session.completed webhook. -#}
 {% set page_event = {"key": "trial", "meta": "StartTrial", "tiktok": "Subscribe"} %}
 {% block title %}Vitajte – {{ product }}{% endblock %}
-{% block description %}Vaša skúšobná verzia {{ product }} je aktívna.{% endblock %}
+{% block description %}Vaše skúšobné obdobie {{ product }} je aktívne.{% endblock %}
 {% block robots %}<meta name="robots" content="noindex, nofollow" />{% endblock %}
 {% block canonical %}{{ base }}/vitajte{% endblock %}
 
@@ -23,12 +23,12 @@
 <section class="welcome">
   <div class="wrap">
     <div class="icon">{{ ic.icon("check") }}</div>
-    <h1>Hotovo. Vaša skúšobná verzia beží.</h1>
+    <h1>Hotovo. Vaše skúšobné obdobie beží.</h1>
     <p class="lead">Ďakujeme! Potvrdenie s dátumom prvej platby a odkazom na zrušenie sme vám poslali e-mailom.</p>
     <ul>
       <li><strong>Dnes ste nezaplatili nič.</strong> Prvá platba prebehne {{ trial_days + 1 }}. deň, ak predtým nezrušíte.</li>
       <li><strong>{{ reminder_days }} dni pred platbou</strong> vám pošleme pripomienku.</li>
-      <li><strong>Zrušíte jedným klikom</strong> cez odkaz v e-maile.</li>
+      <li><strong>Zrušíte kedykoľvek</strong> cez odkaz v e-maile.</li>
       {# TODO: describe the real onboarding step (app download, call forwarding). #}
       <li><strong>Čoskoro sa vám ozveme</strong> s nastavením aplikácie a presmerovania hovorov.</li>
     </ul>

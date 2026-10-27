@@ -1,4 +1,4 @@
-"""SQLite storage for Querie sign-ups (waitlist and trial checkouts).
+"""SQLite storage for Querie sign-ups (waitlist and trial checkouts) and PDF report leads.
 
 One row per email address: a waitlister who later starts a trial is the same
 row moving from status 'waitlist' to 'checkout_started' to 'trial_started'.
@@ -36,6 +36,19 @@ CREATE TABLE IF NOT EXISTS querie_signups (
 );
 
 CREATE INDEX IF NOT EXISTS idx_querie_signups_session ON querie_signups(stripe_session_id);
+
+-- Emails left on /querie/pdf_report for the PDF report.
+CREATE TABLE IF NOT EXISTS querie_report_leads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,              -- lowercased
+  consent_at TEXT NOT NULL,
+  consent_version TEXT NOT NULL,
+  attribution TEXT,                        -- JSON: utm_*, fbclid, ttclid
+  user_agent TEXT,
+  downloads INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 """
 
 _initialized = False
@@ -149,4 +162,51 @@ def mark_trial_started(
 
 def all_signups() -> list[dict]:
     rows = _conn().execute("SELECT * FROM querie_signups ORDER BY created_at, id").fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── PDF report leads ─────────────────────────────────────────────────────────
+def upsert_report_lead(
+    *, email: str, consent_version: str, attribution: Optional[dict] = None, user_agent: Optional[str] = None,
+) -> dict:
+    """One row per email; asking for the report again refreshes the consent."""
+    email = email.strip().lower()
+    stamp = _now()
+    conn = _conn()
+    with _tenants_db.write_lock:
+        conn.execute(
+            """
+            INSERT INTO querie_report_leads
+              (email, consent_at, consent_version, attribution, user_agent, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(email) DO UPDATE SET
+              consent_at = excluded.consent_at,
+              consent_version = excluded.consent_version,
+              attribution = COALESCE(querie_report_leads.attribution, excluded.attribution),
+              user_agent = excluded.user_agent,
+              updated_at = excluded.updated_at
+            """,
+            (
+                email, stamp, consent_version,
+                json.dumps(attribution, ensure_ascii=False) if attribution else None,
+                user_agent, stamp, stamp,
+            ),
+        )
+        conn.commit()
+    row = conn.execute("SELECT * FROM querie_report_leads WHERE email = ?", (email,)).fetchone()
+    return dict(row)
+
+
+def count_report_download(email: str) -> None:
+    conn = _conn()
+    with _tenants_db.write_lock:
+        conn.execute(
+            "UPDATE querie_report_leads SET downloads = downloads + 1, updated_at = ? WHERE email = ?",
+            (_now(), email.strip().lower()),
+        )
+        conn.commit()
+
+
+def all_report_leads() -> list[dict]:
+    rows = _conn().execute("SELECT * FROM querie_report_leads ORDER BY created_at, id").fetchall()
     return [dict(r) for r in rows]

@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% import "_icons.html" as ic %}
+{#- Lead magnet for the "PDF zadarmo" Facebook ad: email in, PDF out. The copy
+    mirrors the ad (Facebook-PDF-report-ad.html) so the click lands on the same promise. -#}
+
+{% block title %}5 prekvapivo jednoduchých krokov, ako predávať viac nehnuteľností – report zadarmo{% endblock %}
+{% block description %}Bezplatný PDF report pre realitných maklérov: prečo rýchly predaj prináša nové nehnuteľnosti, ako vzniká zoznam kupujúcich a čo presvedčí predávajúceho na stretnutí.{% endblock %}
+{% block canonical %}{{ report_path }}{% endblock %}
+
+{% block header_cta %}
+<a class="btn btn-sm btn-ghost" href="{{ base }}/">Čo je {{ product }}?</a>
+{% endblock %}
+
+{% block styles %}
+    .report { padding: 32px 0 64px; position: relative; }
+    .report::before {
+      content: ""; position: absolute; inset: -60px 0 auto; height: 560px; z-index: -1; pointer-events: none;
+      background: radial-gradient(55% 55% at 75% 30%, rgba(196, 154, 0, .14), transparent 70%);
+    }
+    .report-grid { display: grid; gap: 28px; grid-template-areas: "copy" "cover" "form" "inside"; }
+    .report-copy { grid-area: copy; }
+    .cover-wrap { grid-area: cover; display: flex; justify-content: center; padding: 6px 0 10px; }
+    .report-form { grid-area: form; border-color: var(--gold-line); }
+    .inside { grid-area: inside; }
+
+    .tag {
+      display: inline-block; background: var(--gold); color: #0b0b0c; border-radius: 999px;
+      padding: 6px 14px; font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 20px;
+    }
+    .report h1 { font-size: clamp(2rem, 8vw, 3.3rem); margin-bottom: 16px; }
+    .report h1 span { color: var(--gold-bright); }
+
+    /* The report cover, as in the ad */
+    .cover { position: relative; width: 200px; aspect-ratio: 340 / 470; }
+    .cover-back { position: absolute; inset: 0; transform: translate(12px, 10px); border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border-strong); }
+    .cover-front {
+      position: absolute; inset: 0; border-radius: 8px; background: #f2f1ee; color: #141414;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .5); padding: 20px 18px; display: flex; flex-direction: column; transform: rotate(-3deg);
+    }
+    .cover-num { font-weight: 700; font-size: 4.2rem; line-height: .9; letter-spacing: -0.04em; color: var(--gold); }
+    .cover-title { margin-top: 10px; font-weight: 700; font-size: .92rem; line-height: 1.18; letter-spacing: -0.01em; }
+    .cover-sub { margin-top: auto; font-size: .72rem; color: #5a5853; }
+    .cover-foot {
+      margin-top: 16px; padding-top: 8px; border-top: 1px solid #d6d4ce; display: flex; justify-content: space-between;
+      font-size: .6rem; letter-spacing: .14em; text-transform: uppercase; color: #6e6c67; font-weight: 600;
+    }
+
+    .report-form .btn svg { width: 20px; height: 20px; }
+    .report-form h2 { font-size: 1.3rem; margin-bottom: 18px; }
+    .report-form h2 b { color: var(--gold-bright); font-weight: 600; }
+    .done { outline: none; }
+    .done .icon { background: var(--gold); color: #0b0b0c; }
+    .done h2 { margin-bottom: 8px; }
+    .done p { color: var(--muted); }
+    .done .btn { margin-top: 18px; }
+    .done .next { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); font-size: .95rem; }
+
+    .inside-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+    .inside-list li { display: flex; gap: 14px; align-items: center; font-size: 1.05rem; }
+    .inside-list svg { width: 26px; height: 26px; flex: none; color: var(--gold-bright); }
+
+    @media (min-width: 900px) {
+      .report { padding: 64px 0 96px; }
+      .report-grid {
+        grid-template-columns: 1.15fr .85fr; column-gap: 56px; row-gap: 28px;
+        grid-template-areas: "copy cover" "inside cover" "form cover";
+      }
+      .cover-wrap { align-items: center; }
+      .cover { width: 320px; }
+      .cover-front { padding: 32px 28px; }
+      .cover-num { font-size: 7rem; }
+      .cover-title { font-size: 1.45rem; margin-top: 14px; }
+      .cover-sub { font-size: 1rem; }
+      .cover-foot { font-size: .8rem; }
+      .report-form { max-width: 560px; }
+    }
+{% endblock %}
+
+{% block main %}
+<section class="report">
+  <div class="wrap report-grid">
+    <div class="report-copy">
+      <span class="tag">PDF zadarmo</span>
+      <p class="eyebrow">Pre realitných maklérov</p>
+      <h1>5 prekvapivo jednoduchých krokov, ako <span>predávať viac nehnuteľností</span></h1>
+      <p class="lead">S realitnými maklérmi hovoríme každý deň. Najčastejšie ich trápi jedno: ako predať viac nehnuteľností.
+        Odpoveď sme zhrnuli do reportu.</p>
+    </div>
+
+    <div class="cover-wrap" aria-hidden="true">
+      <div class="cover">
+        <div class="cover-back"></div>
+        <div class="cover-front">
+          {#- A leading number ("5 …") is set large, as the cover's accent. #}
+          {% set first, _, rest = report_title.partition(" ") %}
+          {% if first.isdigit() and rest %}
+          <div class="cover-num">{{ first }}</div>
+          <div class="cover-title">{{ rest }}</div>
+          {% else %}
+          <div class="cover-title">{{ report_title }}</div>
+          {% endif %}
+          <div class="cover-sub">Myšlienka · Metóda · Prax</div>
+          <div class="cover-foot"><span>Report</span><span>PDF</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="inside">
+      <p class="eyebrow">V reporte</p>
+      <ul class="inside-list">
+        <li>{{ ic.icon("refresh") }} Prečo rýchly predaj prináša nové nehnuteľnosti</li>
+        <li>{{ ic.icon("users") }} Ako vzniká zoznam kupujúcich</li>
+        <li>{{ ic.icon("handshake") }} Čo presvedčí predávajúceho na stretnutí</li>
+      </ul>
+    </div>
+
+    <div class="card report-form" id="stiahnut">
+      <form data-report data-endpoint="{{ base }}/api/report" novalidate>
+        <h2>Stiahnite si ho <b>zadarmo</b> — stačí e-mail</h2>
+        <div class="field">
+          <label for="r-email">E-mail</label>
+          <input id="r-email" name="email" type="email" autocomplete="email" inputmode="email" required maxlength="200" placeholder="vas@email.sk" />
+        </div>
+        <div class="hp" aria-hidden="true">
+          <label for="r-website">Nevypĺňajte</label>
+          <input id="r-website" name="website" tabindex="-1" autocomplete="off" />
+        </div>
+        {# TODO: legal review — one checkbox covers sending the report and occasional Querie news. #}
+        <label class="consent">
+          <input type="checkbox" name="consent" required />
+          <span>Súhlasím so spracovaním e-mailu na zaslanie reportu a občasných informácií o {{ product }}.
+            Súhlas môžem kedykoľvek odvolať. Viac v <a href="{{ privacy_url }}" target="_blank" rel="noopener">Zásadách ochrany osobných údajov</a>.</span>
+        </label>
+        <button type="submit" class="btn btn-block">{{ ic.icon("download") }} Stiahnuť report</button>
+        <p class="form-error" data-error role="alert"></p>
+      </form>
+
+      <div class="done" id="report-done" tabindex="-1" hidden>
+        <div class="icon">{{ ic.icon("download") }}</div>
+        <h2>Report sa sťahuje</h2>
+        <p>Ak sa sťahovanie nezačalo, použite tlačidlo nižšie. Odkaz sme vám poslali aj e-mailom.</p>
+        <a class="btn btn-block" data-report-link href="#">Stiahnuť report (PDF)</a>
+        <p class="next">Report pripravil tím {{ product }}. {{ product }} prepíše každý váš hovor a odpovie na otázky o klientoch.
+          <a href="{{ base }}/">Pozrite sa, ako funguje</a>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var form = document.querySelector('form[data-report]');
+  if (!form) return;
+  var error = form.querySelector('[data-error]');
+  var button = form.querySelector('button[type=submit]');
+  var label = button.innerHTML;
+  var params = new URLSearchParams(location.search);
+  var attribution = {};
+  ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'ttclid'].forEach(function (k) {
+    if (params.get(k)) attribution[k] = params.get(k);
+  });
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    error.textContent = '';
+    if (!form.reportValidity()) return;
+    var el = form.elements;
+    button.disabled = true;
+    button.textContent = 'Pripravujem…';
+    fetch(form.getAttribute('data-endpoint'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: el.namedItem('email').value, consent: el.namedItem('consent').checked,
+        website: el.namedItem('website').value, attribution: attribution
+      })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : '');
+        return data;
+      });
+    }).then(function (data) {
+      window.querieTrack('Lead', 'SubmitForm');
+      var done = document.getElementById('report-done');
+      done.querySelector('[data-report-link]').href = data.url;
+      form.hidden = true;
+      done.hidden = false;
+      done.focus();
+      // The download is served as an attachment, so the page stays put.
+      setTimeout(function () { location.href = data.url; }, 400);
+    }).catch(function (err) {
+      error.textContent = err.message || 'Niečo sa nepodarilo. Skúste to, prosím, znova.';
+      button.disabled = false;
+      button.innerHTML = label;
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -115,6 +115,9 @@ class Settings(BaseSettings):
     # Recurring €139/month price (tax-exclusive) for the trial checkout. Until it
     # is set the page stays in waitlist mode even after the launch date.
     QUERIE_STRIPE_PRICE_ID: Optional[str] = None
+    # Recurring €1 428/year price (= €119/month, tax-exclusive). Without it the
+    # page offers monthly billing only.
+    QUERIE_STRIPE_ANNUAL_PRICE_ID: Optional[str] = None
     # 25% off, duration "repeating", 3 months. Applied only before the founder
     # deadline; unset → founder checkouts go through at full price.
     QUERIE_FOUNDER_COUPON_ID: Optional[str] = None

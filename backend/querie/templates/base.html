@@ -137,6 +137,23 @@
 
     {% block styles %}{% endblock %}
 
+    /* Forms (sign-up dialog, report page) */
+    .field { display: grid; gap: 6px; margin-bottom: 14px; }
+    .field label { font-size: .92rem; font-weight: 500; }
+    .opt { color: var(--muted); font-weight: 400; }
+    .field input {
+      width: 100%; min-height: 50px; padding: 0 14px;
+      background: var(--bg); color: var(--fg);
+      border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+      font: inherit; font-size: 16px; /* 16px stops iOS zooming into the field */
+    }
+    .field input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-soft); }
+    .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+    .consent { display: flex; gap: 10px; align-items: flex-start; font-size: .9rem; color: var(--muted); margin: 6px 0 18px; }
+    .consent input { width: 20px; height: 20px; flex: none; margin-top: 2px; accent-color: var(--gold); }
+    .form-error { color: var(--danger); font-size: .93rem; margin-top: 10px; min-height: 1.2em; }
+    .form-note { color: var(--muted); font-size: .85rem; margin-top: 10px; text-align: center; }
+
     @media (min-width: 720px) {
       :root { --gutter: 28px; }
       section { padding: 96px 0; }
@@ -273,6 +290,30 @@
     }
     if (timers.length) { tick(); setInterval(tick, 1000); }
 
+    /* ── Monthly / yearly switch: CSS shows the matching prices by data-billing. ── */
+    document.querySelectorAll('[data-billing]').forEach(function (scope) {
+      var radios = scope.querySelectorAll('input[name=billing]');
+      function sync() {
+        radios.forEach(function (r) { if (r.checked) scope.setAttribute('data-billing', r.value); });
+      }
+      radios.forEach(function (r) { r.addEventListener('change', sync); });
+      sync(); // the browser may restore the yearly choice on back navigation
+    });
+
+    /* ── Sign-up dialog: opened from the price card, closed by ×, Esc or a click outside. ── */
+    var dialog = document.getElementById('signup-dialog');
+    if (dialog) {
+      var closeDialog = function () { if (dialog.close) dialog.close(); else dialog.removeAttribute('open'); };
+      document.querySelectorAll('[data-open-signup]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          if (dialog.showModal) dialog.showModal(); else dialog.setAttribute('open', '');
+        });
+      });
+      dialog.querySelectorAll('[data-close-signup]').forEach(function (b) { b.addEventListener('click', closeDialog); });
+      // The dialog has no padding, so a click on the element itself is a click on the backdrop.
+      dialog.addEventListener('click', function (e) { if (e.target === dialog) closeDialog(); });
+    }
+
     /* ── Sign-up forms (waitlist / trial checkout). ── */
     var params = new URLSearchParams(location.search);
     var attribution = {};
@@ -291,7 +332,9 @@
         var body = {
           name: field('name').value, email: field('email').value, phone: field('phone').value,
           company: field('company').value, consent: field('consent').checked,
-          website: field('website').value, attribution: attribution
+          website: field('website').value, attribution: attribution,
+          // The radios sit in the price card, tied to this form by form="…".
+          billing: (field('billing') && field('billing').value) || 'monthly'
         };
         button.disabled = true;
         button.textContent = 'Odosielam…';
@@ -322,5 +365,6 @@
     });
   })();
   </script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

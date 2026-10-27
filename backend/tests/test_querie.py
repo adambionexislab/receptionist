@@ -137,7 +137,7 @@ def test_waitlist_page(client, monkeypatch):
     html = client.get("/querie/").text
     assert 'data-signup="waitlist"' in html
     assert "/querie/api/waitlist" in html
-    assert "Zápisom si rezervujete zakladateľskú cenu" in html
+    assert "Zápisom si rezervujete úvodnú cenu" in html
     assert 'data-deadline="' in html
     assert "bez DPH" in html
     assert "Pokračovať na zadanie karty" not in html
@@ -148,16 +148,27 @@ def test_founder_page_has_offer_countdown_and_transparency(client, monkeypatch):
     html = client.get("/querie/").text
     assert 'data-signup="checkout"' in html
     assert "104,25" in html and 'data-deadline="' in html
-    assert "Dnes neplatíte nič. Pripomenieme sa 3 dni pred prvou platbou. Zrušíte jedným klikom." in html
+    assert "Dnes neplatíte nič. Pripomenieme sa 3 dni pred prvou platbou. Zrušíte kedykoľvek." in html
     assert "24. 11. 2026" in html  # first charge = 10 Nov + 14 days
     assert 'id="signup-done"' not in html
+
+
+def test_form_is_in_dialog_with_three_promises_beside_price(client, monkeypatch):
+    freeze(monkeypatch, at(2026, 11, 20, 9))
+    html = client.get("/querie/").text
+    assert html.index('<dialog id="signup-dialog"') < html.index('id="signup-form"') < html.index("</dialog>")
+    assert "data-open-signup" in html
+    promises = html[html.index('class="assure-list"'):html.index("</ol>")]
+    assert "Prvá platba až 4. 12. 2026" in promises.replace("\xa0", " ")  # 20 Nov + 14 days
+    assert "3 dni pred koncom skúšobného obdobia" in promises
+    assert "7 dní od platby" in promises
 
 
 def test_founder_offer_gone_after_deadline(client, monkeypatch):
     freeze(monkeypatch, at(2026, 11, 16, 0, 0, 1))
     html = client.get("/querie/").text
     assert 'data-signup="checkout"' in html
-    for leftover in ("104,25", "akladateľsk", 'data-deadline="'):
+    for leftover in ("104,25", "Úvodn", "úvodn", 'data-deadline="'):
         assert leftover not in html
 
 
@@ -294,6 +305,66 @@ def test_checkout_after_deadline_has_no_coupon(client, monkeypatch, stripe_calls
     assert stripe_calls[0]["metadata"]["founder"] == "0"
 
 
+# ── yearly billing ───────────────────────────────────────────────────────────
+def test_annual_prices():
+    assert offer.annual_total() == offer.Decimal("1428")
+    assert offer.annual_saving() == offer.Decimal("240")
+    assert offer.annual_saving_percent() == 14
+
+
+def test_annual_switch_shown_once_price_exists(client, monkeypatch):
+    freeze(monkeypatch, at(2026, 11, 20))
+    monkeypatch.setattr(settings, "QUERIE_STRIPE_ANNUAL_PRICE_ID", None)
+    assert 'name="billing"' not in client.get("/querie/").text
+    monkeypatch.setattr(settings, "QUERIE_STRIPE_ANNUAL_PRICE_ID", "price_querie_year")
+    html = client.get("/querie/").text
+    assert 'value="annual" form="signup-form"' in html and 'data-billing="monthly"' in html
+    for amount in ("119", "1428", "240"):
+        assert offer.eur(offer.Decimal(amount)) in html
+
+
+def test_annual_switch_shown_on_waitlist_as_pricing_info(client, monkeypatch):
+    freeze(monkeypatch, at(2026, 10, 30))
+    monkeypatch.setattr(settings, "QUERIE_STRIPE_ANNUAL_PRICE_ID", None)
+    html = client.get("/querie/").text
+    assert 'value="annual"' in html
+    assert "mesačného predplatného" in html  # founder discount is monthly-only
+
+
+def test_annual_checkout_uses_yearly_price_and_never_the_coupon(client, monkeypatch, stripe_calls):
+    freeze(monkeypatch, at(2026, 11, 12, 15))  # founder phase
+    monkeypatch.setattr(settings, "QUERIE_STRIPE_ANNUAL_PRICE_ID", "price_querie_year")
+    assert client.post("/querie/api/checkout", json=signup(billing="annual")).status_code == 200
+    params = stripe_calls[0]
+    assert params["line_items"][0]["price"] == "price_querie_year"
+    assert "discounts" not in params
+    assert params["metadata"]["billing"] == "annual" and params["metadata"]["founder"] == "0"
+    assert params["subscription_data"]["trial_period_days"] == 14
+
+
+def test_annual_checkout_refused_without_yearly_price(client, monkeypatch, stripe_calls):
+    freeze(monkeypatch, at(2026, 11, 20))
+    monkeypatch.setattr(settings, "QUERIE_STRIPE_ANNUAL_PRICE_ID", None)
+    assert client.post("/querie/api/checkout", json=signup(billing="annual")).status_code == 409
+    assert client.post("/querie/api/checkout", json=signup(billing="weekly")).status_code == 422
+    assert stripe_calls == []
+
+
+def test_annual_reminder_states_yearly_amount(monkeypatch, sent):
+    import asyncio
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", None)
+    sub = {
+        "id": "sub_7", "status": "trialing", "cancel_at_period_end": False,
+        "trial_end": int(at(2026, 11, 23, 10).timestamp()), "customer": "cus_7",
+        "items": {"data": [{"quantity": 2}]},
+        "metadata": {"product": "querie", "email": "eva@example.sk", "billing": "annual", "founder": "0"},
+    }
+    asyncio.run(billing.handle_event("customer.subscription.trial_will_end", sub))
+    (mail,) = sent
+    eur = lambda v: offer.eur(offer.Decimal(v))  # noqa: E731
+    assert f"{eur(2856)} bez DPH (2 × {eur(1428)}) za celý rok vopred" in mail.body
+
+
 # ── webhook ──────────────────────────────────────────────────────────────────
 def _webhook_app(monkeypatch, event):
     monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", "whsec_x")
@@ -391,3 +462,48 @@ def test_admin_export_requires_token(client, monkeypatch, sent):
     resp = client.get("/admin/querie-signups", headers={"Authorization": "Bearer admin-secret"})
     assert resp.status_code == 200
     assert "jan.novak@example.sk" in resp.text
+
+
+# ── PDF report page ──────────────────────────────────────────────────────────
+def test_report_page_and_slash_redirect(client):
+    html = client.get("/querie/pdf_report").text
+    assert "predávať viac nehnuteľností" in html and "data-report" in html and "/querie/api/report" in html
+    resp = client.get("/querie/pdf_report/?utm_source=facebook", follow_redirects=False)
+    assert resp.status_code == 308 and resp.headers["location"] == "/querie/pdf_report?utm_source=facebook"
+
+
+def test_report_request_stores_lead_and_emails_link(client, sent):
+    resp = client.post("/querie/api/report", json={
+        "email": " Eva@Example.SK ", "consent": True, "attribution": {"utm_source": "facebook", "x": "y"},
+    })
+    assert resp.status_code == 200
+    url = resp.json()["url"]
+    assert url.startswith("/querie/pdf_report/stiahnut?t=")
+    (lead,) = db.all_report_leads()
+    assert lead["email"] == "eva@example.sk" and lead["consent_version"] == qc.REPORT_CONSENT_VERSION
+    assert "facebook" in lead["attribution"] and '"x"' not in lead["attribution"]
+    (mail,) = sent
+    assert mail.to == "eva@example.sk" and f"{qc.SITE_URL}{url}" in mail.body
+
+
+@pytest.mark.parametrize("body, needle", [
+    ({"email": "nie-je-email", "consent": True}, "e-mail"),
+    ({"email": "eva@example.sk", "consent": False}, "súhlas"),
+])
+def test_report_request_rejects_bad_input(client, body, needle):
+    resp = client.post("/querie/api/report", json=body)
+    assert resp.status_code == 422 and needle in resp.json()["detail"]
+    assert db.all_report_leads() == []
+
+
+def test_report_download_needs_valid_link_and_counts(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(qc, "REPORT_DIR", tmp_path)
+    url = client.post("/querie/api/report", json={"email": "eva@example.sk", "consent": True}).json()["url"]
+    assert client.get(url).status_code == 503  # PDF not uploaded yet
+    (tmp_path / qc.REPORT_FILE).write_bytes(b"%PDF-1.4 test")
+    resp = client.get(url)
+    assert resp.status_code == 200 and resp.content == b"%PDF-1.4 test"
+    assert "attachment" in resp.headers["content-disposition"]
+    assert db.all_report_leads()[0]["downloads"] == 1
+    forged = url.replace(url.split(".")[-1], "0" * 32)
+    assert client.get(forged).status_code == 400

@@ -113,10 +113,15 @@ def portal_url(subscription_id: str, cancel: bool) -> str:
 
 
 # ── checkout ─────────────────────────────────────────────────────────────────
-def create_checkout(*, email: str, name: str, phone: str, company: Optional[str]) -> tuple[str, str, bool]:
+def create_checkout(
+    *, email: str, name: str, phone: str, company: Optional[str], annual: bool = False,
+) -> tuple[str, str, bool]:
     """Open a trial Checkout Session. Returns (session_id, url, founder)."""
-    founder = offer.current_phase() == "founder" and bool(settings.QUERIE_FOUNDER_COUPON_ID)
-    if offer.current_phase() == "founder" and not founder:
+    # The founder coupon is "25% off 3 months" — on a yearly invoice that would
+    # be 25% off the whole year, so yearly billing never gets it.
+    founder_phase = offer.current_phase() == "founder" and not annual
+    founder = founder_phase and bool(settings.QUERIE_FOUNDER_COUPON_ID)
+    if founder_phase and not founder:
         logger.error("Querie founder phase but QUERIE_FOUNDER_COUPON_ID unset — full price checkout")
 
     metadata = {
@@ -126,6 +131,7 @@ def create_checkout(*, email: str, name: str, phone: str, company: Optional[str]
         "company": (company or "")[:200],
         "email": email[:200],
         "founder": "1" if founder else "0",
+        "billing": "annual" if annual else "monthly",
         # Which VOP/privacy versions were accepted, and when — server time, not the browser's.
         "terms_accepted": f"{qc.CONSENT_VERSION} @ {offer.now().isoformat(timespec='seconds')}",
     }
@@ -142,7 +148,7 @@ def create_checkout(*, email: str, name: str, phone: str, company: Optional[str]
     params = dict(
         mode="subscription",
         line_items=[{
-            "price": settings.QUERIE_STRIPE_PRICE_ID,
+            "price": settings.QUERIE_STRIPE_ANNUAL_PRICE_ID if annual else settings.QUERIE_STRIPE_PRICE_ID,
             "quantity": 1,
             # Price is per user; the seat count is picked on the Stripe page.
             "adjustable_quantity": {"enabled": True, "minimum": 1, "maximum": qc.MAX_USERS},
@@ -160,7 +166,7 @@ def create_checkout(*, email: str, name: str, phone: str, company: Optional[str]
         custom_text={"submit": {"message": (
             f"Dnes neplatíte nič. Prvá platba {first}, ak predtým nezrušíte. "
             f"Pripomenieme sa {qc.REMINDER_DAYS_BEFORE} dni pred prvou platbou. "
-            "Zrušíte jedným klikom."
+            "Zrušíte kedykoľvek."
         )}},
     )
     if founder:
@@ -200,6 +206,7 @@ async def _on_checkout_completed(session: dict) -> None:
     subscription_id = _id_of(session.get("subscription"))
     customer_id = _id_of(session.get("customer"))
     founder = meta.get("founder") == "1"
+    annual = meta.get("billing") == "annual"
 
     if not db.mark_trial_started(session.get("id"), email, customer_id, subscription_id):
         logger.warning("Querie checkout %s matched no sign-up row (email=%s)", session.get("id"), email)
@@ -213,13 +220,13 @@ async def _on_checkout_completed(session: dict) -> None:
             logger.warning("Could not fetch Querie subscription %s: %s", subscription_id, exc)
     first, quantity = _trial_facts(sub)
 
-    logger.info("Querie trial started — email=%s seats=%s founder=%s", email, quantity, founder)
+    logger.info("Querie trial started — email=%s seats=%s founder=%s annual=%s", email, quantity, founder, annual)
     await notify.notify_owner_trial(
         name=meta.get("name"), email=email, phone=meta.get("phone"), company=meta.get("company"),
-        quantity=quantity, founder=founder, first_charge=first, subscription_id=subscription_id,
+        quantity=quantity, founder=founder, annual=annual, first_charge=first, subscription_id=subscription_id,
     )
     await notify.send_trial_welcome(
-        to=email, name=meta.get("name"), quantity=quantity, founder=founder,
+        to=email, name=meta.get("name"), quantity=quantity, founder=founder, annual=annual,
         first_charge=first, cancel_url=cancel_url(subscription_id),
     )
 
@@ -241,5 +248,5 @@ async def _on_trial_will_end(sub: dict) -> None:
     first, quantity = _trial_facts(sub)
     await notify.send_trial_reminder(
         to=email, name=meta.get("name"), quantity=quantity, founder=meta.get("founder") == "1",
-        first_charge=first, cancel_url=cancel_url(sub.get("id")),
+        annual=meta.get("billing") == "annual", first_charge=first, cancel_url=cancel_url(sub.get("id")),
     )

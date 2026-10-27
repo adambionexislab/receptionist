@@ -7,6 +7,7 @@ values (pixel IDs, Stripe IDs) are in the main config.py as QUERIE_* settings.
 
 import datetime
 from decimal import Decimal
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from config import settings
@@ -27,6 +28,10 @@ FOUNDER_ENDS_AT = datetime.datetime(2026, 11, 16, 0, 0, tzinfo=TZ)
 
 # ── Pricing (EUR, VAT excluded — always shown as "bez DPH") ──────────────────
 PRICE_EUR = Decimal("139.00")
+# Monthly equivalent when paid yearly up front (12 × this per user per year).
+# The founder coupon is monthly-only: on a yearly invoice a "3 months" coupon
+# would discount the whole year.
+ANNUAL_MONTHLY_EUR = Decimal("119.00")
 FOUNDER_DISCOUNT_PERCENT = 25
 FOUNDER_MONTHS = 3
 TRIAL_DAYS = 14
@@ -73,6 +78,16 @@ TESTIMONIALS: list[dict] = [
     #     "photo": "/querie/assets/testimonials/jana.jpg",
     # },
 ]
+
+# ── PDF report (lead magnet for the Facebook ad) ────────────────────────────
+# Page at REPORT_PATH; the PDF is handed out only through a signed link after
+# the visitor leaves an email. Put the file in querie/reports/ under this name.
+REPORT_PATH = f"{BASE_PATH}/pdf_report"
+REPORT_DIR = Path(__file__).parent / "reports"
+REPORT_FILE = "ako-predat-viac-nehnutelnosti.pdf"
+REPORT_TITLE = "5 prekvapivo jednoduchých krokov, ako predávať viac nehnuteľností"
+# Recorded with each report lead; bump when the consent text or privacy policy changes.
+REPORT_CONSENT_VERSION = "report-1+privacy-placeholder"
 
 # ── Legal documents ──────────────────────────────────────────────────────────
 # Shared with ApollonIA: one VOP and one privacy policy for both products.

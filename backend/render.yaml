@@ -150,6 +150,8 @@ services:
         sync: false
       - key: QUERIE_STRIPE_PRICE_ID
         sync: false
+      - key: QUERIE_STRIPE_ANNUAL_PRICE_ID
+        sync: false
       - key: QUERIE_FOUNDER_COUPON_ID
         sync: false
       - key: QUERIE_STRIPE_TAX_RATE_ID
