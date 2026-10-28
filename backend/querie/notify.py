@@ -89,7 +89,7 @@ async def send_report(*, to: str, url: Optional[str]) -> None:
     lines = [
         "Dobrý deň,",
         "",
-        f"ďakujeme za záujem. Report „{qc.REPORT_TITLE}“ si stiahnete tu:",
+        f"ďakujeme za záujem. PDF „{qc.REPORT_TITLE}“ si stiahnete tu:",
         url or f"{qc.SITE_URL}{qc.REPORT_PATH}",
         "",
         "Odkaz je osobný a funguje opakovane.",
@@ -98,7 +98,7 @@ async def send_report(*, to: str, url: Optional[str]) -> None:
         f"tím {qc.PRODUCT_NAME}",
         f"{qc.COMPANY_NAME}, {qc.COMPANY_ADDRESS}",
     ]
-    await _send_safely(to, f"Váš report: {qc.REPORT_TITLE}", "\n".join(lines), "report")
+    await _send_safely(to, f"Vaše PDF: {qc.REPORT_TITLE}", "\n".join(lines), "report")
 
 
 async def notify_owner_trial(

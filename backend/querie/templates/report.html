@@ -3,8 +3,8 @@
 {#- Lead magnet for the "PDF zadarmo" Facebook ad: email in, PDF out. The copy
     mirrors the ad (Facebook-PDF-report-ad.html) so the click lands on the same promise. -#}
 
-{% block title %}5 prekvapivo jednoduchých krokov, ako predávať viac nehnuteľností – report zadarmo{% endblock %}
-{% block description %}Bezplatný PDF report pre realitných maklérov: prečo rýchly predaj prináša nové nehnuteľnosti, ako vzniká zoznam kupujúcich a čo presvedčí predávajúceho na stretnutí.{% endblock %}
+{% block title %}5 prekvapivo jednoduchých krokov, ako predávať viac nehnuteľností – PDF zadarmo{% endblock %}
+{% block description %}Bezplatné PDF pre realitných maklérov: prečo rýchly predaj prináša nové nehnuteľnosti, ako vzniká zoznam kupujúcich a čo presvedčí predávajúceho na stretnutí.{% endblock %}
 {% block canonical %}{{ report_path }}{% endblock %}
 
 {% block header_cta %}
@@ -17,10 +17,14 @@
       content: ""; position: absolute; inset: -60px 0 auto; height: 560px; z-index: -1; pointer-events: none;
       background: radial-gradient(55% 55% at 75% 30%, rgba(196, 154, 0, .14), transparent 70%);
     }
-    .report-grid { display: grid; gap: 28px; grid-template-areas: "copy" "cover" "form" "inside"; }
+    .report-grid { display: grid; gap: 28px; grid-template-areas: "copy" "form" "cover" "inside"; }
     .report-copy { grid-area: copy; }
     .cover-wrap { grid-area: cover; display: flex; justify-content: center; padding: 6px 0 10px; }
-    .report-form { grid-area: form; border-color: var(--gold-line); }
+    .report-get { grid-area: form; }
+    .report-get [hidden] { display: none; }
+    .report-open { min-height: 60px; font-size: 1.1rem; padding: 0 32px; }
+    .report-open svg { width: 22px; height: 22px; }
+    .report-form { border-color: var(--gold-line); }
     .inside { grid-area: inside; }
 
     .tag {
@@ -63,7 +67,7 @@
       .report { padding: 64px 0 96px; }
       .report-grid {
         grid-template-columns: 1.15fr .85fr; column-gap: 56px; row-gap: 28px;
-        grid-template-areas: "copy cover" "inside cover" "form cover";
+        grid-template-areas: "copy cover" "form cover" "inside cover";
       }
       .cover-wrap { align-items: center; }
       .cover { width: 320px; }
@@ -73,6 +77,7 @@
       .cover-sub { font-size: 1rem; }
       .cover-foot { font-size: .8rem; }
       .report-form { max-width: 560px; }
+      .report-open { width: auto; }
     }
 {% endblock %}
 
@@ -84,7 +89,7 @@
       <p class="eyebrow">Pre realitných maklérov</p>
       <h1>5 prekvapivo jednoduchých krokov, ako <span>predávať viac nehnuteľností</span></h1>
       <p class="lead">S realitnými maklérmi hovoríme každý deň. Najčastejšie ich trápi jedno: ako predať viac nehnuteľností.
-        Odpoveď sme zhrnuli do reportu.</p>
+        Odpoveď sme zhrnuli do PDF.</p>
     </div>
 
     <div class="cover-wrap" aria-hidden="true">
@@ -100,13 +105,13 @@
           <div class="cover-title">{{ report_title }}</div>
           {% endif %}
           <div class="cover-sub">Myšlienka · Metóda · Prax</div>
-          <div class="cover-foot"><span>Report</span><span>PDF</span></div>
+          <div class="cover-foot"><span>Pre maklérov</span><span>PDF</span></div>
         </div>
       </div>
     </div>
 
     <div class="inside">
-      <p class="eyebrow">V reporte</p>
+      <p class="eyebrow">V PDF</p>
       <ul class="inside-list">
         <li>{{ ic.icon("refresh") }} Prečo rýchly predaj prináša nové nehnuteľnosti</li>
         <li>{{ ic.icon("users") }} Ako vzniká zoznam kupujúcich</li>
@@ -114,7 +119,10 @@
       </ul>
     </div>
 
-    <div class="card report-form" id="stiahnut">
+    <div class="report-get">
+    {#- Just the button up front; the email card opens in its place on click. #}
+    <button type="button" class="btn btn-block report-open" data-report-open>{{ ic.icon("download") }} Stiahnuť PDF zadarmo</button>
+    <div class="card report-form" id="stiahnut" hidden>
       <form data-report data-endpoint="{{ base }}/api/report" novalidate>
         <h2>Stiahnite si ho <b>zadarmo</b> — stačí e-mail</h2>
         <div class="field">
@@ -128,21 +136,22 @@
         {# TODO: legal review — one checkbox covers sending the report and occasional Querie news. #}
         <label class="consent">
           <input type="checkbox" name="consent" required />
-          <span>Súhlasím so spracovaním e-mailu na zaslanie reportu a občasných informácií o {{ product }}.
+          <span>Súhlasím so spracovaním e-mailu na zaslanie PDF a občasných informácií o {{ product }}.
             Súhlas môžem kedykoľvek odvolať. Viac v <a href="{{ privacy_url }}" target="_blank" rel="noopener">Zásadách ochrany osobných údajov</a>.</span>
         </label>
-        <button type="submit" class="btn btn-block">{{ ic.icon("download") }} Stiahnuť report</button>
+        <button type="submit" class="btn btn-block">{{ ic.icon("download") }} Stiahnuť PDF</button>
         <p class="form-error" data-error role="alert"></p>
       </form>
 
       <div class="done" id="report-done" tabindex="-1" hidden>
         <div class="icon">{{ ic.icon("download") }}</div>
-        <h2>Report sa sťahuje</h2>
+        <h2>PDF sa sťahuje</h2>
         <p>Ak sa sťahovanie nezačalo, použite tlačidlo nižšie. Odkaz sme vám poslali aj e-mailom.</p>
-        <a class="btn btn-block" data-report-link href="#">Stiahnuť report (PDF)</a>
-        <p class="next">Report pripravil tím {{ product }}. {{ product }} prepíše každý váš hovor a odpovie na otázky o klientoch.
+        <a class="btn btn-block" data-report-link href="#">Stiahnuť PDF</a>
+        <p class="next">PDF pripravil tím {{ product }}. {{ product }} prepíše každý váš hovor a odpovie na otázky o klientoch.
           <a href="{{ base }}/">Pozrite sa, ako funguje</a>.</p>
       </div>
+    </div>
     </div>
   </div>
 </section>
@@ -153,6 +162,12 @@
 (function () {
   var form = document.querySelector('form[data-report]');
   if (!form) return;
+  var open = document.querySelector('[data-report-open]');
+  open.addEventListener('click', function () {
+    open.hidden = true;
+    document.getElementById('stiahnut').hidden = false;
+    form.elements.namedItem('email').focus();
+  });
   var error = form.querySelector('[data-error]');
   var button = form.querySelector('button[type=submit]');
   var label = button.innerHTML;
