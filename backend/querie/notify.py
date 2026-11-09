@@ -181,8 +181,7 @@ async def send_trial_welcome(
         *_cancel_lines(cancel_url),
         _guarantee(),
         "",
-        # TODO: describe the real onboarding step (app download, call forwarding).
-        "Čoskoro sa vám ozveme s nastavením aplikácie a presmerovania hovorov.",
+        "Do 24 hodín dostanete e-mail s informáciami o aktivácii.",
         "",
         "S pozdravom,",
         f"tím {qc.PRODUCT_NAME}",

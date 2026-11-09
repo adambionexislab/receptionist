@@ -179,11 +179,12 @@
       <div>
         <strong style="color:var(--fg)">{{ product }}</strong> prevádzkuje {{ company_name }},
         {{ company_address }}, Slovensko.{% if company_id %} {{ company_id }}{% endif %}
-        {# TODO: add IČO / DIČ / IČ DPH (COMPANY_ID in querie/config.py) and the commercial register entry. #}
       </div>
       <nav aria-label="Pätička">
-        <a href="{{ terms_url }}" target="_blank" rel="noopener">Všeobecné obchodné podmienky</a>
+        <a href="{{ terms_url }}">Všeobecné obchodné podmienky</a>
+        <a href="{{ dpa_url }}">Zmluva o spracúvaní osobných údajov</a>
         <a href="{{ privacy_url }}">Ochrana osobných údajov</a>
+        <a href="{{ subprocessors_url }}">Sprostredkovatelia</a>
         <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>
         {% if meta_pixel_id or tiktok_pixel_id %}
         <button type="button" class="linklike" data-cookie-settings>Nastavenia cookies</button>

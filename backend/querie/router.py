@@ -7,22 +7,25 @@ the HTML the moment it ends. Rendering is a few milliseconds; nothing to cache.
 
 Routes:
   GET  /querie, /querie/                 landing page
-  GET  /querie/ochrana-osobnych-udajov   privacy policy (placeholder)
+  GET  /querie/ochrana-osobnych-udajov   → redirect to the shared privacy policy (legal/)
   GET  /querie/vitajte                   after Stripe Checkout
   POST /querie/api/waitlist              waitlist sign-up
   POST /querie/api/checkout              store sign-up, open trial Checkout
   GET  /querie/zrusit, /querie/sprava    signed one-click cancel / manage links
   GET  /querie/pdf_report                PDF report page (email → download)
   POST /querie/api/report                store the email, return the signed download link
+  POST /querie/api/report-event          anonymous funnel step from the report page
   GET  /querie/pdf_report/stiahnut       the PDF, for a signed link
   GET  /admin/querie-signups             CSV export (ADMIN_TOKEN)
   GET  /admin/querie-report-leads        CSV export of report emails (ADMIN_TOKEN)
+  GET  /admin/querie-report-funnel       CSV of the report page funnel per day (ADMIN_TOKEN)
 """
 
 import asyncio
 import csv
 import hmac
 import io
+import json
 import logging
 import time
 from pathlib import Path
@@ -94,7 +97,9 @@ def _context() -> dict:
         "company_id": qc.COMPANY_ID,
         "contact_email": qc.CONTACT_EMAIL,
         "terms_url": qc.TERMS_URL,
+        "dpa_url": qc.DPA_URL,
         "privacy_url": qc.PRIVACY_URL,
+        "subprocessors_url": qc.SUBPROCESSORS_URL,
         "report_path": qc.REPORT_PATH,
         "report_title": qc.REPORT_TITLE,
         "meta_pixel_id": qc.meta_pixel_id(),
@@ -122,9 +127,10 @@ async def querie_page():
     return _render("index.html")
 
 
-@router.get("/querie/ochrana-osobnych-udajov", response_class=HTMLResponse, include_in_schema=False)
+@router.get("/querie/ochrana-osobnych-udajov", include_in_schema=False)
 async def querie_privacy():
-    return _render("privacy.html")
+    # The temporary Querie-only page, replaced by the shared privacy policy.
+    return RedirectResponse(qc.PRIVACY_URL, status_code=301)
 
 
 @router.get("/querie/vitajte", response_class=HTMLResponse, include_in_schema=False)
@@ -273,7 +279,7 @@ async def waitlist(request: Request, background: BackgroundTasks, payload: dict 
 async def checkout(request: Request, payload: dict = Body(...)):
     _rate_limit(request)
     data = _parse(payload, "Na pokračovanie potvrďte súhlas so Všeobecnými obchodnými podmienkami "
-                           "a Zásadami ochrany osobných údajov.")
+                           "a Zmluvou o spracúvaní osobných údajov.")
     if data.website:
         return JSONResponse({"detail": "Skúste to, prosím, znova."}, status_code=400)
     if offer.current_phase() == "waitlist":
@@ -295,8 +301,37 @@ async def checkout(request: Request, payload: dict = Body(...)):
 
 
 # ── PDF report (lead magnet) ─────────────────────────────────────────────────
+# Anonymous funnel: how far visitors of the report page get, per day and
+# browser kind. "served" and "sent" are counted here on the server; the rest
+# come from the page's script, so they need JavaScript but no cookie.
+FUNNEL_STEPS = ("served", "view", "focus", "submit", "invalid", "sent", "error")
+_CLIENT_STEPS = {"view", "focus", "submit", "invalid", "error"}
+_BOT_MARKERS = ("facebookexternalhit", "facebookcatalog", "bot", "crawler", "spider", "preview")
+
+
+def _browser_kind(user_agent: str) -> str:
+    ua = user_agent.lower()
+    if any(m in ua for m in _BOT_MARKERS):
+        return "bot"
+    if "instagram" in ua:
+        return "instagram"
+    if "fban" in ua or "fbav" in ua or "fb_iab" in ua:
+        return "facebook"
+    return "other"
+
+
+async def _count_step(request: Request, step: str) -> None:
+    day = offer.now().date().isoformat()
+    browser = _browser_kind(request.headers.get("user-agent") or "")
+    try:
+        await asyncio.to_thread(db.count_funnel, day, step, browser)
+    except Exception:  # counting must never break the page
+        logger.exception("Querie report funnel count failed")
+
+
 @router.get(qc.REPORT_PATH, response_class=HTMLResponse, include_in_schema=False)
-async def report_page():
+async def report_page(request: Request):
+    await _count_step(request, "served")
     return _render("report.html")
 
 
@@ -315,15 +350,16 @@ async def report_request(request: Request, background: BackgroundTasks, payload:
         email = _clean_email(str(payload.get("email") or ""))
     except ValueError as exc:
         raise HTTPException(422, str(exc))
-    if payload.get("consent") is not True:
-        raise HTTPException(422, "Na stiahnutie reportu potvrďte, prosím, súhlas so spracovaním e-mailu.")
     if payload.get("website"):
         logger.info("Querie report honeypot tripped — dropped")
         return {"url": qc.REPORT_PATH}
+    # Sending the PDF someone asked for needs no tick; occasional news only
+    # with the optional, unticked-by-default box.
     await asyncio.to_thread(
         db.upsert_report_lead,
         email=email,
         consent_version=qc.REPORT_CONSENT_VERSION,
+        marketing=payload.get("marketing") is True,
         attribution=_clean_attribution(payload.get("attribution")),
         user_agent=(request.headers.get("user-agent") or "")[:300],
     )
@@ -332,8 +368,22 @@ async def report_request(request: Request, background: BackgroundTasks, payload:
         logger.error("Querie report: no SESSION_SECRET/ADMIN_TOKEN to sign download links")
         raise HTTPException(503, "Report sa teraz nepodarilo pripraviť. Skúste to, prosím, o chvíľu.")
     background.add_task(notify.send_report, to=email, url=report.download_url(email, absolute=True))
+    await _count_step(request, "sent")
     logger.info("Querie report lead stored")
     return {"url": url}
+
+
+@router.post("/querie/api/report-event", status_code=204, include_in_schema=False)
+async def report_event(request: Request):
+    # Sent with navigator.sendBeacon as text/plain: {"e": "<step>"}.
+    body = (await request.body())[:200]
+    try:
+        step = json.loads(body).get("e")
+    except (ValueError, AttributeError):
+        step = None
+    if step in _CLIENT_STEPS:
+        await _count_step(request, step)
+    return Response(status_code=204)
 
 
 _REPORT_MISSING = (
@@ -427,5 +477,17 @@ async def export_signups():
 async def export_report_leads():
     rows = await asyncio.to_thread(db.all_report_leads)
     return _csv(rows, [
-        "created_at", "email", "downloads", "consent_at", "consent_version", "attribution", "updated_at",
+        "created_at", "email", "marketing", "downloads", "consent_at", "consent_version", "attribution",
+        "updated_at",
     ], "querie-report-leads.csv")
+
+
+@router.get("/admin/querie-report-funnel", dependencies=[Depends(_require_admin)])
+async def export_report_funnel():
+    # One row per day and browser kind, one column per step.
+    table: dict[tuple, dict] = {}
+    for r in await asyncio.to_thread(db.funnel_counts):
+        row = table.setdefault((r["day"], r["browser"]), {"day": r["day"], "browser": r["browser"]})
+        row[r["event"]] = r["count"]
+    rows = [{step: 0 for step in FUNNEL_STEPS} | row for row in table.values()]
+    return _csv(rows, ["day", "browser", *FUNNEL_STEPS], "querie-report-funnel.csv")

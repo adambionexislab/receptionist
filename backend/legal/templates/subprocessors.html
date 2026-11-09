@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Zoznam ďalších sprostredkovateľov</h1>
+<p class="meta">Stav k 1. 11. 2026.</p>
+
+<p>Služby ApollonIA a Querie prevádzkuje Bionexis Lab s. r. o. Pri ich poskytovaní využívame dodávateľov uvedených nižšie. Stĺpec Služba uvádza, ktorej služby sa dodávateľ týka. Prenos do USA sa týka najmä OpenAI, ElevenLabs, Render a Resend.</p>
+
+<div class="table">
+<table>
+  <thead><tr><th>Dodávateľ</th><th>Služba</th><th>Účel</th><th>Umiestnenie spracúvania</th><th>Záruka pri prenose</th></tr></thead>
+  <tbody>
+    <tr><td>OpenAI Ireland Ltd., Írsko (s prenosom na OpenAI OpCo, LLC, USA)</td><td>ApollonIA, Querie</td>
+      <td>Hlasový asistent (ApollonIA), prepis hovorov a odpovede chatbota (Querie)</td><td>EÚ a USA</td>
+      <td>Štandardné zmluvné doložky alebo rozhodnutie o primeranosti podľa zmluvy s OpenAI</td></tr>
+    <tr><td>Eleven Labs, Inc., USA</td><td>ApollonIA</td>
+      <td>Tvorba hlasu asistenta z textového výstupu OpenAI (syntéza reči)</td><td>EÚ a USA</td>
+      <td>EU-US Data Privacy Framework a/alebo štandardné zmluvné doložky</td></tr>
+    <tr><td>DIDWW Ireland Limited</td><td>ApollonIA, Querie</td>
+      <td>Telefónne čísla a prepojenie hovorov (SIP)</td><td>Amsterdam, Frankfurt</td>
+      <td>Bez prenosu mimo EÚ</td></tr>
+    <tr><td>Render Services, Inc., USA</td><td>ApollonIA, Querie</td>
+      <td>Hosting aplikácie, API a databázy</td><td>Hosting vo Frankfurte (EÚ); prevádzka a správa Render prebieha z USA</td>
+      <td>EU-US Data Privacy Framework; ak by prestal platiť, štandardné zmluvné doložky</td></tr>
+    <tr><td>Hetzner Online GmbH, Nemecko</td><td>ApollonIA, Querie</td>
+      <td>Server aplikácie a úložisko záznamov hovorov</td><td>EÚ: Nemecko</td>
+      <td>Bez prenosu mimo EÚ</td></tr>
+    <tr><td>Acrobits s.r.o., Česká republika</td><td>Querie</td>
+      <td>Mobilná aplikácia na telefonovanie (Cloud Softphone); odosielanie push notifikácií o prichádzajúcom hovore. Obsah hovorov ani záznamy nespracúva.</td><td>EÚ</td>
+      <td>Bez prenosu mimo EÚ</td></tr>
+    <tr><td>Unipile SAS, Francúzsko</td><td>Querie</td>
+      <td>Prepojenie e-mailových schránok (Gmail, Outlook), kalendára a WhatsApp</td><td>EÚ – Francúzsko</td>
+      <td>Bez prenosu mimo EÚ. Výnimka: ak sa pri WhatsApp použijú proxy servery Unipile, aj Izrael (rozhodnutie o primeranosti), USA a Singapur (štandardné zmluvné doložky); zákaznícka podpora Intercom (EU-US Data Privacy Framework).</td></tr>
+    <tr><td>Resend, Inc., USA</td><td>ApollonIA</td>
+      <td>Odosielanie e-mailových notifikácií a súhrnov</td><td>EÚ a USA</td>
+      <td>EU-US Data Privacy Framework a/alebo štandardné zmluvné doložky</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Kalendár Google alebo Outlook je účet samotného zákazníka, ktorý si ho k službe pripája. Google a Microsoft preto nie sú našimi ďalšími sprostredkovateľmi.</p>
+<p>O zmenách v tomto zozname informujeme zákazníkov e-mailom podľa čl. 5 <a href="{{ dpa_url }}">Zmluvy o spracúvaní osobných údajov</a>.</p>
+{% endblock %}

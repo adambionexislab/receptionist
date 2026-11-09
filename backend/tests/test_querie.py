@@ -203,11 +203,20 @@ def test_redirect_keeps_campaign_query(client):
     assert resp.headers["location"] == "/querie/?utm_source=tiktok&ttclid=abc"
 
 
-def test_privacy_and_welcome_pages_are_noindex(client):
-    for path in ("/querie/ochrana-osobnych-udajov", "/querie/vitajte"):
-        resp = client.get(path)
-        assert resp.status_code == 200
-        assert "noindex" in resp.text
+def test_welcome_page_is_noindex(client):
+    resp = client.get("/querie/vitajte")
+    assert resp.status_code == 200 and "noindex" in resp.text
+
+
+def test_old_privacy_page_redirects_to_shared_policy(client):
+    resp = client.get("/querie/ochrana-osobnych-udajov", follow_redirects=False)
+    assert resp.status_code == 301 and resp.headers["location"] == "/ochrana-osobnych-udajov"
+
+
+def test_footer_links_all_legal_documents(client):
+    html = client.get("/querie/").text
+    for url in ("/vop", "/zmluva-o-spracuvani-udajov", "/ochrana-osobnych-udajov", "/sprostredkovatelia"):
+        assert f'href="{url}"' in html
 
 
 # ── waitlist API ─────────────────────────────────────────────────────────────
@@ -233,6 +242,7 @@ def test_trial_form_asks_for_terms_and_privacy(client, monkeypatch):
     freeze(monkeypatch, at(2026, 11, 20))
     html = client.get("/querie/").text
     assert f'href="{qc.TERMS_URL}"' in html and "Všeobecnými obchodnými podmienkami" in html
+    assert f'href="{qc.DPA_URL}"' in html and "Zmluvou o spracúvaní osobných údajov" in html
     resp = client.post("/querie/api/checkout", json=signup(consent=False))
     assert resp.status_code == 422 and "obchodnými podmienkami" in resp.json()["detail"]
 
@@ -473,32 +483,81 @@ def test_report_page_and_slash_redirect(client):
 
 
 def test_report_request_stores_lead_and_emails_link(client, sent):
+    # No consent tick is needed for the PDF itself.
     resp = client.post("/querie/api/report", json={
-        "email": " Eva@Example.SK ", "consent": True, "attribution": {"utm_source": "facebook", "x": "y"},
+        "email": " Eva@Example.SK ", "attribution": {"utm_source": "facebook", "x": "y"},
     })
     assert resp.status_code == 200
     url = resp.json()["url"]
     assert url.startswith("/querie/pdf_report/stiahnut?t=")
     (lead,) = db.all_report_leads()
     assert lead["email"] == "eva@example.sk" and lead["consent_version"] == qc.REPORT_CONSENT_VERSION
+    assert lead["marketing"] == 0
     assert "facebook" in lead["attribution"] and '"x"' not in lead["attribution"]
     (mail,) = sent
     assert mail.to == "eva@example.sk" and f"{qc.SITE_URL}{url}" in mail.body
 
 
-@pytest.mark.parametrize("body, needle", [
-    ({"email": "nie-je-email", "consent": True}, "e-mail"),
-    ({"email": "eva@example.sk", "consent": False}, "súhlas"),
-])
-def test_report_request_rejects_bad_input(client, body, needle):
-    resp = client.post("/querie/api/report", json=body)
-    assert resp.status_code == 422 and needle in resp.json()["detail"]
+def test_report_marketing_opt_in_is_kept(client, sent):
+    client.post("/querie/api/report", json={"email": "eva@example.sk", "marketing": True})
+    client.post("/querie/api/report", json={"email": "eva@example.sk", "marketing": False})
+    assert db.all_report_leads()[0]["marketing"] == 1
+
+
+def test_report_request_rejects_bad_email(client):
+    resp = client.post("/querie/api/report", json={"email": "nie-je-email"})
+    assert resp.status_code == 422 and "e-mail" in resp.json()["detail"]
     assert db.all_report_leads() == []
+
+
+def test_old_report_leads_keep_their_news_consent(in_memory_db, monkeypatch):
+    # A database from before the marketing column: report-1 ticked one box for both.
+    in_memory_db.execute("DROP TABLE querie_report_leads")
+    in_memory_db.execute(
+        "CREATE TABLE querie_report_leads (id INTEGER PRIMARY KEY, email TEXT UNIQUE, consent_at TEXT, "
+        "consent_version TEXT, attribution TEXT, user_agent TEXT, downloads INTEGER DEFAULT 0, "
+        "created_at TEXT, updated_at TEXT)"
+    )
+    in_memory_db.execute("INSERT INTO querie_report_leads (email, consent_version) VALUES ('a@b.sk', 'report-1+x')")
+    monkeypatch.setattr(db, "_initialized", False)
+    db.init()
+    assert db.all_report_leads()[0]["marketing"] == 1
+
+
+FB_UA = "Mozilla/5.0 (Linux; Android 14) Chrome/129.0 Mobile Safari/537.36 [FB_IAB/FB4A;FBAV/480.0.0.0;]"
+
+
+@pytest.mark.parametrize("ua, kind", [
+    (FB_UA, "facebook"),
+    ("Mozilla/5.0 (iPhone) Mobile/15E148 Instagram 350.0", "instagram"),
+    ("facebookexternalhit/1.1", "bot"),
+    ("Mozilla/5.0 (Windows NT 10.0) Chrome/130.0", "other"),
+])
+def test_funnel_browser_kind(ua, kind):
+    assert querie_router._browser_kind(ua) == kind
+
+
+def test_report_funnel_counts_steps(client, sent, monkeypatch):
+    monkeypatch.setattr(settings, "ADMIN_TOKEN", "admin-secret")
+    freeze(monkeypatch, at(2026, 10, 30, 12, 0))
+    fb = {"User-Agent": FB_UA}
+    client.get("/querie/pdf_report", headers=fb)
+    client.get("/querie/pdf_report", headers=fb)
+    for step in ("view", "focus", "submit", "nonsense"):
+        assert client.post("/querie/api/report-event", content='{"e": "%s"}' % step, headers=fb).status_code == 204
+    assert client.post("/querie/api/report-event", content="not json", headers=fb).status_code == 204
+    client.post("/querie/api/report", json={"email": "eva@example.sk"}, headers=fb)
+
+    assert client.get("/admin/querie-report-funnel").status_code == 401
+    csv_text = client.get("/admin/querie-report-funnel", headers={"Authorization": "Bearer admin-secret"}).text
+    header, row = csv_text.lstrip("﻿").strip().splitlines()
+    assert header == "day,browser,served,view,focus,submit,invalid,sent,error"
+    assert row == "2026-10-30,facebook,2,1,1,1,0,1,0"
 
 
 def test_report_download_needs_valid_link_and_counts(client, monkeypatch, tmp_path):
     monkeypatch.setattr(qc, "REPORT_DIR", tmp_path)
-    url = client.post("/querie/api/report", json={"email": "eva@example.sk", "consent": True}).json()["url"]
+    url = client.post("/querie/api/report", json={"email": "eva@example.sk"}).json()["url"]
     assert client.get(url).status_code == 503  # PDF not uploaded yet
     (tmp_path / qc.REPORT_FILE).write_bytes(b"%PDF-1.4 test")
     resp = client.get(url)

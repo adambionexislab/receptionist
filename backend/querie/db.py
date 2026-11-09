@@ -46,8 +46,19 @@ CREATE TABLE IF NOT EXISTS querie_report_leads (
   attribution TEXT,                        -- JSON: utm_*, fbclid, ttclid
   user_agent TEXT,
   downloads INTEGER NOT NULL DEFAULT 0,
+  marketing INTEGER NOT NULL DEFAULT 0,    -- 1 = ticked "send me occasional news"
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
+);
+
+-- Anonymous funnel for /querie/pdf_report: daily counts per step and browser
+-- kind. No emails, no IDs, no cookies — only how far visitors get.
+CREATE TABLE IF NOT EXISTS querie_report_funnel (
+  day TEXT NOT NULL,                       -- YYYY-MM-DD, Europe/Bratislava
+  event TEXT NOT NULL,
+  browser TEXT NOT NULL,                   -- facebook | instagram | other | bot
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, event, browser)
 );
 """
 
@@ -66,6 +77,11 @@ def init() -> None:
     with _tenants_db.write_lock:
         if not _initialized:
             conn.executescript(_SCHEMA)
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(querie_report_leads)")}
+            if "marketing" not in columns:
+                conn.execute("ALTER TABLE querie_report_leads ADD COLUMN marketing INTEGER NOT NULL DEFAULT 0")
+                # report-1 had one required tick that covered the occasional news too.
+                conn.execute("UPDATE querie_report_leads SET marketing = 1 WHERE consent_version LIKE 'report-1%'")
             conn.commit()
             _initialized = True
             logger.info("Querie sign-up table ready")
@@ -167,9 +183,11 @@ def all_signups() -> list[dict]:
 
 # ── PDF report leads ─────────────────────────────────────────────────────────
 def upsert_report_lead(
-    *, email: str, consent_version: str, attribution: Optional[dict] = None, user_agent: Optional[str] = None,
+    *, email: str, consent_version: str, marketing: bool = False,
+    attribution: Optional[dict] = None, user_agent: Optional[str] = None,
 ) -> dict:
-    """One row per email; asking for the report again refreshes the consent."""
+    """One row per email; asking for the report again refreshes the consent.
+    A marketing opt-in is kept when a later request leaves the box unticked."""
     email = email.strip().lower()
     stamp = _now()
     conn = _conn()
@@ -177,17 +195,18 @@ def upsert_report_lead(
         conn.execute(
             """
             INSERT INTO querie_report_leads
-              (email, consent_at, consent_version, attribution, user_agent, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+              (email, consent_at, consent_version, marketing, attribution, user_agent, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(email) DO UPDATE SET
               consent_at = excluded.consent_at,
               consent_version = excluded.consent_version,
+              marketing = MAX(querie_report_leads.marketing, excluded.marketing),
               attribution = COALESCE(querie_report_leads.attribution, excluded.attribution),
               user_agent = excluded.user_agent,
               updated_at = excluded.updated_at
             """,
             (
-                email, stamp, consent_version,
+                email, stamp, consent_version, 1 if marketing else 0,
                 json.dumps(attribution, ensure_ascii=False) if attribution else None,
                 user_agent, stamp, stamp,
             ),
@@ -209,4 +228,22 @@ def count_report_download(email: str) -> None:
 
 def all_report_leads() -> list[dict]:
     rows = _conn().execute("SELECT * FROM querie_report_leads ORDER BY created_at, id").fetchall()
+    return [dict(r) for r in rows]
+
+
+def count_funnel(day: str, event: str, browser: str) -> None:
+    conn = _conn()
+    with _tenants_db.write_lock:
+        conn.execute(
+            """
+            INSERT INTO querie_report_funnel (day, event, browser, count) VALUES (?, ?, ?, 1)
+            ON CONFLICT(day, event, browser) DO UPDATE SET count = count + 1
+            """,
+            (day, event, browser),
+        )
+        conn.commit()
+
+
+def funnel_counts() -> list[dict]:
+    rows = _conn().execute("SELECT * FROM querie_report_funnel ORDER BY day, browser, event").fetchall()
     return [dict(r) for r in rows]

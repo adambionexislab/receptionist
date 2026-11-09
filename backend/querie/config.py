@@ -10,6 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import legal
 from config import settings
 
 PRODUCT_NAME = "Querie"
@@ -46,7 +47,7 @@ MAX_USERS = 50
 # ── Company ──────────────────────────────────────────────────────────────────
 COMPANY_NAME = "Bionexis Lab s. r. o."
 COMPANY_ADDRESS = "Horná 37, 974 01 Banská Bystrica"
-COMPANY_ID = ""  # TODO: IČO / DIČ / IČ DPH for the footer
+COMPANY_ID = "IČO 56668627"
 # TODO: verify — a dedicated Querie inbox may be preferable.
 CONTACT_EMAIL = "info@apollon-ia.com"
 
@@ -87,16 +88,17 @@ REPORT_DIR = Path(__file__).parent / "reports"
 REPORT_FILE = "ako-predat-viac-nehnutelnosti.pdf"
 REPORT_TITLE = "5 prekvapivo jednoduchých krokov, ako predávať viac nehnuteľností"
 # Recorded with each report lead; bump when the consent text or privacy policy changes.
-REPORT_CONSENT_VERSION = "report-1+privacy-placeholder"
+# report-1: one required tick for the PDF and news; report-2: PDF without a
+# tick, news only with the optional box.
+REPORT_CONSENT_VERSION = f"report-2+privacy_{legal.VERSION}"
 
 # ── Legal documents ──────────────────────────────────────────────────────────
-# Shared with ApollonIA: one VOP and one privacy policy for both products.
-# TODO: the VOP PDF still describes only ApollonIA — update it to cover Querie.
-TERMS_URL = "/assets/ApollonIA_VOP_SK_2.pdf"
-# TODO: point at the shared privacy policy once it is published; until then
-# this is Querie's own placeholder page.
-PRIVACY_URL = f"{BASE_PATH}/ochrana-osobnych-udajov"
+# Shared with ApollonIA (VOP, DPA, privacy policy, sub-processors) — see legal/.
+TERMS_URL = legal.TERMS_URL
+DPA_URL = legal.DPA_URL
+PRIVACY_URL = legal.PRIVACY_URL
+SUBPROCESSORS_URL = legal.SUBPROCESSORS_URL
 
 # Recorded with every sign-up (and on the Stripe subscription) so we know which
-# documents were accepted. Bump it whenever the VOP or privacy policy changes.
-CONSENT_VERSION = "VOP_SK_2+privacy-placeholder"  # TODO: bump when the updated documents are published
+# documents were accepted; follows legal.VERSION.
+CONSENT_VERSION = f"VOP+DPA+privacy_{legal.VERSION}"

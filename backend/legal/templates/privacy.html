@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Zásady ochrany osobných údajov</h1>
+<p class="meta">Účinnosť od 1. 11. 2026.</p>
+
+<h2 id="kto-sme">Kto sme</h2>
+<p>Prevádzkovateľom je Bionexis Lab s. r. o., sídlo Horná 37, Banská Bystrica, IČO 56668627, ktorá prevádzkuje služby ApollonIA a Querie. Kontakt vo veciach ochrany osobných údajov: <a href="mailto:info@apollon-ia.com">info@apollon-ia.com</a>. Zodpovednú osobu sme nevymenovali.</p>
+
+<h2 id="rola">V akej role spracúvame vaše údaje</h2>
+<ul>
+  <li><strong>Ako prevádzkovateľ</strong> spracúvame údaje našich zákazníkov a záujemcov: registráciu, faktúru, komunikáciu s nami a rezervácie z našich kampaní.</li>
+  <li><strong>Ako sprostredkovateľ</strong> spracúvame hovory, ktoré v mene našich zákazníkov vybavuje ApollonIA, a hovory, e-maily a správy, ktoré cez Querie ukladajú naši zákazníci. Prevádzkovateľom týchto údajov je náš zákazník, teda osoba alebo firma, s ktorou ste komunikovali. Svoje práva uplatňujte prednostne u nej. Ak sa obrátite na nás, vašu žiadosť jej postúpime.</li>
+</ul>
+
+<h2 id="ucely">Účely, právne základy a doba uchovávania</h2>
+<div class="table">
+<table>
+  <thead><tr><th>Účel</th><th>Údaje</th><th>Právny základ</th><th>Doba uchovávania</th></tr></thead>
+  <tbody>
+    <tr><td>Rezervácia miesta pred spustením a kontaktovanie záujemcu</td><td>Meno, telefón, e-mail, firma a odbor činnosti</td>
+      <td>Opatrenia pred uzavretím zmluvy na žiadosť dotknutej osoby (čl. 6 ods. 1 písm. b)</td><td>Do uzavretia zmluvy, inak 6 mesiacov</td></tr>
+    <tr><td>Poskytovanie služby a správa účtu</td><td>Meno, telefón, e-mail, prihlasovacie údaje, nastavenia</td>
+      <td>Plnenie zmluvy (čl. 6 ods. 1 písm. b)</td><td>Počas trvania zmluvy a 30 dní po nej</td></tr>
+    <tr><td>Fakturácia a účtovníctvo</td><td>Fakturačné údaje, platby</td>
+      <td>Zákonná povinnosť (čl. 6 ods. 1 písm. c), zákon o účtovníctve</td><td>10 rokov</td></tr>
+    <tr><td>Zákaznícka podpora</td><td>Obsah komunikácie s nami</td>
+      <td>Plnenie zmluvy, oprávnený záujem</td><td>2 roky</td></tr>
+    <tr id="cookies"><td>Marketing a meranie kampaní na webe</td><td>Cookies, identifikátory zariadenia</td>
+      <td>Súhlas (čl. 6 ods. 1 písm. a)</td><td>Podľa nastavení cookies</td></tr>
+    <tr><td>Ochrana právnych nárokov</td><td>Údaje potrebné na preukázanie nároku</td>
+      <td>Oprávnený záujem (čl. 6 ods. 1 písm. f)</td><td>Počas premlčacej doby</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="prijemcovia">Príjemcovia</h2>
+<p>Vaše údaje sprístupňujeme len dôveryhodným dodávateľom, ktorí nám pomáhajú služby prevádzkovať. Ich zoznam je zverejnený na <a href="{{ subprocessors_url }}">https://www.apollon-ia.com/sprostredkovatelia</a>. Okrem nich sú to najmä platobná brána Stripe, účtovník, Resend a pri kampaniach Meta Platforms a TikTok, ak na to dáte súhlas cez cookies. Údaje nepredávame.</p>
+
+<h2 id="prenos">Prenos mimo EÚ</h2>
+<p>Niektorí dodávatelia sídlia v USA. Prenos prebieha na základe rámca EU-US Data Privacy Framework alebo štandardných zmluvných doložiek Európskej komisie. Podrobnosti sú uvedené v <a href="{{ subprocessors_url }}">zozname sprostredkovateľov</a>.</p>
+
+<h2 id="ai">Umelá inteligencia</h2>
+<p>V oboch službách používame modely spoločnosti OpenAI cez rozhranie API: pri ApollonIA na vedenie hovoru hlasovým asistentom, ktorého hlas vytvára služba ElevenLabs, pri Querie na prepis hovorov a odpovede chatbota. Podľa zmluvných podmienok OpenAI sa údaje odoslané cez API nepoužívajú na trénovanie jej modelov. My údaje zákazníkov tiež nepoužívame na trénovanie. Volajúci do ApollonIA sa na začiatku hovoru dozvie, že hovorí s virtuálnym asistentom. Kvalifikácia volajúcich slúži ako podklad pre nášho zákazníka, ktorý rozhoduje o ďalšom postupe.</p>
+
+<h2 id="prava">Vaše práva</h2>
+<p>Máte právo na prístup k údajom, ich opravu, vymazanie, obmedzenie spracúvania, prenosnosť a právo namietať proti spracúvaniu na základe oprávneného záujmu. Udelený súhlas môžete kedykoľvek odvolať. Práva uplatníte na <a href="mailto:info@apollon-ia.com">info@apollon-ia.com</a>. Odpovieme do jedného mesiaca.</p>
+<p>Máte aj právo podať návrh na začatie konania na Úrade na ochranu osobných údajov Slovenskej republiky, Hraničná 12, 820 07 Bratislava 27, <a href="https://www.dataprotection.gov.sk" target="_blank" rel="noopener">www.dataprotection.gov.sk</a>.</p>
+
+<h2 id="zmeny">Zmeny</h2>
+<p>Tieto zásady môžeme aktualizovať. O podstatných zmenách budeme zákazníkov informovať e-mailom. Účinnosť od 1. 11. 2026.</p>
+{% endblock %}

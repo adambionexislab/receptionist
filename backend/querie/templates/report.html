@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% import "_icons.html" as ic %}
-{#- Lead magnet for the "PDF zadarmo" Facebook ad: email in, PDF out. The copy
-    mirrors the ad (Facebook-PDF-report-ad.html) so the click lands on the same promise. -#}
+{#- Lead magnet for the "PDF zadarmo" Facebook ad: email in, PDF out. Built for
+    the Facebook in-app browser: the email field and button are on the first
+    screen, and the PDF needs no consent tick (news only with the optional box). -#}
 
 {% block title %}5 prekvapivo jednoduchých krokov, ako predávať viac nehnuteľností – PDF zadarmo{% endblock %}
 {% block description %}Bezplatné PDF pre realitných maklérov: prečo rýchly predaj prináša nové nehnuteľnosti, ako vzniká zoznam kupujúcich a čo presvedčí predávajúceho na stretnutí.{% endblock %}
@@ -12,7 +13,7 @@
 {% endblock %}
 
 {% block styles %}
-    .report { padding: 32px 0 64px; position: relative; }
+    .report { padding: 28px 0 64px; position: relative; }
     .report::before {
       content: ""; position: absolute; inset: -60px 0 auto; height: 560px; z-index: -1; pointer-events: none;
       background: radial-gradient(55% 55% at 75% 30%, rgba(196, 154, 0, .14), transparent 70%);
@@ -20,38 +21,36 @@
     .report-grid { display: grid; gap: 28px; grid-template-areas: "copy" "form" "cover" "inside"; }
     .report-copy { grid-area: copy; }
     .cover-wrap { grid-area: cover; display: flex; justify-content: center; padding: 6px 0 10px; }
-    .report-get { grid-area: form; }
-    .report-get [hidden] { display: none; }
-    .report-open { min-height: 60px; font-size: 1.1rem; padding: 0 32px; }
-    .report-open svg { width: 22px; height: 22px; }
-    .report-form { border-color: var(--gold-line); }
+    .report-form { grid-area: form; border-color: var(--gold-line); padding: 20px; }
     .inside { grid-area: inside; }
 
     .tag {
       display: inline-block; background: var(--gold); color: #0b0b0c; border-radius: 999px;
-      padding: 6px 14px; font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 20px;
+      padding: 6px 14px; font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 16px;
     }
-    .report h1 { font-size: clamp(2rem, 8vw, 3.3rem); margin-bottom: 16px; }
+    .report h1 { font-size: clamp(1.9rem, 7.6vw, 3.3rem); margin-bottom: 14px; }
     .report h1 span { color: var(--gold-bright); }
 
-    /* The report cover, as in the ad */
-    .cover { position: relative; width: 200px; aspect-ratio: 340 / 470; }
-    .cover-back { position: absolute; inset: 0; transform: translate(12px, 10px); border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border-strong); }
-    .cover-front {
-      position: absolute; inset: 0; border-radius: 8px; background: #f2f1ee; color: #141414;
-      box-shadow: 0 24px 60px rgba(0, 0, 0, .5); padding: 20px 18px; display: flex; flex-direction: column; transform: rotate(-3deg);
+    /* The real cover, rendered from the PDF into querie/assets/pdf/ —
+       re-render it when the PDF changes. */
+    .cover { position: relative; width: 220px; }
+    .cover::before {
+      content: ""; position: absolute; inset: 0; transform: translate(12px, 10px); border-radius: 6px;
+      background: var(--surface-2); border: 1px solid var(--border-strong);
     }
-    .cover-num { font-weight: 700; font-size: 4.2rem; line-height: .9; letter-spacing: -0.04em; color: var(--gold); }
-    .cover-title { margin-top: 10px; font-weight: 700; font-size: .92rem; line-height: 1.18; letter-spacing: -0.01em; }
-    .cover-sub { margin-top: auto; font-size: .72rem; color: #5a5853; }
-    .cover-foot {
-      margin-top: 16px; padding-top: 8px; border-top: 1px solid #d6d4ce; display: flex; justify-content: space-between;
-      font-size: .6rem; letter-spacing: .14em; text-transform: uppercase; color: #6e6c67; font-weight: 600;
+    .cover img {
+      position: relative; display: block; width: 100%; height: auto; border-radius: 6px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .5); transform: rotate(-3deg);
     }
 
+    .report-form .field { margin-bottom: 12px; }
+    .report-form .btn { min-height: 56px; font-size: 1.05rem; }
     .report-form .btn svg { width: 20px; height: 20px; }
-    .report-form h2 { font-size: 1.3rem; margin-bottom: 18px; }
-    .report-form h2 b { color: var(--gold-bright); font-weight: 600; }
+    .report-form .consent { margin: 14px 0 0; font-size: .86rem; }
+    .report-form .form-note { text-align: left; margin-top: 10px; font-size: .82rem; }
+    .report-form .form-note a { color: inherit; }
+    .report-form .form-error { margin-top: 8px; min-height: 0; }
+    .report-form .form-error:empty { display: none; }
     .done { outline: none; }
     .done .icon { background: var(--gold); color: #0b0b0c; }
     .done h2 { margin-bottom: 8px; }
@@ -63,21 +62,19 @@
     .inside-list li { display: flex; gap: 14px; align-items: center; font-size: 1.05rem; }
     .inside-list svg { width: 26px; height: 26px; flex: none; color: var(--gold-bright); }
 
+    @media (min-width: 560px) {
+      .report-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
+      .report-row .field { margin-bottom: 0; }
+    }
     @media (min-width: 900px) {
       .report { padding: 64px 0 96px; }
       .report-grid {
         grid-template-columns: 1.15fr .85fr; column-gap: 56px; row-gap: 28px;
         grid-template-areas: "copy cover" "form cover" "inside cover";
       }
-      .cover-wrap { align-items: center; }
-      .cover { width: 320px; }
-      .cover-front { padding: 32px 28px; }
-      .cover-num { font-size: 7rem; }
-      .cover-title { font-size: 1.45rem; margin-top: 14px; }
-      .cover-sub { font-size: 1rem; }
-      .cover-foot { font-size: .8rem; }
-      .report-form { max-width: 560px; }
-      .report-open { width: auto; }
+      .cover-wrap { align-items: flex-start; padding-top: 24px; }
+      .cover { width: 340px; }
+      .report-form { max-width: 600px; padding: 24px; }
     }
 {% endblock %}
 
@@ -86,61 +83,31 @@
   <div class="wrap report-grid">
     <div class="report-copy">
       <span class="tag">PDF zadarmo</span>
-      <p class="eyebrow">Pre realitných maklérov</p>
       <h1>5 prekvapivo jednoduchých krokov, ako <span>predávať viac nehnuteľností</span></h1>
-      <p class="lead">S realitnými maklérmi hovoríme každý deň. Najčastejšie ich trápi jedno: ako predať viac nehnuteľností.
-        Odpoveď sme zhrnuli do PDF.</p>
+      <p class="lead">Ako premeniť bežné telefonáty s kupujúcimi na zoznam, ktorý vám prinesie viac predávajúcich — bez platenia za kontakty.</p>
     </div>
 
-    <div class="cover-wrap" aria-hidden="true">
-      <div class="cover">
-        <div class="cover-back"></div>
-        <div class="cover-front">
-          {#- A leading number ("5 …") is set large, as the cover's accent. #}
-          {% set first, _, rest = report_title.partition(" ") %}
-          {% if first.isdigit() and rest %}
-          <div class="cover-num">{{ first }}</div>
-          <div class="cover-title">{{ rest }}</div>
-          {% else %}
-          <div class="cover-title">{{ report_title }}</div>
-          {% endif %}
-          <div class="cover-sub">Myšlienka · Metóda · Prax</div>
-          <div class="cover-foot"><span>Pre maklérov</span><span>PDF</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="inside">
-      <p class="eyebrow">V PDF</p>
-      <ul class="inside-list">
-        <li>{{ ic.icon("refresh") }} Prečo rýchly predaj prináša nové nehnuteľnosti</li>
-        <li>{{ ic.icon("users") }} Ako vzniká zoznam kupujúcich</li>
-        <li>{{ ic.icon("handshake") }} Čo presvedčí predávajúceho na stretnutí</li>
-      </ul>
-    </div>
-
-    <div class="report-get">
-    {#- Just the button up front; the email card opens in its place on click. #}
-    <button type="button" class="btn btn-block report-open" data-report-open>{{ ic.icon("download") }} Stiahnuť PDF zadarmo</button>
-    <div class="card report-form" id="stiahnut" hidden>
+    <div class="card report-form" id="stiahnut">
       <form data-report data-endpoint="{{ base }}/api/report" novalidate>
-        <h2>Stiahnite si ho <b>zadarmo</b> — stačí e-mail</h2>
-        <div class="field">
-          <label for="r-email">E-mail</label>
-          <input id="r-email" name="email" type="email" autocomplete="email" inputmode="email" required maxlength="200" placeholder="vas@email.sk" />
+        <div class="report-row">
+          <div class="field">
+            <label for="r-email">Kam vám ho máme poslať?</label>
+            <input id="r-email" name="email" type="email" autocomplete="email" inputmode="email" required maxlength="200" placeholder="vas@email.sk" />
+          </div>
+          <button type="submit" class="btn btn-block">{{ ic.icon("download") }} Stiahnuť PDF zadarmo</button>
         </div>
         <div class="hp" aria-hidden="true">
           <label for="r-website">Nevypĺňajte</label>
           <input id="r-website" name="website" tabindex="-1" autocomplete="off" />
         </div>
-        {# TODO: legal review — one checkbox covers sending the report and occasional Querie news. #}
-        <label class="consent">
-          <input type="checkbox" name="consent" required />
-          <span>Súhlasím so spracovaním e-mailu na zaslanie PDF a občasných informácií o {{ product }}.
-            Súhlas môžem kedykoľvek odvolať. Viac v <a href="{{ privacy_url }}" target="_blank" rel="noopener">Zásadách ochrany osobných údajov</a>.</span>
-        </label>
-        <button type="submit" class="btn btn-block">{{ ic.icon("download") }} Stiahnuť PDF</button>
         <p class="form-error" data-error role="alert"></p>
+        {# TODO: legal review — the PDF is sent without a tick; news only with this optional box. #}
+        <label class="consent">
+          <input type="checkbox" name="marketing" />
+          <span>Posielajte mi aj občasné tipy pre maklérov a novinky o {{ product }}. Odhlásiť sa dá kedykoľvek.</span>
+        </label>
+        <p class="form-note">PDF vám hneď otvoríme a pošleme aj e-mailom.
+          <a href="{{ privacy_url }}" target="_blank" rel="noopener">Ochrana osobných údajov</a></p>
       </form>
 
       <div class="done" id="report-done" tabindex="-1" hidden>
@@ -152,6 +119,20 @@
           <a href="{{ base }}/">Pozrite sa, ako funguje</a>.</p>
       </div>
     </div>
+
+    <div class="cover-wrap">
+      <div class="cover">
+        <img src="{{ base }}/assets/pdf/cover.jpg" width="910" height="1287" alt="Obálka PDF: {{ report_title }}" />
+      </div>
+    </div>
+
+    <div class="inside">
+      <p class="eyebrow">V PDF</p>
+      <ul class="inside-list">
+        <li>{{ ic.icon("refresh") }} Prečo rýchly predaj prináša nové nehnuteľnosti</li>
+        <li>{{ ic.icon("users") }} Ako vzniká zoznam kupujúcich</li>
+        <li>{{ ic.icon("handshake") }} Čo presvedčí predávajúceho na stretnutí</li>
+      </ul>
     </div>
   </div>
 </section>
@@ -162,12 +143,19 @@
 (function () {
   var form = document.querySelector('form[data-report]');
   if (!form) return;
-  var open = document.querySelector('[data-report-open]');
-  open.addEventListener('click', function () {
-    open.hidden = true;
-    document.getElementById('stiahnut').hidden = false;
-    form.elements.namedItem('email').focus();
-  });
+  // Anonymous funnel step (no cookie, no ID) — see /admin/querie-report-funnel.
+  var eventUrl = '{{ base }}/api/report-event';
+  function step(name) {
+    var body = JSON.stringify({ e: name });
+    try {
+      if (navigator.sendBeacon && navigator.sendBeacon(eventUrl, new Blob([body], { type: 'text/plain' }))) return;
+      fetch(eventUrl, { method: 'POST', body: body, keepalive: true }).catch(function () {});
+    } catch (e) {}
+  }
+  step('view');
+  var email = form.elements.namedItem('email');
+  email.addEventListener('focus', function () { step('focus'); }, { once: true });
+
   var error = form.querySelector('[data-error]');
   var button = form.querySelector('button[type=submit]');
   var label = button.innerHTML;
@@ -179,14 +167,15 @@
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     error.textContent = '';
-    if (!form.reportValidity()) return;
+    step('submit');
+    if (!form.reportValidity()) { step('invalid'); return; }
     var el = form.elements;
     button.disabled = true;
     button.textContent = 'Pripravujem…';
     fetch(form.getAttribute('data-endpoint'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: el.namedItem('email').value, consent: el.namedItem('consent').checked,
+        email: email.value, marketing: el.namedItem('marketing').checked,
         website: el.namedItem('website').value, attribution: attribution
       })
     }).then(function (r) {
@@ -204,6 +193,7 @@
       // The download is served as an attachment, so the page stays put.
       setTimeout(function () { location.href = data.url; }, 400);
     }).catch(function (err) {
+      step('error');
       error.textContent = err.message || 'Niečo sa nepodarilo. Skúste to, prosím, znova.';
       button.disabled = false;
       button.innerHTML = label;

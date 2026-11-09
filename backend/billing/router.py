@@ -20,6 +20,7 @@ import stripe
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+import legal
 from config import settings
 from querie import billing as querie_billing
 
@@ -95,7 +96,7 @@ async def create_checkout_session(data: CheckoutRequest):
         # Which terms were accepted and when. The timestamp is taken here rather
         # than in the browser so it cannot be spoofed by the client.
         "terms_accepted": (
-            f"ApollonIA_VOP_SK_2.pdf @ {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')}"
+            f"VOP+DPA+privacy_{legal.VERSION} @ {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')}"
             if data.terms_accepted
             else ""
         ),

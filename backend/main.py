@@ -27,6 +27,7 @@ from dashboard.router import router as dashboard_router
 from demo.router import router as demo_router
 from leadgen import db as leadgen_db
 from leadgen.router import router as leadgen_router
+from legal.router import router as legal_router
 from listings import db as listings_db
 from listings.store import ListingsStore, store, tenant_stores
 from querie import db as querie_db
@@ -233,6 +234,7 @@ app.include_router(whatsapp_webhook_router)
 app.include_router(salesnotes_router)
 app.include_router(dashboard_router)
 app.include_router(querie_router)
+app.include_router(legal_router)
 if settings.ACQUISIZIONE_ENABLED:
     app.include_router(acquisizione_router)
 if settings.VIDEO_TOUR_ENABLED:

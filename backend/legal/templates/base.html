@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title }} – ApollonIA a Querie</title>
+  <meta name="description" content="{{ title }} služieb ApollonIA a Querie, Bionexis Lab s. r. o." />
+  <link rel="canonical" href="https://www.apollon-ia.com{{ current }}" />
+  <style>
+    :root {
+      --bg: #faf9f6; --fg: #1b1b1d; --muted: #5d5c58; --line: #e3e1dc; --head: #f1efe9; --accent: #9a7700;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #111113; --fg: #ececee; --muted: #a2a1a6; --line: #2c2c31; --head: #1b1b1f; --accent: #d9b23a; }
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--fg);
+      font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    a { color: var(--accent); text-underline-offset: 2px; overflow-wrap: anywhere; }
+    .wrap { max-width: 780px; margin: 0 auto; padding: 0 16px; }
+
+    header { border-bottom: 1px solid var(--line); padding: 14px 0; font-size: .9rem; color: var(--muted); }
+    header .wrap { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; }
+    header nav { display: flex; gap: 14px; }
+    .docs { margin: 28px 0 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .docs a {
+      border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font-size: .85rem;
+      color: var(--muted); text-decoration: none;
+    }
+    .docs a[aria-current="page"] { border-color: var(--accent); color: var(--fg); }
+
+    main { padding: 16px 0 56px; }
+    h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; line-height: 1.25; }
+    h1 { font-size: clamp(1.8rem, 6vw, 2.5rem); margin: 18px 0 8px; }
+    h2 { font-size: 1.45rem; margin: 40px 0 10px; }
+    h3 { font-size: 1.15rem; margin: 28px 0 6px; }
+    .meta { color: var(--muted); font-size: .92rem; margin: 0 0 24px; }
+    p, li { margin: 0 0 10px; }
+    ul, ol { padding-left: 1.3em; margin: 0 0 12px; }
+    .table { overflow-x: auto; margin: 12px 0 18px; }
+    table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+    th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--head); font-weight: 500; color: var(--muted); }
+    /* Phones: each row becomes a card, every cell labelled with its column
+       (data-label is filled in by the script at the bottom). */
+    @media (max-width: 640px) {
+      .js table, .js tbody, .js tr, .js td { display: block; width: 100%; }
+      .js thead { display: none; }
+      .js tr { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+      .js td { border: 0; border-top: 1px solid var(--line); }
+      .js td:first-child { border-top: 0; background: var(--head); font-weight: 500; }
+      .js td[data-label]::before {
+        content: attr(data-label); display: block; font-size: .78rem; color: var(--muted); margin-bottom: 2px;
+      }
+      .js td:first-child::before { display: none; }
+    }
+    .actions { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line); font-size: .9rem; color: var(--muted); }
+    .actions button {
+      font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline;
+    }
+    @media print {
+      header, .docs, .actions { display: none; }
+      body { background: #fff; color: #000; font-size: 11pt; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <span>Bionexis Lab s. r. o.</span>
+      <nav aria-label="Služby"><a href="/sk/">ApollonIA</a><a href="/querie/">Querie</a></nav>
+    </div>
+  </header>
+  <div class="wrap">
+    <nav class="docs" aria-label="Právne dokumenty">
+      {% for url, (_, doc_title) in documents.items() %}
+      <a href="{{ url }}"{% if url == current %} aria-current="page"{% endif %}>{{ doc_title }}</a>
+      {% endfor %}
+    </nav>
+    <main>
+      {% block content %}{% endblock %}
+      <p class="actions">Bionexis Lab s. r. o., Horná 37, 974 01 Banská Bystrica, IČO 56668627 ·
+        <a href="mailto:info@apollon-ia.com">info@apollon-ia.com</a> ·
+        <button type="button" onclick="window.print()">Vytlačiť alebo uložiť ako PDF</button></p>
+    </main>
+  </div>
+  <script>
+    document.querySelectorAll('table').forEach(function (table) {
+      var labels = Array.prototype.map.call(table.querySelectorAll('thead th'), function (th) { return th.textContent; });
+      table.querySelectorAll('tbody tr').forEach(function (tr) {
+        Array.prototype.forEach.call(tr.children, function (td, i) { if (labels[i]) td.setAttribute('data-label', labels[i]); });
+      });
+    });
+    document.documentElement.classList.add('js');
+  </script>
+</body>
+</html>
