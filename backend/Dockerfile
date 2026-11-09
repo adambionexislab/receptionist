@@ -22,8 +22,12 @@ WORKDIR /app
 # ffmpeg does double duty: it stitches the two generated clips, and it
 # downscales every uploaded photo under Runway's 5MB data-URI limit. Installing
 # it here is what keeps an image library out of requirements.txt.
+#
+# ca-certificates is already in the base image, but the base is pinned, so its
+# CA store is frozen at the pin's date. Naming it here upgrades it to Debian's
+# current one on every build (eMudhra intermediate compromise, 2026-10).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg \
+ && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
