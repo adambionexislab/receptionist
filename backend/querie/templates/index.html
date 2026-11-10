@@ -127,6 +127,8 @@ ak skúšobné obdobie aktivujete najneskôr {{ deadline_text }}{{ countdown() }
 
     /* "Dnes neplatíte nič" — the three promises beside the price card */
     .assurance { border-color: var(--gold-line); background: linear-gradient(180deg, var(--gold-soft), transparent 70%), var(--surface); }
+    /* Stacked on phones: the promises come before the price. */
+    .assurance { order: -1; }
     .assurance h3 { font-size: 1.3rem; margin-bottom: 20px; }
     .assure-list { list-style: none; counter-reset: assure; padding: 0; margin: 0; display: grid; gap: 20px; }
     .assure-list li { counter-increment: assure; position: relative; padding-left: 46px; color: var(--muted); }
@@ -198,6 +200,7 @@ ak skúšobné obdobie aktivujete najneskôr {{ deadline_text }}{{ countdown() }
       .checks { grid-template-columns: repeat(3, 1fr); }
       .steps { grid-template-columns: repeat(3, 1fr); }
       .buy { grid-template-columns: .9fr 1.1fr; gap: 20px; }
+      .assurance { order: 0; }
     }
 {% endblock %}
 
